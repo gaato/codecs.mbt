@@ -1,0 +1,11 @@
+import {
+  "gaato/zstd/internal/xxhash",
+  "moonbitlang/core/debug",
+}
+
+import {
+  "gaato/zstd/internal/checksum",
+  "moonbitlang/core/encoding/base64",
+} for "wbtest"
+
+supported_targets = "js + native + wasm + wasm-gc"

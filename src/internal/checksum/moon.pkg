@@ -1,0 +1,4 @@
+// SHA-256 for the tests, to name expected outputs. Test-only; the decoder
+// checks frames with internal/xxhash.
+
+supported_targets = "js + native + wasm + wasm-gc"

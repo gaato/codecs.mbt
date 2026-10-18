@@ -1,0 +1,20 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/zstd/internal/xxhash"
+
+// Values
+
+// Errors
+
+// Types and methods
+pub struct Xxh64 {
+  // private fields
+}
+pub fn Xxh64::Xxh64() -> Self
+pub fn Xxh64::digest(Self) -> UInt64
+pub fn Xxh64::reset(Self) -> Unit
+pub fn Xxh64::update(Self, FixedArray[Byte], Int, Int) -> Unit
+pub fn Xxh64::update_bytes(Self, BytesView) -> Unit
+
+// Type aliases
+
+// Traits

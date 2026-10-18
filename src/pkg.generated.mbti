@@ -1,0 +1,52 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/zstd"
+
+import {
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn decompress(BytesView, max_output? : Int, max_window_bits? : Int) -> Bytes raise ZstdError
+
+// Errors
+pub suberror ZstdError {
+  ZstdError(ZstdErrorKind, String)
+} derive(@debug.Debug)
+pub fn ZstdError::to_repr(Self) -> @debug.Repr
+
+// Types and methods
+pub struct Decoder {
+  // private fields
+}
+pub fn Decoder::Decoder(max_window_bits? : Int) -> Self
+pub fn Decoder::is_finished(Self) -> Bool
+pub fn Decoder::last_consumed(Self) -> Int
+pub fn Decoder::last_produced(Self) -> Int
+pub fn Decoder::reset(Self) -> Unit
+pub fn Decoder::step(Self, BytesView, MutArrayView[Byte], end? : Bool) -> Status raise ZstdError
+pub fn Decoder::step_into(Self, BytesView, FixedArray[Byte], end? : Bool) -> Status raise ZstdError
+
+pub(all) enum Status {
+  Done
+  NeedMoreInput
+  NeedMoreOutput
+} derive(Eq, @debug.Debug)
+pub fn Status::equal(Self, Self) -> Bool
+pub fn Status::not_equal(Self, Self) -> Bool
+pub fn Status::to_repr(Self) -> @debug.Repr
+
+pub(all) enum ZstdErrorKind {
+  Truncated
+  Corrupt
+  ChecksumMismatch
+  WindowTooLarge
+  DictionaryUnsupported
+  OutputLimitExceeded
+} derive(Eq, @debug.Debug)
+pub fn ZstdErrorKind::equal(Self, Self) -> Bool
+pub fn ZstdErrorKind::not_equal(Self, Self) -> Bool
+pub fn ZstdErrorKind::to_repr(Self) -> @debug.Repr
+
+// Type aliases
+
+// Traits
