@@ -1,0 +1,8 @@
+gaato/zstd is licensed under the Apache License 2.0 (LICENSE).
+
+testdata/upstream holds test frames from facebook/zstd's tests/golden-decompression
+and tests/golden-decompression-errors, at commit
+49cf51799ea051457f57243527aa2058f999f005, and src/vectors_wbtest.mbt embeds
+them. They are used under facebook/zstd's BSD license, testdata/upstream/LICENSE:
+
+  Copyright (c) Meta Platforms, Inc. and affiliates. All rights reserved.
