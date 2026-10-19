@@ -35,6 +35,7 @@ pub fn Status::equal(Self, Self) -> Bool
 pub fn Status::not_equal(Self, Self) -> Bool
 pub fn Status::to_repr(Self) -> @debug.Repr
 
+#non_exhaustive
 pub(all) enum ZstdErrorKind {
   Truncated
   Corrupt

@@ -18,6 +18,7 @@ pub extend Status with @debug.Debug::{to_repr}
 
 ///|
 /// Why a stream was refused.
+#non_exhaustive
 pub(all) enum ZstdErrorKind {
   /// The input ended inside a frame, or held no frame at all.
   Truncated

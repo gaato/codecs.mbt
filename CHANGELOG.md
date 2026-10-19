@@ -7,6 +7,16 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-19
+
+### Changed
+
+- **`ZstdErrorKind` is `#non_exhaustive`.** A later kind of failure, such as
+  one for dictionary support, can then be told apart without breaking
+  matches in your code. Migration: a `match` on `ZstdErrorKind` ends with
+  `@zstd.ZstdErrorKind::.. => …` after the existing constructors. `Status`
+  stays exhaustive.
+
 ## [0.1.0] - 2026-10-19
 
 ### Added
