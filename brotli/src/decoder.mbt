@@ -52,6 +52,7 @@ const INITIAL_WINDOW : Int32 = 1024
 /// fixed-size tables, never the whole input or output.
 pub struct Decoder {
   priv max_window_bits : Int32
+  priv until : @codec_bytes.Until
   // Bit reader. `acc` holds `nbits` unread bits, least significant first;
   // they come from `stash` and then from `view`.
   priv mut acc : Int32
@@ -83,7 +84,7 @@ pub struct Decoder {
   priv mut state : State
   priv mut is_last : Bool
   priv mut meta_remaining : Int32
-  priv mut failure : BrotliError?
+  priv mut failure : @codec.CodecError?
   priv mut step_consumed : Int32
   priv mut step_produced : Int32
   // Compressed meta-block header. `cat` is the category being read
@@ -126,14 +127,26 @@ pub struct Decoder {
 }
 
 ///|
-/// A decoder at the start of a stream. It refuses, with `WindowTooLarge`,
-/// a stream whose window exceeds `1 << max_window_bits` bytes (the window
-/// memory it would need); the default 24 accepts every RFC 7932 stream.
-/// Values are clamped to 10..24.
-pub fn Decoder::Decoder(max_window_bits~ : Int32 = 24) -> Decoder {
+/// A decoder at the start of a stream. It refuses a stream whose window
+/// exceeds what `max_window_bits` allows: `LimitExceeded` with the
+/// `Memory` resource, where `needed` is the stream's window and `limit` the
+/// largest one allowed, both `(1 << WBITS) - 16` bytes (RFC 7932 section
+/// 9.1). The default 24 accepts every RFC 7932 stream. Values are clamped
+/// to 10..24.
+///
+/// Brotli has no framing: an input holds one stream. With `until` at its
+/// default `EndOfInput`, bytes after the stream raise `TrailingData`; with
+/// `EndOfMember`, `step` answers `Done` right after the stream's last
+/// meta-block and consumes nothing past it, so `input[last_consumed():]`
+/// is what follows the stream.
+pub fn Decoder::Decoder(
+  max_window_bits~ : Int32 = 24,
+  until~ : @codec_bytes.Until = EndOfInput,
+) -> Decoder {
   let empty_out = FixedArray::make(0, b'\x00')
   {
     max_window_bits: max_window_bits.clamp(min=10, max=24),
+    until,
     acc: 0,
     nbits: 0,
     stash: [],
@@ -244,18 +257,39 @@ pub fn Decoder::last_produced(self : Decoder) -> Int32 {
 }
 
 ///|
+/// Bytes the decoder holds in buffers sized by the stream: the window, and
+/// the prefix code tables of the largest meta-block so far. At most
+/// `1 << max_window_bits` plus 1,343,596 bytes of tables (see
+/// RESOURCE_BOUNDS.md). `reset` releases the window and keeps the tables.
+pub fn Decoder::memory_usage(self : Decoder) -> Int32 {
+  let mut entries = self.lit_trees.pool.length() +
+    self.cmd_trees.pool.length() +
+    self.dist_trees.pool.length() +
+    self.map_code.pool.length() +
+    self.code.cl_code.pool.length()
+  for c in 0..<3 {
+    entries += self.type_codes[c].pool.length() +
+      self.count_codes[c].pool.length()
+  }
+  self.ring.length() + 2 * entries
+}
+
+///|
 /// Decodes from `input` into `output`; see `last_consumed` and
-/// `last_produced` for how much of each it used. Pass `end=true` once
-/// `input` holds the last bytes of the stream, so that a stream cut short
-/// raises `Truncated` instead of asking for more. Bytes after the end of the
-/// stream raise `TrailingData`. After an error the decoder raises it again
+/// `last_produced` for how much of each it used. `end` says whether `input`
+/// holds the last bytes there are: then a stream cut short raises
+/// `Truncated` instead of asking for more. With `EndOfInput`, `Done` comes
+/// once the stream has ended, `end` is true and every byte is consumed;
+/// bytes after the end of the stream raise `TrailingData`. With
+/// `EndOfMember`, `Done` comes once the stream has ended, and the bytes
+/// after it are left unconsumed. After an error the decoder raises it again
 /// until `reset`.
 pub fn Decoder::step(
   self : Decoder,
   input : BytesView,
   output : MutArrayView[Byte],
-  end~ : Bool = false,
-) -> Status raise BrotliError {
+  end~ : Bool,
+) -> Status raise @codec.CodecError {
   self.step_with(input, output, None, end~)
 }
 
@@ -265,8 +299,8 @@ pub fn Decoder::step_into(
   self : Decoder,
   input : BytesView,
   output : FixedArray[Byte],
-  end~ : Bool = false,
-) -> Status raise BrotliError {
+  end~ : Bool,
+) -> Status raise @codec.CodecError {
   self.step_with(input, output.mut_view(), Some(output), end~)
 }
 
@@ -277,7 +311,7 @@ fn Decoder::step_with(
   output : MutArrayView[Byte],
   fixed_output : FixedArray[Byte]?,
   end~ : Bool,
-) -> Status raise BrotliError {
+) -> Status raise @codec.CodecError {
   self.step_consumed = 0
   self.step_produced = 0
   if self.failure is Some(err) {
@@ -298,19 +332,34 @@ fn Decoder::step_with(
       self.stash_pos = 0
       self.in_pos = self.view.length()
       if end {
-        self.fail(BrotliError(Truncated, "the stream ends early"))
+        self.fail(@codec.CodecError(Truncated, "the stream ends early"))
       }
       self.drain()
       self.finish_step(if self.pending > 0 { NeedMoreOutput } else { status })
     }
     Done => {
-      if self.nbits > 0 ||
-        self.stash_pos < self.stash.length() ||
-        self.in_pos < self.view.length() {
-        self.fail(BrotliError(TrailingData, "data after the end of the stream"))
+      // Under `EndOfMember` the stream's end gave back the bytes past it.
+      if self.until is EndOfInput &&
+        (
+          self.nbits > 0 ||
+          self.stash_pos < self.stash.length() ||
+          self.in_pos < self.view.length()
+        ) {
+        self.fail(
+          @codec.CodecError(TrailingData, "data after the end of the stream"),
+        )
       }
       self.drain()
-      self.finish_step(if self.pending > 0 { NeedMoreOutput } else { Done })
+      self.finish_step(
+        if self.pending > 0 {
+          NeedMoreOutput
+        } else if end || self.until is EndOfMember {
+          Done
+        } else {
+          // More input could still be trailing data.
+          NeedMoreInput
+        },
+      )
     }
     NeedMoreOutput => {
       self.drain()
@@ -333,7 +382,10 @@ fn Decoder::finish_step(self : Decoder, status : Status) -> Status {
 
 ///|
 /// Records a terminal error and raises it.
-fn[T] Decoder::fail(self : Decoder, err : BrotliError) -> T raise BrotliError {
+fn[T] Decoder::fail(
+  self : Decoder,
+  err : @codec.CodecError,
+) -> T raise @codec.CodecError {
   self.failure = Some(err)
   self.stash = []
   self.stash_pos = 0
@@ -479,6 +531,17 @@ fn Decoder::next_aligned_byte(self : Decoder) -> Byte {
   b
 }
 
+///|
+/// Returns the whole bytes left in `acc` to the input, at the end of the
+/// stream: they follow it. They all come from `view`: a unit leaves bytes in
+/// `stash` only when they fall short of what it needs, so they all belong
+/// to the stream, and the stream ends on a byte boundary.
+fn Decoder::give_back(self : Decoder) -> Unit {
+  self.in_pos -= self.nbits / 8
+  self.acc = 0
+  self.nbits = 0
+}
+
 // ---- window ----
 
 ///|
@@ -611,7 +674,7 @@ fn Decoder::write_out(self : Decoder, start : Int32, n : Int32) -> Unit {
 
 ///|
 /// Runs units until the input or the output runs out or the stream ends.
-fn Decoder::run(self : Decoder) -> Status raise BrotliError {
+fn Decoder::run(self : Decoder) -> Status raise @codec.CodecError {
   for ;; {
     self.checkpoint()
     let status = self.unit() catch {
@@ -619,7 +682,7 @@ fn Decoder::run(self : Decoder) -> Status raise BrotliError {
         self.rewind()
         return NeedMoreInput
       }
-      Fail(kind, message) => raise BrotliError(kind, message)
+      Fail(kind, message) => raise @codec.CodecError(kind, message)
     }
     if status is Some(status) {
       return status
@@ -662,6 +725,9 @@ fn Decoder::unit(self : Decoder) -> Status? raise Stop {
       if self.is_last {
         self.skip_padding()
         self.state = Done
+        if self.until is EndOfMember {
+          self.give_back()
+        }
       } else {
         self.state = MetaHeader
       }

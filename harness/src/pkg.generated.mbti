@@ -8,7 +8,11 @@ import {
 }
 
 // Values
+pub fn[E : @codec_bytes.Encode, D : @codec_bytes.Decode] check_flush(() -> E, () -> D, BytesView, flush_at~ : Array[Int]) -> Unit raise
+
 pub fn[S : Stepper] check_reset(() -> S, BytesView, BytesView) -> Unit raise
+
+pub fn[E : @codec_bytes.Encode, D : @codec_bytes.Decode] check_roundtrip(() -> E, () -> D, BytesView, encoder_memory_limit? : Int?, decoder_memory_limit? : Int?, small? : Int) -> Bytes raise
 
 pub fn[S : Stepper] check_splits(() -> S, BytesView, memory_limit? : Int?, small? : Int) -> Transcript raise
 
@@ -35,6 +39,15 @@ pub fn[D] ByteDecoder::new(D) -> Self[D]
 pub fn[D : @codec_bytes.Decode] ByteDecoder::reset(Self[D]) -> Unit
 pub fn[D : @codec_bytes.Decode] ByteDecoder::step(Self[D], BytesView, Int, end~ : Bool) -> Step raise
 pub impl[D : @codec_bytes.Decode] Stepper for ByteDecoder[D]
+
+pub struct ByteEncoder[E] {
+  encoder : E
+}
+pub fn[E : @codec_bytes.Encode] ByteEncoder::memory_usage(Self[E]) -> Int
+pub fn[E] ByteEncoder::new(E) -> Self[E]
+pub fn[E : @codec_bytes.Encode] ByteEncoder::reset(Self[E]) -> Unit
+pub fn[E : @codec_bytes.Encode] ByteEncoder::step(Self[E], BytesView, Int, end~ : Bool) -> Step raise
+pub impl[E : @codec_bytes.Encode] Stepper for ByteEncoder[E]
 
 pub struct Rng {
   mut state : UInt

@@ -42,7 +42,7 @@ streams built bit by bit, and seeded pseudo-random splits and corruptions.
 - moon's bundled tcc cannot link on some hosts (openSUSE); the script sets
   `MOON_CC=cc` unless it is already set.
 
-Snapshot at the last full measurement (2026-10-18): **99.9 %** (840/841
+Snapshot at the last full measurement (2026-10-20): **99.9 %** (871/872
 lines).
 
 ## Policy
@@ -55,7 +55,11 @@ Must be covered by tests:
   each kind, all four literal context modes, direct and postfix distance
   codes, dictionary references, uncompressed and metadata meta-blocks;
 - suspension on input and on output at every unit, through byte-sized and
-  random splits.
+  random splits;
+- both ways of ending a stream: `EndOfInput` (trailing bytes, `Done` only
+  with `end`) and `EndOfMember` (stopping before what follows);
+- the `gaato/codec_bytes` trait implementations, through generic code in
+  `src/api_test.mbt`;
 - every encoder path: simple prefix codes of one to four symbols, complex
   codes (including a code length code of one symbol), the uncompressed
   fallback, flushes, the input buffer sliding, and suspension on output

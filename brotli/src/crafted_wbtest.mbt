@@ -363,7 +363,7 @@ test "malformed streams raise the error the RFC calls for" {
   let results = cases.map(c => {
     let (name, input, max_window_bits) = c
     let outcome = try decompress(input, max_window_bits~) catch {
-      BrotliError(kind, message) => "\{Repr(kind)}: \{message}"
+      @codec.CodecError(kind, message) => "\{Repr(kind)}: \{message}"
     } noraise {
       _ => "decoded"
     }
@@ -374,7 +374,7 @@ test "malformed streams raise the error the RFC calls for" {
     content=(
       #|[
       #|  "large-window header -> Corrupt: large-window streams are not RFC 7932",
-      #|  "window over max_window_bits -> WindowTooLarge: the stream needs a 16777216-byte window, over the limit of 4194304",
+      #|  "window over max_window_bits -> LimitExceeded({ resource: Memory, needed: Some(16777200), limit: 4194288 }): the stream needs a 16777200-byte window, over the limit of 4194288",
       #|  "reserved metadata bit -> Corrupt: reserved bit set",
       #|  "metadata length with a zero last byte -> Corrupt: metadata length has a needless zero byte",
       #|  "meta-block length with a zero last nibble -> Corrupt: meta-block length has a needless zero nibble",

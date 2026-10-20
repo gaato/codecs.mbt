@@ -21,13 +21,19 @@ fn Decoder::stream_header(self : Decoder) -> Unit raise Stop {
     }
   }
   if wbits > self.max_window_bits {
+    let needed = window_size(wbits)
+    let limit = window_size(self.max_window_bits)
     raise Fail(
-      WindowTooLarge,
-      "the stream needs a \{1 << wbits}-byte window, over the limit of \{1 << self.max_window_bits}",
+      LimitExceeded({
+        resource: Memory,
+        needed: Some(needed.to_uint64()),
+        limit: limit.to_uint64(),
+      }),
+      "the stream needs a \{needed}-byte window, over the limit of \{limit}",
     )
   }
   self.ring_max = 1 << wbits
-  self.window = self.ring_max - 16
+  self.window = window_size(wbits)
   self.state = MetaHeader
 }
 

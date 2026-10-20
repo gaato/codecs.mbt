@@ -3,6 +3,29 @@
 const MAX_DISTANCE_ALPHABET : Int32 = 16 + 120 + (48 << 3)
 
 ///|
+/// The most bytes of prefix code tables a decoder holds: 256 trees of each
+/// category, the block type and count codes, the context map code and the
+/// code length code, at 2 bytes an entry.
+fn max_decoder_table_bytes() -> Int32 {
+  let entries = 256 *
+    (
+      max_table_size(NUM_LITERALS) +
+      max_table_size(MAX_ALPHABET) +
+      max_table_size(MAX_DISTANCE_ALPHABET)
+    ) +
+    3 * (max_table_size(258) + max_table_size(NUM_BLOCK_COUNT_CODES)) +
+    max_table_size(256 + 16) +
+    max_table_size(18)
+  2 * entries
+}
+
+///|
+/// The bound RESOURCE_BOUNDS.md gives for `Decoder::memory_usage`.
+fn decoder_memory_bound(max_window_bits : Int32) -> Int32 {
+  (1 << max_window_bits) + max_decoder_table_bytes()
+}
+
+///|
 /// Checks the limits RESOURCE_BOUNDS.md states, after a step that had
 /// `room` bytes of output.
 fn check_bounds(d : Decoder, room : Int32) -> Unit raise {
@@ -33,6 +56,8 @@ fn check_bounds(d : Decoder, room : Int32) -> Unit raise {
   }
   assert_true(d.map_code.pool.length() <= max_table_size(256 + 16))
   assert_true(d.code.cl_code.pool.length() <= max_table_size(18))
+  // Everything sized by the stream.
+  assert_true(d.memory_usage() <= decoder_memory_bound(d.max_window_bits))
 }
 
 ///|
@@ -110,6 +135,83 @@ fn check_encoder_bounds(e : Encoder, room : Int32) -> Unit raise {
   assert_true(e.meta_block.count <= MAX_COMMANDS)
   // The hash table.
   assert_eq(e.matcher.capacity(), 4 << e.window_bits.min(15))
+  // Everything sized by the stream.
+  assert_true(e.memory_usage() <= encoder_memory_bound(e.window_bits))
+}
+
+///|
+/// The bound RESOURCE_BOUNDS.md gives for `Encoder::memory_usage`: the
+/// input buffer at its largest, and twice the most output that waits.
+fn encoder_memory_bound(window_bits : Int32) -> Int32 {
+  (1 << window_bits) -
+  16 +
+  (1 << (window_bits - 2)).max(BLOCK_SIZE) +
+  BLOCK_SIZE +
+  2 * MAX_ENCODER_PENDING
+}
+
+///|
+/// The WBITS a stream declares (section 9.1).
+fn stream_wbits(stream : BytesView) -> Int32 {
+  let b = stream[0].to_int() |
+    (if stream.length() > 1 { stream[1].to_int() << 8 } else { 0 })
+  if (b & 1) == 0 {
+    16
+  } else if ((b >> 1) & 7) != 0 {
+    17 + ((b >> 1) & 7)
+  } else if ((b >> 4) & 7) != 0 {
+    8 + ((b >> 4) & 7)
+  } else {
+    17
+  }
+}
+
+///|
+test "memory_usage stays within its bound after every step" {
+  // The figures RESOURCE_BOUNDS.md gives.
+  inspect(max_decoder_table_bytes(), content="1343596")
+  inspect(encoder_memory_bound(22), content="5439600")
+  inspect(encoder_memory_bound(24), content="21168240")
+  let rng = Rng::new(2026)
+  let mut largest = 0
+  for v in vectors {
+    guard v.size <= 300000 else { continue }
+    let input = v.input()
+    guard input.length() > 0 else { continue }
+    // The tightest limit the stream passes, and the widest.
+    for bits in [stream_wbits(input), 24] {
+      let decoder = Decoder(max_window_bits=bits)
+      let got = drive(
+        decoder,
+        input,
+        next_in=() => 1 + rng.below(700),
+        next_out=() => 1 + rng.below(9000),
+        check=(d, room) => {
+          check_bounds(d, room)
+          largest = largest.max(d.memory_usage())
+        },
+      )
+      assert_eq(@checksum.sha256(got), v.sha256, msg=v.name)
+    }
+  }
+  // Some stream used most of its window and tables.
+  assert_true(largest > 1 << 16)
+  let input = sample_text(rng, 300000) + sample_random(rng, 100000)
+  for window_bits in [10, 16, 22] {
+    let encoder = Encoder(window_bits~)
+    let stream = encode_drive(
+      encoder,
+      input,
+      next_in=() => 1 + rng.below(20000),
+      next_out=() => 1 + rng.below(5000),
+      flush=_ => rng.below(8) == 0,
+      check=check_encoder_bounds,
+    )
+    assert_true(decompress(stream) == input)
+    // `reset` releases the input buffer.
+    encoder.reset()
+    assert_true(encoder.memory_usage() <= 2 * MAX_ENCODER_PENDING)
+  }
 }
 
 ///|

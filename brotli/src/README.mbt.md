@@ -92,16 +92,33 @@ test "encode a stream part by part" {
 }
 ```
 
+`Decoder` and `Encoder` implement `Decode` and `Encode` from [`gaato/codec_bytes`](https://mooncakes.io/docs/gaato/codec_bytes), the contract the codecs of [codecs.mbt](https://github.com/gaato/codecs.mbt) share, so code written once against it drives them. Errors are `gaato/codec`'s `CodecError(kind, message)`, the same for every codec there.
+
+Brotli has no framing, so an input holds one stream. A decoder made with `until=EndOfMember` stops right after the stream and leaves what follows unread:
+
+```mbt check
+///|
+test "stop at the end of the stream" {
+  let input = b"\x0b\x02\x80hello\x03" + b"what follows"
+  let decoder = @brotli.Decoder(until=EndOfMember)
+  let out = FixedArray::make(64, b'\x00')
+  let status = decoder.step_into(input, out, end=false)
+  assert_eq(status, Done)
+  assert_eq(Bytes::from_array(out[:decoder.last_produced()]), b"hello")
+  assert_eq(input[decoder.last_consumed():], b"what follows")
+}
+```
+
 ## What it does
 
 - Decodes every RFC 7932 stream, including the static dictionary and its 121 transforms.
 - Takes input in chunks of any size, down to one byte, and writes output into buffers of any size; the same `step` / `Status` shape as `moonbit-community/flate`.
-- Memory is the window (at most 16 MiB, and no more than the output so far) plus tables of at most 1.3 MiB. `Decoder(max_window_bits=n)` refuses streams that need a window over `2^n` bytes.
-- Every malformed stream raises `BrotliError(kind, message)`: `Truncated`, `Corrupt`, `TrailingData` (bytes after the stream), `WindowTooLarge` or `OutputLimitExceeded`. It does not abort.
+- Memory is the window (at most 16 MiB, and no more than the output so far) plus tables of at most 1.3 MiB; `memory_usage()` reports it. `Decoder(max_window_bits=n)` refuses streams that need a window over `2^n - 16` bytes with `LimitExceeded`, saying how much the stream needs.
+- Every malformed stream raises `CodecError(kind, message)` with `Truncated`, `Corrupt` or `TrailingData` (bytes after the stream); `decompress(max_output=n)` raises `LimitExceeded` past `n` bytes. It does not abort.
 - Encodes with greedy LZ77 (lazy by one byte) and one prefix code per meta-block: about google/brotli's quality 4, and close to gzip -6. Its streams decode with google/brotli's decoder (`scripts/crosscheck.py`).
 - The encoder's memory is its window (`Encoder(window_bits=n)`, 22 by default: 4 MiB, growing with the input to at most twice what it has taken, and up to a quarter more before it slides) plus a 64 KiB meta-block, its output and about 1 MiB of fixed tables.
 
-Not included: higher-quality encoding (context modeling, block splitting, static dictionary references), and the non-RFC large-window format.
+Not included: higher-quality encoding (context modeling, block splitting, static dictionary references), and Shared Brotli (RFC 9841): its shared dictionaries, its large window and its framing format. A large-window stream raises `Corrupt`.
 
 ## License
 

@@ -186,3 +186,148 @@ fn mutate(rng : Rng, input : BytesView) -> Bytes {
   }
   Bytes::from_array(bytes)
 }
+
+///|
+/// Checks an encoder against a decoder of its format: `input` is encoded
+/// whole, then under every split of `splits()`, by a fresh encoder through
+/// `ByteEncoder` (so `Finish` comes with the last chunk), and every
+/// encoding must decode, with a fresh decoder given it whole, back to
+/// `input`. Splitting does not matter to encoders either: every encoding
+/// must equal the whole one. Byte-at-a-time splits are skipped for inputs
+/// over `small` bytes. Returns the whole encoding.
+pub fn[E : @codec_bytes.Encode, D : @codec_bytes.Decode] check_roundtrip(
+  make_encoder : () -> E,
+  make_decoder : () -> D,
+  input : BytesView,
+  encoder_memory_limit~ : Int32? = None,
+  decoder_memory_limit~ : Int32? = None,
+  small~ : Int32 = 1 << 16,
+) -> Bytes raise {
+  let encode = (input_sizes : Sizes, output_sizes : Sizes) => {
+    let run = drive(
+      ByteEncoder::new(make_encoder()),
+      input,
+      input_sizes~,
+      output_sizes~,
+      memory_limit=encoder_memory_limit,
+    )
+    let label = "input in \{input_sizes.label}, output in \{output_sizes.label}"
+    if run.error is Some(kind) {
+      fail("\{label}: encoding raised \{@debug.to_string(kind)}")
+    }
+    let decoded = drive(
+      ByteDecoder::new(make_decoder()),
+      run.output,
+      memory_limit=decoder_memory_limit,
+    )
+    if decoded.error is Some(_) || decoded.output != input.to_owned() {
+      fail("\{label}: the encoding decodes to \{describe(decoded)}")
+    }
+    (run, label)
+  }
+  let (whole, _) = encode(Sizes::fixed(1 << 20), Sizes::fixed(1 << 16))
+  for split in splits() {
+    let (input_sizes, output_sizes) = split
+    let tiny = input_sizes.label == "1" || output_sizes.label == "1"
+    if tiny && input.length() > small {
+      continue
+    }
+    let (run, label) = encode(input_sizes, output_sizes)
+    if !run.agrees(whole) {
+      fail("\{label}: \{describe(run)}, whole: \{describe(whole)}")
+    }
+  }
+  whole.output
+}
+
+///|
+/// Checks `Flush`: `input` is encoded with a `Flush` after each of the
+/// offsets `flush_at` (in increasing order) and `Finish` at the end. After
+/// every flush, a fresh decoder given everything produced so far, without
+/// `end`, must give out exactly the input up to that offset and ask for
+/// more; the finished stream must decode to `input`. An encoder that
+/// cannot flush raises `Unsupported` for `Flush`, and the check passes.
+pub fn[E : @codec_bytes.Encode, D : @codec_bytes.Decode] check_flush(
+  make_encoder : () -> E,
+  make_decoder : () -> D,
+  input : BytesView,
+  flush_at~ : Array[Int32],
+) -> Unit raise {
+  let encoder = make_encoder()
+  let stream = Buffer()
+  let mut pos = 0
+  for at in flush_at {
+    if at < pos || at > input.length() {
+      fail("flush offset \{at} out of order")
+    }
+    let flushed = encode_all(encoder, input[pos:at], Flush, stream) catch {
+      @codec.CodecError(Unsupported, _) => return
+      err => raise err
+    }
+    if flushed is Done {
+      fail("a flush at \{at} ended the stream")
+    }
+    pos = at
+    let decoded = decode_available(make_decoder(), stream.to_bytes())
+    if decoded != input[:at].to_owned() {
+      fail(
+        "after a flush at \{at}, \{decoded.length()} bytes decode, not the input so far",
+      )
+    }
+  }
+  if encode_all(encoder, input[pos:], Finish, stream) != Done {
+    fail("Finish did not end the stream")
+  }
+  let decoded = drive(ByteDecoder::new(make_decoder()), stream.to_bytes())
+  if decoded.error is Some(_) || decoded.output != input.to_owned() {
+    fail("the flushed stream decodes to \{describe(decoded)}")
+  }
+}
+
+///|
+/// Steps `encoder` over `input` with `action` until it has taken it all and
+/// handed out what the action calls for, appending the output to `out`.
+fn[E : @codec_bytes.Encode] encode_all(
+  encoder : E,
+  input : BytesView,
+  action : @codec_bytes.EncodeAction,
+  out : Buffer,
+) -> Stop raise {
+  let mut rest = input
+  for ;; {
+    let step = encode_step(encoder, rest, 1000, action)
+    out.write_bytes(step.produced)
+    rest = rest[step.consumed:]
+    match step.stop {
+      NeedMoreOutput => continue
+      NeedMoreInput =>
+        if rest.length() != 0 {
+          fail("NeedMoreInput with input left")
+        }
+      _ => ()
+    }
+    return step.stop
+  }
+}
+
+///|
+/// Everything `decoder` gives out for `input` without `end`: it must take
+/// all of it and ask for more, never answer `Done`.
+fn[D : @codec_bytes.Decode] decode_available(
+  decoder : D,
+  input : BytesView,
+) -> Bytes raise {
+  let adapter = ByteDecoder::new(decoder)
+  let out = Buffer()
+  let mut rest = input
+  for ;; {
+    let step = adapter.step(rest, 4096, end=false)
+    out.write_bytes(step.produced)
+    rest = rest[step.consumed:]
+    match step.stop {
+      NeedMoreOutput => continue
+      NeedMoreInput if rest.length() == 0 => return out.to_bytes()
+      stop => fail("without end, a decoder answered \{@debug.to_string(stop)}")
+    }
+  }
+}

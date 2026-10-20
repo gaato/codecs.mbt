@@ -64,7 +64,7 @@ test "every proper prefix of a stream is truncated" {
     guard input.length() <= 2000 else { continue }
     for cut in 0..<input.length() {
       let outcome = try decompress(input[:cut]) catch {
-        BrotliError(kind, _) => kind
+        @codec.CodecError(kind, _) => kind
       } noraise {
         _ => fail("\{v.name} cut at \{cut} decoded")
       }
@@ -78,19 +78,23 @@ test "bytes after the end are refused in the same step or a later one" {
   let input = b"\x06"
   let decoder = Decoder()
   let out = FixedArray::make(8, b'\x00')
-  debug_inspect(decoder.step_into(input, out), content="Done")
+  // The stream is over, but without `end` more bytes may still come.
+  debug_inspect(
+    decoder.step_into(input, out, end=false),
+    content="NeedMoreInput",
+  )
   assert_true(decoder.is_finished())
   // An empty step after the end is fine; a byte is not.
   debug_inspect(decoder.step_into(b"", out, end=true), content="Done")
-  let late = try decoder.step_into(b"\x00", out) catch {
-    BrotliError(kind, _) => kind
+  let late = try decoder.step_into(b"\x00", out, end=false) catch {
+    @codec.CodecError(kind, _) => kind
   } noraise {
     _ => fail("trailing byte accepted")
   }
   debug_inspect(late, content="TrailingData")
   // The error sticks until `reset`.
-  let again = try decoder.step_into(b"", out) catch {
-    BrotliError(kind, _) => kind
+  let again = try decoder.step_into(b"", out, end=true) catch {
+    @codec.CodecError(kind, _) => kind
   } noraise {
     _ => fail("error forgotten")
   }
@@ -120,13 +124,13 @@ test "decompress honours max_output" {
   let input = vectors[alice].input()
   inspect(decompress(input, max_output=152089).length(), content="152089")
   let refused = try decompress(input, max_output=152088) catch {
-    BrotliError(kind, message) => "\{Repr(kind)}: \{message}"
+    @codec.CodecError(kind, message) => "\{Repr(kind)}: \{message}"
   } noraise {
     _ => fail("limit ignored")
   }
   inspect(
     refused,
-    content="OutputLimitExceeded: the output exceeds 152088 bytes",
+    content="LimitExceeded({ resource: Output, needed: None, limit: 152088 }): the output exceeds 152088 bytes",
   )
 }
 
@@ -134,22 +138,33 @@ test "decompress honours max_output" {
 test "max_window_bits refuses larger windows and is clamped" {
   let far = vectors.search_by(v => v.name == "gen/window24_far").unwrap()
   let input = vectors[far].input()
+  // The window the stream needs and the largest one allowed, in bytes.
   for bits in [10, 23] {
     let refused = try decompress(input, max_window_bits=bits) catch {
-      BrotliError(kind, _) => kind
+      @codec.CodecError(kind, _) => kind
     } noraise {
       _ => fail("window over \{bits} bits accepted")
     }
-    assert_eq(refused, WindowTooLarge)
+    assert_eq(
+      refused,
+      LimitExceeded({
+        resource: Memory,
+        needed: Some((1UL << 24) - 16),
+        limit: (1UL << bits) - 16,
+      }),
+    )
   }
   assert_eq(decompress(input, max_window_bits=99).length(), vectors[far].size)
   // A 16-bit window passes a limit of 16 (and of 3, clamped up to 10, fails).
   let small = BitWriter::new().bits(1, 0).bits(2, 3).finish()
   inspect(decompress(small, max_window_bits=16).length(), content="0")
   let clamped = try decompress(small, max_window_bits=3) catch {
-    BrotliError(kind, _) => kind
+    @codec.CodecError(kind, _) => kind
   } noraise {
     _ => fail("16-bit window under a 10-bit limit accepted")
   }
-  assert_eq(clamped, WindowTooLarge)
+  debug_inspect(
+    clamped,
+    content="LimitExceeded({ resource: Memory, needed: Some(65520), limit: 1008 })",
+  )
 }

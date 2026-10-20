@@ -61,22 +61,47 @@ pub impl[D : @codec_bytes.Decode] Stepper for ByteDecoder[D] with fn step(
   let out = FixedArray::make(room, b'\x00')
   let status = self.decoder.step(input, out.mut_view(), end~) catch {
     @codec.CodecError(kind, message) => {
-      // A step that raises reports nothing consumed and nothing produced.
-      if self.decoder.last_consumed() != 0 || self.decoder.last_produced() != 0 {
-        fail(
-          "a raising step reported \{self.decoder.last_consumed()} consumed and \{self.decoder.last_produced()} produced",
-        )
-      }
+      check_nothing_reported(
+        self.decoder.last_consumed(),
+        self.decoder.last_produced(),
+      )
       raise @codec.CodecError(kind, message)
     }
   }
-  let consumed = self.decoder.last_consumed()
-  let produced = self.decoder.last_produced()
+  to_step(
+    status,
+    input,
+    out,
+    self.decoder.last_consumed(),
+    self.decoder.last_produced(),
+  )
+}
+
+///|
+/// A step that raises reports nothing consumed and nothing produced.
+fn check_nothing_reported(consumed : Int32, produced : Int32) -> Unit raise {
+  if consumed != 0 || produced != 0 {
+    fail(
+      "a raising step reported \{consumed} consumed and \{produced} produced",
+    )
+  }
+}
+
+///|
+/// A byte-stream step as the checks see it, once its counts are checked
+/// against what it was given.
+fn to_step(
+  status : @codec_bytes.Status,
+  input : BytesView,
+  out : FixedArray[Byte],
+  consumed : Int32,
+  produced : Int32,
+) -> Step raise {
   if consumed < 0 || consumed > input.length() {
     fail("consumed \{consumed} of \{input.length()} bytes")
   }
-  if produced < 0 || produced > room {
-    fail("produced \{produced} bytes into \{room}")
+  if produced < 0 || produced > out.length() {
+    fail("produced \{produced} bytes into \{out.length()}")
   }
   let stop : Stop = match status {
     Done => Done
@@ -96,4 +121,74 @@ pub impl[D : @codec_bytes.Decode] Stepper for ByteDecoder[D] with fn memory_usag
   self,
 ) {
   self.decoder.memory_usage()
+}
+
+///|
+/// A byte-stream encoder under the checks. A step with `end` is a step with
+/// `Finish`, any other a step with `Continue`, so that `drive` and every
+/// check built on it run encoders as they run decoders: the output of a
+/// run is the encoded stream.
+pub struct ByteEncoder[E] {
+  encoder : E
+}
+
+///|
+pub fn[E] ByteEncoder::new(encoder : E) -> ByteEncoder[E] {
+  { encoder, }
+}
+
+///|
+pub extend ByteEncoder with Stepper::{step, reset, memory_usage}
+
+///|
+pub impl[E : @codec_bytes.Encode] Stepper for ByteEncoder[E] with fn step(
+  self,
+  input,
+  room,
+  end~,
+) {
+  encode_step(self.encoder, input, room, if end { Finish } else { Continue })
+}
+
+///|
+pub impl[E : @codec_bytes.Encode] Stepper for ByteEncoder[E] with fn reset(self) {
+  self.encoder.reset()
+}
+
+///|
+pub impl[E : @codec_bytes.Encode] Stepper for ByteEncoder[E] with fn memory_usage(
+  self,
+) {
+  self.encoder.memory_usage()
+}
+
+///|
+/// One step of `encoder` with `action`, checked: besides the counts, `Done`
+/// comes only after `Finish` with every byte of `input` consumed.
+fn[E : @codec_bytes.Encode] encode_step(
+  encoder : E,
+  input : BytesView,
+  room : Int32,
+  action : @codec_bytes.EncodeAction,
+) -> Step raise {
+  let out = FixedArray::make(room, b'\x00')
+  let status = encoder.step(input, out.mut_view(), action~) catch {
+    @codec.CodecError(kind, message) => {
+      check_nothing_reported(encoder.last_consumed(), encoder.last_produced())
+      raise @codec.CodecError(kind, message)
+    }
+  }
+  let step = to_step(
+    status,
+    input,
+    out,
+    encoder.last_consumed(),
+    encoder.last_produced(),
+  )
+  if step.stop is Done && (action != Finish || step.consumed != input.length()) {
+    fail(
+      "Done after \{@debug.to_string(action)} with \{input.length() - step.consumed} bytes unread",
+    )
+  }
+  step
 }

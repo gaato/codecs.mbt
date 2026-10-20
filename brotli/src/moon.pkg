@@ -1,7 +1,8 @@
 import {
+  "gaato/codec",
+  "gaato/codec_bytes",
   "gaato/brotli/internal/huffman",
   "gaato/brotli/internal/lz77",
-  "moonbitlang/core/debug",
 }
 
 import {
@@ -11,6 +12,8 @@ import {
 } for "wbtest"
 
 import {
+  "gaato/codec",
+  "gaato/codec_bytes",
   "moonbitlang/core/encoding/utf8",
 } for "test"
 

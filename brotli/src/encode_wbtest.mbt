@@ -325,7 +325,10 @@ test "prefix codes of every shape decode" {
 test "steps after the end take no input" {
   let encoder = Encoder()
   let out = FixedArray::make(64, b'\x00')
-  debug_inspect(encoder.step_into(b"hello", out), content="NeedMoreInput")
+  debug_inspect(
+    encoder.step_into(b"hello", out, action=Continue),
+    content="NeedMoreInput",
+  )
   inspect(encoder.last_consumed(), content="5")
   inspect(encoder.last_produced(), content="0")
   inspect(encoder.is_finished(), content="false")

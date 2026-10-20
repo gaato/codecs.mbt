@@ -11,7 +11,13 @@ and whether the input ends there, take a step and say what was consumed,
 what was produced and why the step stopped (`NeedMoreInput`,
 `NeedMoreOutput`, an `Event`, or `Done`). Each kind of codec has an adapter
 that turns its contract into this view and checks its own rules on the way;
-`ByteDecoder` does it for `gaato/codec_bytes` decoders.
+`ByteDecoder` does it for `gaato/codec_bytes` decoders, and `ByteEncoder` for
+its encoders. An encoder's step with `end` is a step with `Finish`, any other
+a step with `Continue`, so every check below runs an encoder as it runs a
+decoder, its output being the encoded stream. Both adapters check that a
+step that raises reports nothing consumed or produced and that the counts fit
+what the step was given; `ByteEncoder` also checks that `Done` comes only
+after `Finish`, with all input consumed.
 
 `drive` runs a codec over an input split by two `Sizes` sequences and checks
 the rules every kind shares after every step: nothing is asked for after the
@@ -24,6 +30,14 @@ On top of `drive`: `check_splits` (every split agrees with the whole run),
 boundary), `check_trailing` (bytes after the end), `check_reset`, and `fuzz`
 (corrupted inputs never break the contract; returns how often each outcome
 happened).
+
+For an encoder and a decoder of the same format: `check_roundtrip` encodes
+an input whole and under every split, requires every encoding to equal the
+whole one and to decode, with a fresh decoder, back to the input; and
+`check_flush` encodes with a `Flush` at given offsets, and requires that a
+fresh decoder given everything produced so far, without `end`, gives out
+exactly the input up to each offset and asks for more. An encoder that cannot
+flush raises `Unsupported` for `Flush`, and `check_flush` accepts that.
 
 ## Adding a kind
 

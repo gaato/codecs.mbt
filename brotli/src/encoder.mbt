@@ -9,24 +9,6 @@
 // passes. The step model follows moonbit-community/flate's `Deflater`.
 
 ///|
-/// What `Encoder::step` should do once it has taken all of its input.
-pub(all) enum EncodeAction {
-  /// Only take input.
-  Continue
-  /// Compress everything buffered and pad to a byte boundary, so that the
-  /// output so far decodes to the input so far; the stream continues.
-  Flush
-  /// Compress everything buffered and end the stream.
-  Finish
-} derive(Eq, Debug)
-
-///|
-pub extend EncodeAction with Eq::{equal, not_equal}
-
-///|
-pub extend EncodeAction with @debug.Debug::{to_repr}
-
-///|
 /// The first allocation of the input buffer; it doubles as input grows.
 const INITIAL_BUFFER : Int32 = 1024
 
@@ -145,12 +127,24 @@ pub fn Encoder::last_produced(self : Encoder) -> Int32 {
 }
 
 ///|
+/// Bytes the encoder holds in buffers that grow with the stream: the input
+/// buffer (the window and at most a meta-block not encoded yet) and the
+/// output waiting for the caller. At most `(1 << window_bits) - 16`, plus
+/// `max(1 << (window_bits - 2), 64 KiB)`, plus 64 KiB, plus 131,200 bytes
+/// (see RESOURCE_BOUNDS.md). `reset` releases the input buffer.
+pub fn Encoder::memory_usage(self : Encoder) -> Int32 {
+  self.data.length() + self.writer.buf.length()
+}
+
+///|
 /// Compresses from `input` into `output`; see `last_consumed` and
 /// `last_produced` for how much of each it used. Input that was not taken
 /// (when the output is full) must be passed again, with the same action.
 ///
-/// `action` applies once all of `input` is taken: `Flush` makes the output
-/// so far decode to the input so far, `Finish` ends the stream. Both stay
+/// `action` applies once all of `input` is taken: `Continue` only takes
+/// input, `Flush` compresses everything buffered and pads to a byte
+/// boundary, so that the output so far decodes to the input so far, and
+/// `Finish` ends the stream. Both stay
 /// in effect while the step answers `NeedMoreOutput`. Status: `NeedMoreInput`
 /// once everything is taken and its output handed out (a `Flush` is then
 /// complete), `NeedMoreOutput` while output waits, `Done` once the stream
@@ -160,7 +154,7 @@ pub fn Encoder::step(
   self : Encoder,
   input : BytesView,
   output : MutArrayView[Byte],
-  action~ : EncodeAction = Continue,
+  action~ : EncodeAction,
 ) -> Status {
   self.step_with(input, output, None, action)
 }
@@ -171,7 +165,7 @@ pub fn Encoder::step_into(
   self : Encoder,
   input : BytesView,
   output : FixedArray[Byte],
-  action~ : EncodeAction = Continue,
+  action~ : EncodeAction,
 ) -> Status {
   self.step_with(input, output.mut_view(), Some(output), action)
 }

@@ -35,7 +35,7 @@ test "corrupted streams raise errors or decode, within bounds, never abort" {
         check=check_bounds,
       )
     catch {
-      BrotliError(kind, _) => Repr(kind).to_string()
+      @codec.CodecError(kind, _) => Repr(kind).to_string()
       err => fail("unexpected error: \{Repr(err)}")
     } noraise {
       _ => "decoded"
@@ -46,10 +46,10 @@ test "corrupted streams raise errors or decode, within bounds, never abort" {
     tally,
     content=(
       #|{
-      #|  "Truncated": 992,
-      #|  "TrailingData": 84,
-      #|  "Corrupt": 743,
-      #|  "decoded": 181,
+      #|  "Truncated": 1009,
+      #|  "TrailingData": 85,
+      #|  "Corrupt": 733,
+      #|  "decoded": 173,
       #|}
     ),
   )
