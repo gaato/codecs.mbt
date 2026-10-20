@@ -66,7 +66,7 @@ def render():
                       f"let {fmt}_{name} : String =", "  #|" + b64[:76]]
             lines += ["  #|" + b64[i:i + 76] for i in range(76, len(b64), 76)]
             lines += [""]
-        lines += ["///|", f"let {name}_size : Int = {len(raw)}", ""]
+        lines += ["///|", f"let {name}_size : Int32 = {len(raw)}", ""]
     return "\n".join(lines)
 
 

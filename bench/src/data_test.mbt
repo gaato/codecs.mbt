@@ -4982,7 +4982,7 @@ let brotli_text : String =
   #|5kUOB5Pm5CM=
 
 ///|
-let text_size : Int = 524288
+let text_size : Int32 = 524288
 
 ///|
 /// binary (131072 bytes) as zstd produces it (120850 bytes).
@@ -9125,4 +9125,4 @@ let brotli_binary : String =
   #|J5M1s+HJchvGcHvWakPyttEC
 
 ///|
-let binary_size : Int = 131072
+let binary_size : Int32 = 131072
