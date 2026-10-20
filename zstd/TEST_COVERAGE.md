@@ -26,8 +26,8 @@ and corruptions.
 ### What is measured
 
 - Sources: every non-test `.mbt` directly under `src/`, the library package,
-  and under `src/internal/xxhash/`. The test-only checksum package under
-  `src/internal/` is not measured.
+  and under `src/internal/header/` and `src/internal/xxhash/`. The test-only
+  checksum package under `src/internal/` is not measured.
 - Counts are Coveralls lines: lines with at least one instrumented point,
   covered when any point on them ran.
 
@@ -42,7 +42,7 @@ and corruptions.
 - moon's bundled tcc cannot link on some hosts (openSUSE); the script sets
   `MOON_CC=cc` unless it is already set.
 
-Snapshot at the last full measurement (2026-10-20): **99.2 %** (519/523
+Snapshot at the last full measurement (2026-10-20): **99.3 %** (584/588
 lines).
 
 ## Policy
@@ -51,6 +51,17 @@ Must be covered by tests:
 
 - every `raise` arm: each malformed-stream check has a stream built by hand
   that reaches it (`src/crafted_wbtest.mbt`);
+- every decision on header bytes the decoder holds (frame, block and
+  literals section headers, the jump table), a pure function in
+  `src/internal/header/`: checked against a reference written from RFC 8878
+  over its whole input space where it is small enough (every block header
+  on native, every frame header descriptor and window descriptor) and a
+  grid and seeded random inputs elsewhere;
+- the tables `Fse::build` and `Huffman::build` fill in place: equal to
+  references written from RFC 8878 sections 4.1.1 and 4.2.1, for the
+  predefined distributions, every table the test vectors build, and seeded
+  random distributions and weights (`src/fse_spec_wbtest.mbt`,
+  `src/huffman_spec_wbtest.mbt`, `src/spec_vectors_wbtest.mbt`);
 - every block type, literals section type (raw, RLE, compressed, treeless;
   one and four streams; direct and FSE-compressed Huffman weights), table
   mode (predefined, RLE, FSE-compressed, repeat), repeat offset case, and

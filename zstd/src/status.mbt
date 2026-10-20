@@ -16,3 +16,13 @@ priv suberror Stop {
 fn corrupt(message : String) -> Stop {
   Fail(Corrupt, message)
 }
+
+///|
+/// The value of one of `@header`'s pure checks, or corruption with its
+/// message.
+fn[T] checked(result : Result[T, String]) -> T raise Stop {
+  match result {
+    Ok(value) => value
+    Err(message) => raise corrupt(message)
+  }
+}

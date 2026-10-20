@@ -229,19 +229,13 @@ fn Huffman::decode(
     self.decode_stream(data, start, end, out, 0, count)
     return
   }
-  if end - start < 10 {
-    raise corrupt("four Huffman streams in fewer than 10 bytes")
-  }
-  let size1 = data[start].to_int() | (data[start + 1].to_int() << 8)
-  let size2 = data[start + 2].to_int() | (data[start + 3].to_int() << 8)
-  let size3 = data[start + 4].to_int() | (data[start + 5].to_int() << 8)
+  let (size1, size2, size3, _) = checked(
+    @header.parse_jump_table(data[start:end]),
+  )
   let s1 = start + 6
   let s2 = s1 + size1
   let s3 = s2 + size2
   let s4 = s3 + size3
-  if s4 >= end {
-    raise corrupt("a Huffman jump table past its streams")
-  }
   // The caller rejects four streams with fewer than 6 literals, and for 6 or
   // more the last segment is never negative.
   let segment = (count + 3) / 4

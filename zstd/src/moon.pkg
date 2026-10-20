@@ -1,6 +1,7 @@
 import {
   "gaato/codec",
   "gaato/codec_bytes",
+  "gaato/zstd/internal/header",
   "gaato/zstd/internal/xxhash",
 }
 

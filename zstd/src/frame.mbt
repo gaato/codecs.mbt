@@ -42,49 +42,16 @@ fn Decoder::skippable_data(self : Decoder) -> Unit raise Stop {
 /// The frame header: what the frame holds and the window it needs.
 fn Decoder::frame_header(self : Decoder) -> Unit raise Stop {
   self.fill(1)
-  let descriptor = self.hdr[0].to_int()
-  let fcs_flag = descriptor >> 6
-  let single_segment = (descriptor & 0x20) != 0
-  if (descriptor & 0x08) != 0 {
-    raise corrupt("the frame header's reserved bit is set")
-  }
-  let did_size = match descriptor & 3 {
-    0 => 0
-    1 => 1
-    2 => 2
-    _ => 4
-  }
-  let fcs_size = match fcs_flag {
-    0 => if single_segment { 1 } else { 0 }
-    1 => 2
-    2 => 4
-    _ => 8
-  }
-  let window_size = if single_segment { 0 } else { 1 }
-  self.fill(1 + window_size + did_size + fcs_size)
-  let mut at = 1
-  // Computed in 64 bits: a descriptor may ask for up to 2^41 + 7 * 2^38.
-  let mut window : UInt64 = 0
-  if !single_segment {
-    let b = self.hdr[at].to_int()
-    let base = 1UL << (10 + (b >> 3))
-    window = base + (base >> 3) * (b & 7).to_uint64()
-    at += 1
-  }
-  if did_size > 0 && self.hdr_le(at, did_size) != 0 {
-    let id = self.hdr_le(at, did_size).to_uint()
+  let len = checked(@header.frame_header_len(self.hdr[0].to_int()))
+  self.fill(len)
+  let header = checked(@header.parse_frame_header(self.hdr[0:len]))
+  if header.dictionary_id != 0 {
+    let id = header.dictionary_id
     raise Fail(DictionaryRequired(Some(id)), "the frame needs dictionary \{id}")
   }
-  at += did_size
-  self.content_size = if fcs_size > 0 {
-    let size = self.hdr_le(at, fcs_size)
-    Some(if fcs_size == 2 { size + 256 } else { size })
-  } else {
-    None
-  }
-  if single_segment {
-    window = self.content_size.unwrap_or(0)
-  }
+  self.content_size = header.content_size
+  // Computed in 64 bits: a descriptor may ask for up to 2^41 + 7 * 2^38.
+  let window = header.window_size
   let limit = 1UL << self.max_window_bits
   if window > limit {
     raise Fail(
@@ -94,7 +61,7 @@ fn Decoder::frame_header(self : Decoder) -> Unit raise Stop {
   }
   self.window = window.to_int()
   self.block_max = self.window.min(MAX_BLOCK_SIZE)
-  self.has_checksum = (descriptor & 0x04) != 0
+  self.has_checksum = header.has_checksum
   self.frame_out = 0
   self.xxh.reset()
   self.huffman_valid = false
@@ -135,40 +102,28 @@ fn Decoder::block_header(self : Decoder) -> Status? raise Stop {
     return Some(NeedMoreOutput)
   }
   self.fill(3)
-  let header = self.hdr_le(0, 3).to_int()
+  let value = self.hdr_le(0, 3).to_int()
   self.hdr_len = 0
-  self.last_block = (header & 1) != 0
-  let size = header >> 3
+  let header = checked(
+    @header.parse_block_header(value).bind(h => h.check(self.block_max)),
+  )
+  let size = header.size
+  self.last_block = header.last
   self.block_size = size
   self.block_out = 0
-  match (header >> 1) & 3 {
-    0 => {
-      if size > self.block_max {
-        raise corrupt("a raw block larger than the block limit")
-      }
+  match header.block_type {
+    Raw => {
       self.remaining = size.to_int64()
       self.state = RawBlock
     }
-    1 => {
-      if size > self.block_max {
-        raise corrupt("an RLE block larger than the block limit")
-      }
-      self.state = RleByte
-    }
-    2 => {
-      if size > self.block_max {
-        raise corrupt("a compressed block larger than the block limit")
-      }
-      if size == 0 {
-        raise corrupt("an empty compressed block")
-      }
+    Rle => self.state = RleByte
+    Compressed => {
       if self.block.length() < size {
         self.block = FixedArray::make(size, b'\x00')
       }
       self.block_len = 0
       self.state = CompressedBlock
     }
-    _ => raise corrupt("a block of the reserved type")
   }
   None
 }

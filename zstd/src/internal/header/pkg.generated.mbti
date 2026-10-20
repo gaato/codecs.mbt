@@ -1,0 +1,87 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/zstd/internal/header"
+
+import {
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn byte_at(ArrayView[Byte], Int) -> Int
+
+pub fn decode_literals_header(Int, Int, Int, Int, Int, Int, Int) -> Result[LiteralsHeader, String]
+
+pub fn frame_header_len(Int) -> Result[Int, String]
+
+pub fn le16(ArrayView[Byte], Int) -> Int
+
+pub fn parse_block_header(Int) -> Result[BlockHeader, String]
+
+pub fn parse_frame_header(ArrayView[Byte]) -> Result[FrameHeader, String]
+
+pub fn parse_jump_table(ArrayView[Byte]) -> Result[(Int, Int, Int, Int), String]
+
+pub fn parse_literals_header(ArrayView[Byte], Int) -> Result[LiteralsHeader, String]
+
+pub fn stream_sizes(Int, Int, Int, Int) -> Result[(Int, Int, Int, Int), String]
+
+pub fn window_size(Int) -> UInt64
+
+// Errors
+
+// Types and methods
+pub(all) struct BlockHeader {
+  last : Bool
+  block_type : BlockType
+  size : Int
+} derive(Eq, @debug.Debug)
+pub fn BlockHeader::check(Self, Int) -> Result[Self, String]
+pub fn BlockHeader::equal(Self, Self) -> Bool
+pub fn BlockHeader::not_equal(Self, Self) -> Bool
+pub fn BlockHeader::to_repr(Self) -> @debug.Repr
+
+pub(all) enum BlockType {
+  Raw
+  Rle
+  Compressed
+} derive(Eq, @debug.Debug)
+pub fn BlockType::equal(Self, Self) -> Bool
+pub fn BlockType::not_equal(Self, Self) -> Bool
+pub fn BlockType::to_repr(Self) -> @debug.Repr
+
+pub(all) struct FrameHeader {
+  single_segment : Bool
+  has_checksum : Bool
+  dictionary_id : UInt
+  content_size : UInt64?
+  window_size : UInt64
+  header_len : Int
+} derive(Eq, @debug.Debug)
+pub fn FrameHeader::equal(Self, Self) -> Bool
+pub fn FrameHeader::not_equal(Self, Self) -> Bool
+pub fn FrameHeader::to_repr(Self) -> @debug.Repr
+
+pub(all) struct LiteralsHeader {
+  block_type : LiteralsType
+  size_format : Int
+  header_len : Int
+  regenerated : Int
+  compressed : Int
+} derive(Eq, @debug.Debug)
+pub fn LiteralsHeader::equal(Self, Self) -> Bool
+pub fn LiteralsHeader::four_streams(Self) -> Bool
+pub fn LiteralsHeader::not_equal(Self, Self) -> Bool
+pub fn LiteralsHeader::to_repr(Self) -> @debug.Repr
+
+pub(all) enum LiteralsType {
+  RawLiterals
+  RleLiterals
+  CompressedLiterals
+  TreelessLiterals
+} derive(Eq, @debug.Debug)
+pub fn LiteralsType::equal(Self, Self) -> Bool
+pub fn LiteralsType::not_equal(Self, Self) -> Bool
+pub fn LiteralsType::to_repr(Self) -> @debug.Repr
+
+// Type aliases
+
+// Traits
