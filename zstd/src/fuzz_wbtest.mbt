@@ -57,13 +57,13 @@ test "corrupted streams raise errors or decode, within bounds, never abort" {
     tally,
     content=(
       #|{
-      #|  "Truncated": 823,
-      #|  "ChecksumMismatch": 449,
-      #|  "Corrupt": 1574,
-      #|  "LimitExceeded(Memory)": 6,
-      #|  "decoded": 142,
-      #|  "DictionaryRequired": 5,
+      #|  "Truncated": 814,
+      #|  "Corrupt": 1586,
+      #|  "decoded": 117,
+      #|  "ChecksumMismatch": 477,
+      #|  "LimitExceeded(Memory)": 1,
       #|  "TrailingData": 1,
+      #|  "DictionaryRequired": 4,
       #|}
     ),
   )

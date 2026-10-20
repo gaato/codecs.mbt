@@ -1,0 +1,714 @@
+// Generates zstd/src/vectors_wbtest.mbt: the decoder's test vectors.
+//
+// Each vector is a compressed stream (base64) with the length and SHA-256 of
+// the bytes it must decode to, and the smallest `max_window_bits` that accepts
+// it. Two sources:
+// - facebook/zstd's golden decompression files, vendored under
+//   zstd/testdata/upstream (BSD, see zstd/NOTICE): frames that decode, and
+//   frames that must be refused as corrupt;
+// - streams made here with the `zstd` command from deterministic inputs:
+//   every kind of block, literals section and table mode the reference
+//   encoder emits, at many levels and windows, with and without content sizes
+//   and checksums, several frames in a row and skippable frames between them.
+//   The script reads every frame and block header and fails unless the
+//   streams hold each of these kinds (see `required`), so that another zstd
+//   version cannot silently drop one.
+//
+// Usage, from the repository root (needs the zstd command):
+//   moon run zstd/scripts/gen_vectors.mbtx [--check]
+// --check regenerates the inputs and fails unless the file holds them: every
+// stored stream must decompress, with `zstd -d`, to its regenerated input,
+// and the rest of the file (sizes, digests, windows, the upstream streams)
+// must be what this script writes for those streams. It does not compress
+// again, because another version of zstd may produce other, equally valid,
+// bytes.
+
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/core/encoding/base64",
+  "moonbitlang/core/env",
+  "moonbitlang/x@0.5.5/crypto",
+}
+
+///|
+let target : String = "zstd/src/vectors_wbtest.mbt"
+
+///|
+let upstream : String = "zstd/testdata/upstream"
+
+///|
+let zstd_commit : String = "49cf51799ea051457f57243527aa2058f999f005"
+
+///|
+let golden : Array[String] = [
+  "block-128k.zst", "empty-block.zst", "rle-first-block.zst", "zeroSeq_2B.zst",
+]
+
+///|
+let golden_errors : Array[String] = [
+  "off0.bin.zst", "truncated_huff_state.zst", "zeroSeq_extraneous.zst",
+]
+
+///|
+/// The kinds of frame, block, literals section and table mode the vectors must
+/// hold between them, as `scan` names them.
+let required : Array[String] = [
+  "frame: checksum", "frame: no checksum", "frame: no content size",
+  "frame: content size in 1 byte", "frame: content size in 2 bytes",
+  "frame: content size in 4 bytes", "frame: single segment", "frame: skippable",
+  "stream: several frames", "window: 1 KiB", "window: over 64 MiB", "block: raw",
+  "block: RLE", "block: compressed", "literals: raw", "literals: RLE",
+  "literals: compressed, 1 stream", "literals: compressed, 4 streams",
+  "literals: treeless", "Huffman weights: direct",
+  "Huffman weights: FSE-compressed", "sequences: none", "sequences: count in 1 byte",
+  "sequences: count in 2 bytes", "literal lengths: predefined",
+  "literal lengths: RLE", "literal lengths: compressed", "literal lengths: repeat",
+  "offsets: predefined", "offsets: RLE", "offsets: compressed", "offsets: repeat",
+  "match lengths: predefined", "match lengths: RLE", "match lengths: compressed",
+  "match lengths: repeat",
+]
+
+///|
+let words : Array[String] = [
+  "the", "of", "and", "to", "in", "is", "was", "that", "for", "it", "with", "as",
+  "his", "on", "be", "at", "by", "had", "are", "but", "from", "or", "have", "an",
+  "they", "which", "one", "you", "were", "all", "her", "she", "there", "would",
+  "their", "we", "him", "been", "has", "when", "who", "will", "no", "more", "if",
+  "out", "so", "said", "what", "up", "its", "about", "than", "into", "them", "can",
+  "only", "other", "time", "new", "some", "could", "these", "two", "may", "first",
+  "then", "do", "any", "like", "my", "now", "over", "such", "our", "man", "me",
+  "even", "most", "made", "after", "also", "did", "many", "before", "must",
+  "through", "back", "years", "where", "much", "your", "way", "well", "down",
+  "should", "because", "each", "just", "those", "people", "how", "too", "little",
+  "state", "good", "very", "make", "world", "still", "own", "see", "men", "work",
+  "long", "get", "here", "between", "both", "life", "being", "under", "never",
+  "zstandard", "window", "frame", "block", "literal", "sequence", "offset", "match",
+  "huffman", "entropy",
+]
+
+///|
+/// A seeded 64-bit LCG (Knuth's MMIX constants): the same numbers on every
+/// platform and version. Draws take the high bits, whose period is longest.
+struct Rng {
+  mut state : UInt64
+}
+
+///|
+fn Rng::next(self : Rng) -> UInt {
+  self.state = self.state * 6364136223846793005UL + 1442695040888963407UL
+  (self.state >> 32).to_uint()
+}
+
+///|
+fn Rng::below(self : Rng, bound : Int) -> Int {
+  (self.next() >> 1).reinterpret_as_int() % bound
+}
+
+///|
+fn Rng::byte(self : Rng) -> Byte {
+  (self.next() >> 24).to_byte()
+}
+
+///|
+/// Sentences of 4 to 17 words, capitalised, each ending in a punctuation mark.
+fn text(rng : Rng, n : Int) -> Bytes {
+  let out = Buffer()
+  while out.length() < n {
+    for i in 0..<(4 + rng.below(14)) {
+      let word = words[rng.below(words.length())]
+      if i > 0 {
+        out.write_byte(b' ')
+      }
+      for j in 0..<word.length() {
+        // The first word is capitalised.
+        let lower = if i == 0 && j == 0 { 32 } else { 0 }
+        out.write_byte((word.code_unit_at(j).to_int() - lower).to_byte())
+      }
+    }
+    for c in [". ", ", ", ".\n", "; "][rng.below(4)] {
+      out.write_byte(c.to_int().to_byte())
+    }
+  }
+  out.to_bytes()[:n].to_owned()
+}
+
+///|
+fn noise(rng : Rng, n : Int) -> Bytes {
+  Bytes::makei(n, _ => rng.byte())
+}
+
+///|
+fn prefix(data : Bytes, n : Int) -> Bytes {
+  data[:n].to_owned()
+}
+
+///|
+fn concat(parts : Array[Bytes]) -> Bytes {
+  let out = Buffer()
+  for part in parts {
+    out.write_bytes(part)
+  }
+  out.to_bytes()
+}
+
+///|
+/// A piece of a stream.
+enum Piece {
+  /// The input, compressed by the zstd command with the arguments.
+  Frame(Bytes, Array[String])
+  /// A skippable frame: the low 4 bits of its magic number, and its data.
+  Skippable(Int, Bytes)
+}
+
+///|
+/// A frame of `input` as `zstd` makes it. `size=false` writes no content
+/// size, and gives the encoder no size to tune its parameters for (the input
+/// comes through a pipe); `args` are passed after the others.
+fn frame(
+  input : Bytes,
+  level~ : Int = 3,
+  checksum~ : Bool = true,
+  size~ : Bool = true,
+  args~ : Array[String] = [],
+) -> Piece {
+  let all = if level < 0 {
+    ["--fast=\{-level}"]
+  } else if level > 19 {
+    ["--ultra", "-\{level}"]
+  } else {
+    ["-\{level}"]
+  }
+  if !checksum {
+    all.push("--no-check")
+  }
+  // The zstd command writes the content size only when it knows it: from
+  // `--stream-size` for a pipe. An empty input is the exception, which
+  // `--no-content-size` handles.
+  all.push(
+    if size {
+      "--stream-size=\{input.length()}"
+    } else {
+      "--no-content-size"
+    },
+  )
+  Frame(input, [..all, ..args])
+}
+
+///|
+/// The bytes the pieces decode to.
+fn original(pieces : Array[Piece]) -> Bytes {
+  concat(
+    pieces.filter_map(p => match p {
+      Frame(input, _) => Some(input)
+      Skippable(_, _) => None
+    }),
+  )
+}
+
+///|
+/// The generated vectors: names and the pieces of their streams.
+fn generated() -> Array[(String, Array[Piece])] {
+  let rng = { state: 8878 }
+  let out = []
+  let add = (name : String, pieces : Array[Piece]) => {
+    out.push(("gen/\{name}", pieces))
+  }
+  add("empty", [frame(b"")])
+  add("empty_unknown_size", [frame(b"", size=false)])
+  add("one_byte", [frame(b"x")])
+  let prose = text(rng, 70_000)
+  let text60k = prefix(prose, 60_000)
+  for level in [-5, 1, 3, 9, 19] {
+    add("text_level\{level}", [frame(text60k, level~)])
+  }
+  add("text_level22", [frame(prefix(prose, 40_000), level=22)])
+  add("text_no_checksum", [frame(prefix(prose, 30_000), checksum=false)])
+  add("text_unknown_size", [frame(prefix(prose, 30_000), size=false)])
+  // Content sizes in 1, 2 and 4 bytes.
+  for n in [200, 300, 70_000] {
+    add("text_\{n}", [frame(prefix(prose, n), level=6)])
+  }
+  // Incompressible bytes: raw blocks.
+  add("random", [frame(noise(rng, 40_000))])
+  // Bytes 0 to 15, byte n about half as often as n - 1: so few Huffman
+  // weights that the encoder writes them directly, not FSE-compressed.
+  let alphabet = Bytes::makei(12_000, _ => {
+    let mut n = 0
+    while n < 15 && rng.below(2) == 1 {
+      n += 1
+    }
+    n.to_byte()
+  })
+  add("small_alphabet", [frame(alphabet)])
+  // Runs: RLE blocks, and short runs of short matches.
+  add("zeros", [frame(Bytes::make(1 << 20, b'\x00'), level=1)])
+  let runs = Buffer()
+  for _ in 0..<3000 {
+    let byte = rng.byte()
+    for _ in 0..<(1 + rng.below(299)) {
+      runs.write_byte(byte)
+    }
+  }
+  add("runs", [frame(runs.to_bytes(), level=19)])
+  // Noise without `Z`, repeated with a period of 5003 bytes, where from the
+  // second 64 KiB on a `Z` overwrites one byte every 512 and, from then on,
+  // the byte a period later: offset 5003 matches everything but the newest
+  // `Z`. A 64 KiB window makes blocks of 64 KiB, too small for the encoder to
+  // split; the second starts at a `Z` and holds 128 sequences of a literal
+  // `Z` and a 511-byte match at the repeated offset: RLE literals, and an RLE
+  // table for each of literal lengths, offsets and match lengths. The `Z`s
+  // land on bytes 512 k mod 5003 of the period, 14 or more apart for the 256
+  // of them, so no run of `Z`s offers another match.
+  let period = Bytes::makei(5003, _ => {
+    let byte = rng.byte()
+    if byte == b'Z' {
+      b'Y'
+    } else {
+      byte
+    }
+  })
+  let marked = FixedArray::make(5003, false)
+  let rle = Buffer()
+  for i in 0..<(3 << 16) {
+    let r = i % 5003
+    if i % 512 == 0 && i >= 1 << 16 {
+      marked[r] = true
+    }
+    rle.write_byte(if marked[r] { b'Z' } else { period[r] })
+  }
+  add("rle_tables", [frame(rle.to_bytes(), level=9, args=["--zstd=wlog=16"])])
+  // Text, binary and runs mixed, in many small blocks.
+  let mixed = Buffer()
+  for _ in 0..<60 {
+    match rng.below(3) {
+      0 => mixed.write_bytes(text(rng, 3000))
+      1 => mixed.write_bytes(noise(rng, 500))
+      _ => mixed.write_bytes(Bytes::make(2000, rng.byte()))
+    }
+  }
+  let mixed = mixed.to_bytes()
+  // The zstd command cannot flush a block at a chosen point; a target block
+  // size cuts about as many blocks, which reuse the Huffman and FSE tables of
+  // the block before them (treeless literals, repeat modes).
+  add("mixed_flushed", [
+    frame(mixed, size=false, args=["--target-compressed-block-size=1340"]),
+  ])
+  add("mixed_level19", [frame(mixed, level=19)])
+  // A 1 KiB window: offsets wrap the smallest ring, blocks are at most 1 KiB.
+  add("window10_text", [
+    frame(prefix(prose, 40_000), level=19, size=false, args=["--zstd=wlog=10"]),
+  ])
+  add("window10_random", [
+    frame(noise(rng, 5000), size=false, args=["--zstd=wlog=10"]),
+  ])
+  // A 3000-byte block repeated 5 MiB later: only an 8 MiB window reaches it.
+  let block = noise(rng, 3000)
+  let filler = Bytes::makei(1 << 22, i => (i * 7).to_byte())
+  let far = concat([block, filler, Bytes::make(1 << 20, b'\x00'), block])
+  add("window23_far", [frame(far, level=19, size=false, args=["--long=23"])])
+  // Large declared windows over little data.
+  let small = prefix(prose, 10_000)
+  add("window27_declared", [frame(small, size=false, args=["--zstd=wlog=27"])])
+  add("window30_declared", [frame(small, size=false, args=["--zstd=wlog=30"])])
+  // Frames in a row, and skippable frames among them.
+  let a = prefix(prose, 5000)
+  let b = prose[5000:9000].to_owned()
+  add("two_frames", [frame(a), frame(b, level=19, checksum=false)])
+  let metadata = concat([b"metadata", b"metadata", b"metadata"])
+  add("skippable_between", [
+    frame(a),
+    Skippable(0, metadata),
+    Skippable(15, b""),
+    frame(b),
+  ])
+  add("skippable_only", [Skippable(7, noise(rng, 100))])
+  add("skippable_first", [Skippable(1, b"x"), frame(a)])
+  out
+}
+
+///|
+fn write_le32(out : Buffer, value : Int) -> Unit {
+  for shift in [0, 8, 16, 24] {
+    out.write_byte((value >> shift).to_byte())
+  }
+}
+
+///|
+async fn zstd(args : Array[String], input : Bytes) -> Bytes {
+  let output = @shell.Cmd(
+    "zstd",
+    ["-q", "-c", "--no-progress", ..args],
+    stdin=Binary(input),
+  ).output(max_output_bytes=1 << 26)
+  output.check()
+  output.stdout_bytes()
+}
+
+///|
+/// The stream the pieces make. `--single-thread` compresses in one pass, as
+/// the library does, instead of in jobs.
+async fn build(pieces : Array[Piece]) -> Bytes {
+  let out = Buffer()
+  for piece in pieces {
+    match piece {
+      Frame(input, args) =>
+        out.write_bytes(zstd(["--single-thread", ..args], input))
+      Skippable(low, data) => {
+        write_le32(out, 0x184D2A50 | low)
+        write_le32(out, data.length())
+        out.write_bytes(data)
+      }
+    }
+  }
+  out.to_bytes()
+}
+
+///|
+/// What `zstd -d` makes of `stream`, under windows up to 2 GiB.
+async fn decompress(stream : Bytes) -> Bytes {
+  zstd(["-d", "--long=31"], stream)
+}
+
+///|
+fn le(stream : Bytes, at : Int, n : Int) -> UInt64 {
+  let mut value = 0UL
+  for i in 0..<n {
+    value = value | (stream[at + i].to_uint64() << (8 * i))
+  }
+  value
+}
+
+///|
+fn count(kinds : Map[String, Int], kind : String) -> Unit {
+  kinds[kind] = kinds.get(kind).unwrap_or(0) + 1
+}
+
+///|
+let table_modes : Array[String] = ["predefined", "RLE", "compressed", "repeat"]
+
+///|
+/// Counts the kinds of the compressed block `stream[at:end]` in `kinds`.
+fn scan_block(
+  stream : Bytes,
+  at : Int,
+  end : Int,
+  kinds : Map[String, Int],
+) -> Unit raise {
+  let b0 = stream[at].to_int()
+  let format = (b0 >> 2) & 3
+  let mut pos = at
+  match b0 & 3 {
+    (0 | 1) as kind => {
+      let (header, size) = match format {
+        1 => (2, (b0 >> 4) + (stream[at + 1].to_int() << 4))
+        3 =>
+          (
+            3,
+            (b0 >> 4) +
+            (stream[at + 1].to_int() << 4) +
+            (stream[at + 2].to_int() << 12),
+          )
+        _ => (1, b0 >> 3)
+      }
+      count(kinds, if kind == 0 { "literals: raw" } else { "literals: RLE" })
+      pos += header + (if kind == 0 { size } else { 1 })
+    }
+    kind => {
+      let (header, bits) = match format {
+        0 | 1 => (3, 10)
+        2 => (4, 14)
+        _ => (5, 18)
+      }
+      let fields = le(stream, at, header) >> 4
+      let size = (fields >> bits).to_int() & ((1 << bits) - 1)
+      let streams = if format == 0 { "1 stream" } else { "4 streams" }
+      if kind == 2 {
+        count(kinds, "literals: compressed, \{streams}")
+        // The Huffman tree description: FSE-compressed weights below 128.
+        count(kinds, if stream[at + header] < b'\x80' {
+          "Huffman weights: FSE-compressed"
+        } else {
+          "Huffman weights: direct"
+        })
+      } else {
+        count(kinds, "literals: treeless")
+      }
+      pos += header + size
+    }
+  }
+  guard pos < end else { fail("a block without a sequences section") }
+  let s0 = stream[pos].to_int()
+  let (width, sequences) = if s0 < 128 {
+    (1, s0)
+  } else if s0 < 255 {
+    (2, ((s0 - 128) << 8) + stream[pos + 1].to_int())
+  } else {
+    (3, le(stream, pos + 1, 2).to_int() + 0x7F00)
+  }
+  let plural = if width > 1 { "s" } else { "" }
+  count(kinds, "sequences: count in \{width} byte\{plural}")
+  if sequences == 0 {
+    // No compression modes follow.
+    count(kinds, "sequences: none")
+    return
+  }
+  let modes = stream[pos + width].to_int()
+  count(kinds, "literal lengths: \{table_modes[modes >> 6]}")
+  count(kinds, "offsets: \{table_modes[(modes >> 4) & 3]}")
+  count(kinds, "match lengths: \{table_modes[(modes >> 2) & 3]}")
+}
+
+///|
+/// The smallest max_window_bits that accepts every frame of `stream`, which
+/// walks its frame and block headers and counts their kinds in `kinds`.
+fn scan(stream : Bytes, kinds : Map[String, Int]) -> Int raise {
+  let mut bits = 10
+  let mut pos = 0
+  let mut frames = 0
+  while pos < stream.length() {
+    frames += 1
+    let magic = le(stream, pos, 4)
+    if (magic & 0xFFFFFFF0UL) == 0x184D2A50UL {
+      count(kinds, "frame: skippable")
+      pos += 8 + le(stream, pos + 4, 4).to_int()
+      continue
+    }
+    guard magic == 0xFD2FB528UL else { fail("not a zstd frame at \{pos}") }
+    let descriptor = stream[pos + 4].to_int()
+    let single = (descriptor & 0x20) != 0
+    let dictionary = [0, 1, 2, 4][descriptor & 3]
+    let fcs = [if single { 1 } else { 0 }, 2, 4, 8][descriptor >> 6]
+    let mut at = pos + 5
+    let window = if single {
+      count(kinds, "frame: single segment")
+      let size = le(stream, at + dictionary, fcs)
+      if fcs == 2 {
+        size + 256
+      } else {
+        size
+      }
+    } else {
+      let w = stream[at].to_int()
+      at += 1
+      let base = 1UL << (10 + (w >> 3))
+      base + (base >> 3) * (w & 7).to_uint64()
+    }
+    at += dictionary + fcs
+    count(kinds, if fcs == 0 {
+      "frame: no content size"
+    } else {
+      "frame: content size in \{fcs} byte\{if fcs > 1 { "s" } else { "" }}"
+    })
+    let checksum = (descriptor & 0x04) != 0
+    let kind = if checksum { "frame: checksum" } else { "frame: no checksum" }
+    count(kinds, kind)
+    if window <= 1024UL {
+      count(kinds, "window: 1 KiB")
+    } else if window > (1UL << 26) {
+      count(kinds, "window: over 64 MiB")
+    }
+    while (1UL << bits) < window {
+      bits += 1
+    }
+    for last = false; !last; {
+      let header = le(stream, at, 3).to_int()
+      let size = header >> 3
+      at += 3
+      match (header >> 1) & 3 {
+        0 => {
+          count(kinds, "block: raw")
+          at += size
+        }
+        1 => {
+          count(kinds, "block: RLE")
+          at += 1
+        }
+        2 => {
+          count(kinds, "block: compressed")
+          scan_block(stream, at, at + size, kinds)
+          at += size
+        }
+        _ => fail("a reserved block type at \{at - 3}")
+      }
+      continue (header & 1) != 0
+    }
+    if checksum {
+      at += 4
+    }
+    pos = at
+  }
+  if frames > 1 {
+    count(kinds, "stream: several frames")
+  }
+  bits
+}
+
+///|
+fn literal(data : Bytes) -> String {
+  let b64 = @base64.encode(data)
+  let out = StringBuilder()
+  out.write_string("(\n")
+  for i = 0; i < b64.length().max(1); i = i + 76 {
+    let line = b64.view(start_offset=i, end_offset=(i + 76).min(b64.length()))
+    out.write_string("      #|\{line}\n")
+  }
+  out.write_string("    )")
+  out.to_string()
+}
+
+///|
+/// Renders the file, with `version` the zstd command's; `stream(name, pieces)`
+/// gives the stream of a generated vector, and `kinds` counts what the
+/// streams hold. Fails unless every stream decodes to what it must.
+async fn render(
+  version : String,
+  stream : async (String, Array[Piece]) -> Bytes,
+  kinds : Map[String, Int],
+) -> String {
+  let vectors = []
+  for name in golden {
+    let path = "\{upstream}/golden-decompression/\{name}"
+    let compressed = @fs.read_file(path).binary()
+    vectors.push(("upstream/\{name}", compressed, decompress(compressed)))
+  }
+  for named in generated() {
+    let (name, pieces) = named
+    vectors.push((name, stream(name, pieces), original(pieces)))
+  }
+  let out = StringBuilder()
+  out.write_string(
+    (
+      $|// Generated by zstd/scripts/gen_vectors.mbtx, DON'T EDIT IT.
+      $|// facebook/zstd tests/golden-decompression* at \{zstd_commit}, and
+      $|// streams made with the zstd command \{version}.
+      $|
+      $|///|
+      $|let vectors : Array[Vector] = [
+      $|
+    ),
+  )
+  for v in vectors {
+    let (name, compressed, original) = v
+    let decoded = decompress(compressed) catch {
+      _ => fail("\{name}: zstd -d refuses it")
+    }
+    if decoded != original {
+      fail("\{name}: does not decode to its original")
+    }
+    let sha256 = @crypto.bytes_to_hex_string(@crypto.sha256(original))
+    out.write_string(
+      (
+        $|  {
+        $|    name: "\{name}",
+        $|    compressed: \{literal(compressed)},
+        $|    size: \{original.length()},
+        $|    sha256: "\{sha256}",
+        $|    window_bits: \{scan(compressed, kinds)},
+        $|  },
+        $|
+      ),
+    )
+  }
+  out.write_string(
+    (
+      $|]
+      $|
+      $|///|
+      $|/// Frames the reference decoder refuses as corrupt: names and streams.
+      $|let corrupt_vectors : Array[(String, String)] = [
+      $|
+    ),
+  )
+  for name in golden_errors {
+    let path = "\{upstream}/golden-decompression-errors/\{name}"
+    let compressed = @fs.read_file(path).binary()
+    let refused = @shell.Cmd(
+      "zstd",
+      ["-d", "-c", "-q", "-q"],
+      stdin=Binary(compressed),
+    ).output()
+    if refused.exit_code() == 0 {
+      fail("\{name}: decodes, but should not")
+    }
+    out.write_string(
+      "  (\n    \"upstream/\{name}\",\n    \{literal(compressed)},\n  ),\n",
+    )
+  }
+  out.write_string("]\n")
+  out.to_string()
+}
+
+///|
+/// The streams of `let vectors` in the generated file, by name.
+fn stored(file : String) -> Map[String, Bytes] raise {
+  let streams = Map([])
+  let mut name = ""
+  let b64 = StringBuilder()
+  for raw in file.split("\n") {
+    let line = raw.trim()
+    if line.strip_prefix("name: \"") is Some(rest) {
+      name = rest.strip_suffix("\",").unwrap_or(rest).to_owned()
+      b64.reset()
+    } else if line.strip_prefix("#|") is Some(rest) {
+      b64.write_view(rest)
+    } else if line == ")," && name != "" {
+      streams[name] = @base64.decode(b64.to_string())
+      name = ""
+    }
+  }
+  streams
+}
+
+///|
+/// The zstd version the generated file names.
+fn stored_version(file : String) -> String? {
+  let lead = "// streams made with the zstd command "
+  for line in file.split("\n") {
+    if line.strip_prefix(lead) is Some(rest) {
+      return rest.strip_suffix(".").map(v => v.to_owned())
+    }
+  }
+  None
+}
+
+///|
+/// Fails unless the vectors hold every kind in `required`.
+fn check_kinds(kinds : Map[String, Int]) -> Unit raise {
+  let missing = required.filter(kind => !kinds.contains(kind))
+  if !missing.is_empty() {
+    fail("the vectors hold no \{missing.join(", ")}")
+  }
+}
+
+///|
+async fn main {
+  let stale = "\{target} is stale: run moon run zstd/scripts/gen_vectors.mbtx"
+  let kinds = Map([])
+  if @env.args().contains("--check") {
+    guard @fs.exists(target) else { fail(stale) }
+    let file = @fs.read_file(target).text()
+    guard stored_version(file) is Some(version) else { fail(stale) }
+    let streams = stored(file)
+    let text = render(version, (name, _) => {
+      guard streams.get(name) is Some(data) else { fail(stale) }
+      data
+    }, kinds)
+    if file != text {
+      fail(stale)
+    }
+    check_kinds(kinds)
+  } else {
+    let version = @shell.Cmd("zstd", ["-q", "-V"]).output()
+    version.check()
+    let version = version.stdout().trim().to_owned()
+    let text = render(version, async fn(_, pieces) { build(pieces) }, kinds)
+    for kind, n in kinds {
+      println("  \{kind}: \{n}")
+    }
+    check_kinds(kinds)
+    @fs.write_file(target, text)
+    println("\{target}: \{text.length()} characters")
+  }
+}
