@@ -1,0 +1,105 @@
+# Architecture
+
+This repository holds pure-MoonBit codecs that decode and encode as data
+arrives: input in chunks of any size, output into slices of any size, and
+memory bounded by limits the caller sets. Each format is its own module with
+its own version; the modules share a small vocabulary, a few building blocks,
+and one way of testing.
+
+## Layers
+
+```
+consumers     command-line tools, HTTP clients, applications
+                │ depend only on a kind's contract and gaato/codec's errors
+──────────────┼───────────────────────────────────────────────────────────
+formats       gaato/zstd  gaato/brotli  │  image formats  │  audio formats
+                one module per format; a format may embed another codec
+──────────────┼───────────────────────────────────────────────────────────
+contracts     gaato/codec_bytes          │  an image contract │ an audio contract
+  per kind    byte stream in, bytes out  │  pixels, by rows   │ samples, by blocks
+──────────────┼───────────────────────────────────────────────────────────
+vocabulary    gaato/codec: errors, limits, resources
+──────────────┼───────────────────────────────────────────────────────────
+building      bit readers and writers, checksums, prefix-code tables,
+blocks        entropy coders: small, mostly pure functions
+```
+
+Only the byte-stream contract and the two compression formats exist today. The
+image and audio rows show where such codecs would go; nothing in the layers
+below has to change for them.
+
+**Vocabulary.** `gaato/codec` holds what every kind of codec reports in the
+same terms: the error kinds, and the limits a stream can exceed, in bytes. A
+command-line tool or a fuzzer handles a failure the same way whatever it was
+decoding. The error kinds and resources are `#non_exhaustive`, so a new kind
+of codec can add what it needs without breaking anyone.
+
+**Contracts, one per kind.** Bytes, images and audio come out in different
+shapes, so each kind has its own contract module: the steps a codec takes,
+what a step reports, and the rules every codec of that kind keeps. They are
+separate modules because a module's version covers all of its packages, and
+an image contract that is still settling should not force a new version on
+every compression codec. The rules are the same for every kind: errors stick,
+a codec never reads past what it needs, results do not depend on how input
+and output are split, and memory stays within the limits it was given. The
+byte-stream contract is written down in [CONTRACT.md](CONTRACT.md).
+
+**Formats.** Each format is one module. A format that contains another embeds
+that codec as a value (a PNG decoder holds a zlib decoder, which holds an
+inflater), rather than reaching into its internals. Formats own their state:
+a codec allocates what a stream needs, never more than its limits, and
+reports it through `memory_usage`.
+
+**Building blocks.** What several formats share is small and stable: reading
+and writing bits in the orders formats use (LSB first, MSB first, backwards),
+checksums, building canonical prefix-code tables, table construction for
+entropy coders. They are written as pure functions where possible, which is
+also where the proofs live. The decoding loops of each format stay inside the
+format: they are tuned to it, and sharing them couples formats that change for
+different reasons. A block moves out of a format into a shared module when a
+second format needs it.
+
+## What a step looks like
+
+A byte-stream codec's step consumes input, fills output, and says why it
+stopped: done, needs more input, or needs more room. Kinds whose output has
+structure add events to that answer. An image decoder's step can stop to
+report the image's header, rows it has written, metadata it was asked for, or
+the end of a frame; an audio decoder's step reports the stream's parameters
+and blocks of samples.
+
+Codecs do not hold a whole frame unless the format leaves no choice. A PNG
+decoder keeps the previous row and the current one; interlaced images come
+out pass by pass, and assembling the final image is the caller's choice.
+Where a format does require buffering, the codec states it as a limit.
+
+Conversions between pixel or sample formats are functions outside the codecs:
+a codec produces its format's own layout, and the caller converts if it wants
+another.
+
+Recognising a format from its first bytes is a function that returns what it
+found. Nothing registers itself; callers choose which codecs they link.
+
+## Testing
+
+Every codec is held to its kind's rules by one test harness, kept in a private
+module of the workspace and never published:
+
+- results are the same however input and output are split, down to one byte
+  at a time;
+- errors stick, truncated input is reported, nothing past the end is read;
+- memory stays within the limits, checked after every step;
+- corrupted input never crashes, and the kinds of error it causes are
+  recorded;
+- output matches the reference implementations (zstd, google/brotli).
+
+Each module also keeps two ledgers that scripts enforce: RESOURCE_BOUNDS.md
+names the tests that hold every bound, and TEST_COVERAGE.md explains every
+line that tests do not reach.
+
+## Where things are not
+
+Archives and containers with entries or random access (tar, zip) build on
+codecs from their own repositories. So do byte-stream codecs outside
+compression (base64, character sets, encryption): implementing
+`gaato/codec_bytes` needs only a dependency on it.
