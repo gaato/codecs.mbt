@@ -13,8 +13,8 @@ ledger:
 ## Running it
 
 ```fish
-scripts/coverage_report.sh                    # measure, print tables, check the ledger
-scripts/coverage_report.sh --from-json _build/coverage_report.json   # recheck only
+scripts/coverage_report.sh zstd                    # measure, print tables, check the ledger
+scripts/coverage_report.sh zstd --from-json _build/coverage_report.zstd.json   # recheck only
 ```
 
 CI runs it after the gates on every push and pull request. Exit status: 0 =

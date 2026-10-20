@@ -1,0 +1,74 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/brotli"
+
+import {
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn compress(BytesView, window_bits? : Int) -> Bytes
+
+pub fn decompress(BytesView, max_output? : Int, max_window_bits? : Int) -> Bytes raise BrotliError
+
+// Errors
+pub suberror BrotliError {
+  BrotliError(BrotliErrorKind, String)
+} derive(@debug.Debug)
+pub fn BrotliError::to_repr(Self) -> @debug.Repr
+
+// Types and methods
+#non_exhaustive
+pub(all) enum BrotliErrorKind {
+  Truncated
+  Corrupt
+  TrailingData
+  WindowTooLarge
+  OutputLimitExceeded
+} derive(Eq, @debug.Debug)
+pub fn BrotliErrorKind::equal(Self, Self) -> Bool
+pub fn BrotliErrorKind::not_equal(Self, Self) -> Bool
+pub fn BrotliErrorKind::to_repr(Self) -> @debug.Repr
+
+pub struct Decoder {
+  // private fields
+}
+pub fn Decoder::Decoder(max_window_bits? : Int) -> Self
+pub fn Decoder::is_finished(Self) -> Bool
+pub fn Decoder::last_consumed(Self) -> Int
+pub fn Decoder::last_produced(Self) -> Int
+pub fn Decoder::reset(Self) -> Unit
+pub fn Decoder::step(Self, BytesView, MutArrayView[Byte], end? : Bool) -> Status raise BrotliError
+pub fn Decoder::step_into(Self, BytesView, FixedArray[Byte], end? : Bool) -> Status raise BrotliError
+
+pub(all) enum EncodeAction {
+  Continue
+  Flush
+  Finish
+} derive(Eq, @debug.Debug)
+pub fn EncodeAction::equal(Self, Self) -> Bool
+pub fn EncodeAction::not_equal(Self, Self) -> Bool
+pub fn EncodeAction::to_repr(Self) -> @debug.Repr
+
+pub struct Encoder {
+  // private fields
+}
+pub fn Encoder::Encoder(window_bits? : Int) -> Self
+pub fn Encoder::is_finished(Self) -> Bool
+pub fn Encoder::last_consumed(Self) -> Int
+pub fn Encoder::last_produced(Self) -> Int
+pub fn Encoder::reset(Self) -> Unit
+pub fn Encoder::step(Self, BytesView, MutArrayView[Byte], action? : EncodeAction) -> Status
+pub fn Encoder::step_into(Self, BytesView, FixedArray[Byte], action? : EncodeAction) -> Status
+
+pub(all) enum Status {
+  Done
+  NeedMoreInput
+  NeedMoreOutput
+} derive(Eq, @debug.Debug)
+pub fn Status::equal(Self, Self) -> Bool
+pub fn Status::not_equal(Self, Self) -> Bool
+pub fn Status::to_repr(Self) -> @debug.Repr
+
+// Type aliases
+
+// Traits

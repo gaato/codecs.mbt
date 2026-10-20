@@ -1,0 +1,3 @@
+// A greedy LZ77 match finder: a hash table of recent positions, in buckets.
+
+supported_targets = "js + native + wasm + wasm-gc"

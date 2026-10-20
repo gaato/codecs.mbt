@@ -1,0 +1,15 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/brotli/internal/checksum"
+
+// Values
+pub fn crc32(BytesView) -> UInt
+
+pub fn sha256(BytesView) -> String
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+
+// Traits

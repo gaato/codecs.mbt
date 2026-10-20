@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Test-coverage report for gaato/zstd.
+# Test-coverage report for one module of the workspace.
 #
-# Runs the native test suite with coverage instrumentation, writes a Coveralls
-# JSON report, prints per-file and total tables, and checks every remaining
-# uncovered file against the TEST_COVERAGE.md ledger: a file with uncovered
-# lines must have a ledger row whose budget covers them.
+# Runs the module's native test suite with coverage instrumentation, writes a
+# Coveralls JSON report, prints per-file and total tables, and checks every
+# remaining uncovered file against the module's TEST_COVERAGE.md ledger: a file
+# with uncovered lines must have a ledger row whose budget covers them.
 #
-# Usage: scripts/coverage_report.sh [--from-json FILE]
+# Usage: scripts/coverage_report.sh MODULE [--from-json FILE]
 #   --from-json FILE  recheck an existing Coveralls JSON report against the
 #                     ledger instead of re-running the instrumented tests.
 #
@@ -14,10 +14,15 @@
 # gaps or over-budget files, 2 = setup/run failure.
 #
 # Measurement pitfalls this script works around (see TEST_COVERAGE.md):
+# - In a moon.work workspace `moon -C <member> test` tests every member. Run
+#   `moon test --target native --enable-coverage <package dirs>` from the
+#   workspace root instead, and pass only this module's trace maps.
 # - The reporter merges every `moonbit_coverage_*` counter file it is given or
 #   finds; counters from earlier runs and trace maps of moved or deleted
 #   packages corrupt the totals. Drop both before measuring, and pass the
 #   trace maps and counters explicitly.
+# - The reporter names files by their workspace-relative path; the ledger uses
+#   module-relative paths, so the module's directory is stripped.
 # - `-f summary` omits fully covered files; use the Coveralls JSON.
 # - moon's bundled tcc cannot link on some hosts (openSUSE); use the system cc.
 
@@ -27,29 +32,30 @@ for tool in jq gawk; do
   command -v "$tool" >/dev/null || { echo "coverage_report.sh needs $tool" >&2; exit 2; }
 done
 
-# Measured sources, as module-relative paths (how the reporter names them):
-# the library package and its XXH64, not the test-only checksum package under
-# src/internal.
-LIBRARY='^src/([^/]+|internal/xxhash/[^/]+)[.]mbt$'
-
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-ledger="$repo_root/TEST_COVERAGE.md"
+source "$repo_root/scripts/modules.sh"
+module="${1:?usage: scripts/coverage_report.sh MODULE [--from-json FILE]}"
+shift
+LIBRARY="${COVERAGE_SCOPE[$module]:?no coverage scope for $module in scripts/modules.sh}"
+ledger="$repo_root/$module/TEST_COVERAGE.md"
 json_file=""
 
 if [[ "${1:-}" == "--from-json" ]]; then
   json_file="${2:?--from-json needs a file}"
 else
   cd "$repo_root"
-  json_file="$repo_root/_build/coverage_report.json"
+  json_file="$repo_root/_build/coverage_report.$module.json"
+  mapfile -t drivers < <(find "$module/src" -name moon.pkg -printf '%h\n')
   find _build -name 'moonbit_coverage_*' -delete 2>/dev/null || true
   rm -rf _build/native/debug/test
-  MOON_CC="${MOON_CC:-cc}" moon test --target native --enable-coverage >/dev/null || {
+  MOON_CC="${MOON_CC:-cc}" moon test --target native --enable-coverage "${drivers[@]}" >/dev/null || {
     echo "error: instrumented native test run failed" >&2
     exit 2
   }
+  name="$(sed -nE 's/^name = "(.*)"$/\1/p' "$module/moon.mod")"
   traces=()
   while IFS= read -r f; do traces+=("$f"); done \
-    < <(find _build/native/debug/test -name '*.trace.source')
+    < <(find "_build/native/debug/test/$name" -name '*.trace.source')
   counters=()
   while IFS= read -r f; do counters+=(-t "$f"); done \
     < <(find _build -name 'moonbit_coverage_*')
@@ -65,8 +71,9 @@ else
 fi
 
 # One "file<TAB>covered<TAB>total" line per measured source file.
-jq -r --arg lib "$LIBRARY" '
+jq -r --arg lib "$LIBRARY" --arg dir "$module/" '
   .source_files[]
+  | .name |= (if startswith($dir) then ltrimstr($dir) else . end)
   | select(.name | test($lib))
   | [ .name,
       ([.coverage[] | select(. != null and . > 0)] | length),

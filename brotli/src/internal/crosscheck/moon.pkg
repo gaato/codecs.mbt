@@ -1,0 +1,12 @@
+// Prints streams made by the encoder, for scripts/crosscheck.py to decode
+// with the reference decoder. Not part of the library.
+
+import {
+  "gaato/brotli",
+  "gaato/brotli/internal/checksum",
+  "moonbitlang/core/encoding/base64",
+}
+
+pkgtype(kind: "executable")
+
+supported_targets = "js + native + wasm + wasm-gc"

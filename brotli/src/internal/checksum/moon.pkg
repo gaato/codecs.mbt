@@ -1,0 +1,4 @@
+// Checksums for the tests: SHA-256 and the CRC-32 of RFC 7932 Appendix C.
+// Test-only; the decoder does not use them.
+
+supported_targets = "js + native + wasm + wasm-gc"

@@ -41,8 +41,15 @@ jobs:
       - name: Gates
         run: scripts/gates.sh
 
-      - name: Coverage ledger
+      - name: Coverage ledgers
         run: |
           command -v jq >/dev/null && command -v gawk >/dev/null || { apt-get update && apt-get install -y --no-install-recommends jq gawk; }
-          scripts/coverage_report.sh
+          source scripts/modules.sh
+          for m in "${MODULES[@]}"; do scripts/coverage_report.sh "$m"; done
+        shell: bash
+
+      - name: Cross-check the brotli encoder with the reference decoder
+        run: |
+          python3 -c 'import brotli' 2>/dev/null || { apt-get update && apt-get install -y --no-install-recommends python3 python3-brotli; }
+          brotli/scripts/crosscheck.py
 

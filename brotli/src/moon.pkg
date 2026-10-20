@@ -1,0 +1,17 @@
+import {
+  "gaato/brotli/internal/huffman",
+  "gaato/brotli/internal/lz77",
+  "moonbitlang/core/debug",
+}
+
+import {
+  "gaato/brotli/internal/checksum",
+  "moonbitlang/core/encoding/base64",
+  "moonbitlang/core/encoding/utf8",
+} for "wbtest"
+
+import {
+  "moonbitlang/core/encoding/utf8",
+} for "test"
+
+supported_targets = "js + native + wasm + wasm-gc"

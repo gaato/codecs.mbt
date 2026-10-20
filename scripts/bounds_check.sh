@@ -4,7 +4,9 @@
 # Every row's last cell ("Tests") names the tests that check its bound, as a
 # backticked file path followed by the quoted names of that file's tests:
 #
-#   `http/src/sse/parser_test.mbt`: "first test", "second test"; `other_test.mbt`: "third"
+#   `src/parser_test.mbt`: "first test", "second test"; `src/other_test.mbt`: "third"
+
+# File paths are relative to the module, which holds the ledger.
 #
 # The check fails when a row names no test, a name comes before any file, a
 # file does not exist, or a file declares no `test "<name>" {` or
@@ -12,7 +14,7 @@
 # a test really drives the bound; that is the reviewer's job (see the ledger's
 # header).
 #
-# Usage: scripts/bounds_check.sh [LEDGER]   (default: RESOURCE_BOUNDS.md)
+# Usage: scripts/bounds_check.sh MODULE   (checks MODULE/RESOURCE_BOUNDS.md)
 #
 # Exit status: 0 = every row names tests that exist, 1 = a row does not,
 # 2 = the table is missing or has no Tests column.
@@ -21,8 +23,9 @@
 
 set -euo pipefail
 
-repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-ledger="${1:-$repo_root/RESOURCE_BOUNDS.md}"
+module="${1:?usage: scripts/bounds_check.sh MODULE}"
+module_root="$(cd "$(dirname "$0")/../$module" && pwd)"
+ledger="$module_root/RESOURCE_BOUNDS.md"
 [[ -f "$ledger" ]] || { echo "bounds_check.sh: no ledger at $ledger" >&2; exit 2; }
 
 # One tab-separated record per finding:
@@ -69,9 +72,9 @@ while IFS=$'\t' read -r kind label file name; do
   case "$kind" in
     TEST)
       if [[ -z "${row_tests[$label]+set}" ]]; then rows+=("$label"); row_tests[$label]=0; fi
-      if [[ ! -f "$repo_root/$file" ]]; then
+      if [[ ! -f "$module_root/$file" ]]; then
         printf 'NO FILE     %s: %s\n' "$label" "$file"; bad=1
-      elif grep -Fxq -e "test \"$name\" {" -e "async test \"$name\" {" "$repo_root/$file"; then
+      elif grep -Fxq -e "test \"$name\" {" -e "async test \"$name\" {" "$module_root/$file"; then
         row_tests[$label]=$(( row_tests[$label] + 1 )); tests=$(( tests + 1 ))
       else
         printf 'NO TEST     %s: %s has no test "%s"\n' "$label" "$file" "$name"; bad=1

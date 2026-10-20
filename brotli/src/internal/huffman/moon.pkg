@@ -1,0 +1,4 @@
+// Prefix codes for encoders: length-limited Huffman code lengths and the
+// canonical codes they define, as DEFLATE and Brotli use them.
+
+supported_targets = "js + native + wasm + wasm-gc"
