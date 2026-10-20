@@ -1,0 +1,431 @@
+// Release helper for the workspace: version bumps, CHANGELOG notes, the
+// CHANGELOG check of the gates, and publishing to mooncakes (see `usage`).
+//
+// Publishing is idempotent: a version already in the index is skipped, so the
+// job can run on every push to main and only a version bump releases anything.
+//
+// The modules, bottom-up, are those of scripts/modules.json.
+
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/async@0.22.5/process",
+  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/async@0.22.5/stdio",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/x@0.5.6/sys",
+}
+
+///|
+let usage : String =
+  #|Usage, from the repository root:
+  #|
+  #|  moon run scripts/release.mbtx -- bump <module> <version>
+  #|      set a module's version and every sibling import of it, and move its
+  #|      CHANGELOG [Unreleased] entries under <version> (local edit)
+  #|  moon run scripts/release.mbtx -- note <module> <section> <text>
+  #|      add "- <text>" under ### <section> of the module's [Unreleased]
+  #|  moon run scripts/release.mbtx -- check
+  #|      every published module has a CHANGELOG with [Unreleased] first and a
+  #|      heading for its version
+  #|  moon run scripts/release.mbtx -- publish [--dry-run]
+  #|      publish, bottom-up, every listed module whose version is not yet in
+  #|      the mooncakes index
+
+///|
+let unreleased : String = "## [Unreleased]"
+
+///|
+/// Prints `message` on stderr and exits with `code`.
+async fn[T] die(code : Int, message : String) -> T {
+  @stdio.stderr.write("\{message}\n")
+  @sys.exit(code)
+  panic()
+}
+
+///|
+/// The published modules of scripts/modules.json, bottom-up.
+async fn modules() -> Array[String] {
+  let path = "scripts/modules.json"
+  guard @fs.exists(path) else {
+    die(2, "no \{path}: run from the repository root")
+  }
+  let config = @json.parse(@fs.read_file(path).text())
+  guard config is { "modules": Array(list), .. } else {
+    die(2, "\{path} has no \"modules\" list")
+  }
+  list.filter_map(m => if m is String(m) { Some(m) } else { None })
+}
+
+///|
+/// The lines of `text`: a final line break ends the last line instead of
+/// starting an empty one.
+fn lines(text : String) -> Array[String] {
+  let all = text.split("\n").map(l => l.to_owned()).to_array()
+  if all.last() is Some("") {
+    all.pop() |> ignore
+  }
+  all
+}
+
+///|
+fn unlines(lines : Array[String]) -> String {
+  let out = StringBuilder()
+  for line in lines {
+    out.write_string("\{line}\n")
+  }
+  out.to_string()
+}
+
+///|
+/// The value of `field = "..."` in `dir`/moon.mod, or "" without one.
+async fn moon_mod(dir : String, field : String) -> String {
+  let path = "\{dir}/moon.mod"
+  guard @fs.exists(path) else { die(2, "no \{path}") }
+  let prefix = "\{field} = \""
+  for line in @fs.read_file(path).text().split("\n") {
+    if line.strip_prefix(prefix) is Some(rest) &&
+      rest.strip_suffix("\"") is Some(value) {
+      return value.to_owned()
+    }
+  }
+  ""
+}
+
+///|
+/// The local date as YYYY-MM-DD. `date` gives it in the local time zone, as
+/// CHANGELOG dates are written; MoonBit's clock (`@env.now`) is UTC.
+async fn today() -> String {
+  let output = @shell.Cmd("date", ["+%F"]).output()
+  output.check()
+  output.stdout().trim_end(chars="\n").to_owned()
+}
+
+///|
+/// Rewrites the first `"<name>@<digit>..."` of `line` to `"<name>@<version>"`:
+/// an import of `name` in a moon.mod.
+fn set_import(line : String, name : String, version : String) -> String {
+  let needle = "\"\{name}@"
+  for from = 0; from < line.length(); {
+    guard line.view(start_offset=from).find(needle) is Some(at) else { break }
+    let start = from + at
+    let digits = start + needle.length()
+    let rest = line.view(start_offset=digits)
+    if rest is ['0'..<='9', ..] && rest.find("\"") is Some(close) {
+      let end = digits + close + 1
+      return line.view(end_offset=start).to_owned() +
+        "\"\{name}@\{version}\"" +
+        line.view(start_offset=end).to_owned()
+    }
+    continue start + 1
+  }
+  line
+}
+
+///|
+/// Turns the [Unreleased] heading into [Unreleased] followed by a dated heading
+/// for `version`, so the entries that were under it now belong to `version`.
+async fn changelog_release(dir : String, version : String) -> Unit {
+  let file = "\{dir}/CHANGELOG.md"
+  guard @fs.exists(file) else { return }
+  let text = @fs.read_file(file).text()
+  let lines = lines(text)
+  if !lines.contains(unreleased) {
+    @stdio.stderr.write(
+      "warning: \{file} has no '\{unreleased}' heading; not updated\n",
+    )
+    return
+  }
+  if text.contains("## [\{version}] - ") {
+    println("  \{file} already has [\{version}]")
+    return
+  }
+  let date = today()
+  let heading = "## [\{version}] - \{date}"
+  let out = []
+  let mut inside = false
+  let mut entries = false
+  for line in lines {
+    if line == unreleased {
+      out.append([line, "", heading])
+      inside = true
+      continue
+    }
+    if inside && line.has_prefix("## ") {
+      inside = false
+    }
+    // A line with more than blanks and tabs.
+    if inside && line.trim(chars=" \t") != "" {
+      entries = true
+    }
+    out.push(line)
+  }
+  if !entries {
+    @stdio.stderr.write(
+      "warning: no entries under [Unreleased] for \{heading}\n",
+    )
+  }
+  @fs.write_file(file, unlines(out))
+  println("  \{file}: [Unreleased] -> [\{version}] - \{date}")
+}
+
+///|
+/// Appends "- <text>" to ### <section> of [Unreleased], creating the section.
+async fn changelog_note(dir : String, section : String, text : String) -> Unit {
+  let file = "\{dir}/CHANGELOG.md"
+  guard @fs.exists(file) else { die(1, "no \{file}") }
+  let line = lines(@fs.read_file(file).text())
+  guard line.search(unreleased) is Some(start) else {
+    die(1, "\{file} has no '\{unreleased}' heading")
+  }
+  let sec = "### \{section}"
+  let entry = "- \{text}"
+  let n = line.length()
+  // [Unreleased] runs up to the next "## " heading.
+  let end = for i in (start + 1)..<n {
+    if line[i].has_prefix("## ") {
+      break i
+    }
+  } nobreak {
+    n
+  }
+  let s = for i in (start + 1)..<end {
+    if line[i] == sec {
+      break Some(i)
+    }
+  } nobreak {
+    None
+  }
+  let out = []
+  match s {
+    Some(s) => {
+      // The entry goes after the section's last non-blank line.
+      let stop = for i in (s + 1)..<end {
+        if line[i].has_prefix("##") {
+          break i
+        }
+      } nobreak {
+        end
+      }
+      let last = for i = stop - 1; i > s && line[i] == ""; i = i - 1 {
+
+      } nobreak {
+        i
+      }
+      out.append(line[:last + 1])
+      if last == s {
+        out.push("")
+      }
+      out.push(entry)
+      out.append(line[last + 1:])
+    }
+    None => {
+      // A new section at the end of [Unreleased].
+      let last = for i = end - 1; i > start && line[i] == ""; i = i - 1 {
+
+      } nobreak {
+        i
+      }
+      out.append(line[:last + 1])
+      out.append(["", sec, "", entry])
+      if end < n {
+        out.push("")
+      }
+      out.append(line[end:])
+    }
+  }
+  @fs.write_file(file, unlines(out))
+}
+
+///|
+async fn bump(dir : String, version : String) -> Unit {
+  let name = moon_mod(dir, "name")
+  let own = "\{dir}/moon.mod"
+  let text = @fs.read_file(own).text()
+  let set = text
+    .split("\n")
+    .map(line => {
+      if line.has_prefix("version = \"") &&
+        line.length() > 11 &&
+        line.has_suffix("\"") {
+        "version = \"\{version}\""
+      } else {
+        line.to_owned()
+      }
+    })
+    .to_array()
+  @fs.write_file(own, set.join("\n"))
+  // Every module of the workspace, in the order of `*/moon.mod`.
+  let mods = []
+  for entry in @fs.readdir(".", include_hidden=false) {
+    if @fs.kind(entry) is Directory && @fs.exists("\{entry}/moon.mod") {
+      mods.push("\{entry}/moon.mod")
+    }
+  }
+  mods.sort_by(lexical)
+  let importers = []
+  for path in mods {
+    let text = @fs.read_file(path).text()
+    let edited = text
+      .split("\n")
+      .map(line => set_import(line.to_owned(), name, version))
+      .to_array()
+      .join("\n")
+    if edited != text {
+      @fs.write_file(path, edited)
+    }
+    if edited.contains("\{name}@\{version}") {
+      importers.push(path)
+    }
+  }
+  println("\{name} -> \{version}")
+  for path in importers {
+    println("  \{path}")
+  }
+  changelog_release(dir, version)
+}
+
+///|
+/// Byte order, as `*` sorts paths in the C locale; `String::compare` puts
+/// shorter strings first.
+fn lexical(a : String, b : String) -> Int {
+  for i in 0..<a.length().min(b.length()) {
+    if a[i] != b[i] {
+      return a[i].to_int() - b[i].to_int()
+    }
+  }
+  a.length() - b.length()
+}
+
+///|
+async fn check() -> Unit {
+  let mut status = 0
+  for dir in modules() {
+    let file = "\{dir}/CHANGELOG.md"
+    let version = moon_mod(dir, "version")
+    if !@fs.exists(file) {
+      @stdio.stderr.write("\{file} is missing\n")
+      status = 1
+      continue
+    }
+    let text = @fs.read_file(file).text()
+    let first = lines(text).search_by(l => l.has_prefix("## "))
+    if first.map(i => lines(text)[i]) != Some(unreleased) {
+      @stdio.stderr.write(
+        "\{file}: the first section must be '\{unreleased}'\n",
+      )
+      status = 1
+    }
+    if !text.contains("## [\{version}] - ") {
+      @stdio.stderr.write(
+        "\{file}: no '## [\{version}] - <date>' heading for the version in moon.mod (use 'moon run scripts/release.mbtx -- bump')\n",
+      )
+      status = 1
+    }
+  }
+  @sys.exit(status)
+}
+
+///|
+/// Whether the registry index already lists `name` at `version`.
+async fn index_has(name : String, version : String) -> Bool {
+  let home = match @env.get_env_var("MOON_HOME") {
+    Some(home) if home != "" => home
+    _ => "\{@env.get_env_var("HOME").unwrap_or("")}/.moon"
+  }
+  let file = "\{home}/registry/index/user/\{name}.index"
+  guard @fs.exists(file) else { return false }
+  for line in @fs.read_file(file).text().split("\n") {
+    let entry = @json.parse(line) catch { _ => continue }
+    if entry is { "version": String(v), .. } && v == version {
+      return true
+    }
+  }
+  false
+}
+
+///|
+/// `moon update`, its report on stderr only; the index then has the versions
+/// just published.
+async fn moon_update() -> Unit {
+  let code = @shell.Cmd("moon", ["update"], stdout=Discard, stderr=Inherit).status()
+  if code != 0 {
+    @sys.exit(code)
+  }
+}
+
+///|
+/// Whether `out` says the module needs a module in `pending`, which this run
+/// would publish first. moon says "not found in the registry" for a module
+/// that was never published and "no version satisfies" for a new version of
+/// one that was.
+fn waits_for(out : String, pending : Array[String]) -> Bool {
+  out
+  .split("\n")
+  .any(line => {
+    pending.any(name => {
+      guard line.find("dependency `\{name}`") is Some(at) else { return false }
+      let rest = line.view(start_offset=at)
+      rest.contains("not found in the registry") ||
+      rest.contains("no version satisfies")
+    })
+  })
+}
+
+///|
+async fn publish(dry : Bool) -> Unit {
+  moon_update()
+  let pending = []
+  for dir in modules() {
+    let name = moon_mod(dir, "name")
+    let version = moon_mod(dir, "version")
+    if index_has(name, version) {
+      println("skip    \{name}@\{version} (already published)")
+      continue
+    }
+    if dry {
+      // `moon publish --dry-run` exits non-zero even when the server accepts
+      // the dry run, so judge it by its output. A dependant of a module that
+      // this run would publish first cannot be checked yet: its packaged copy
+      // resolves dependencies from the registry.
+      let (_, out) = @process.collect_output_merged("moon", [
+        "-C", dir, "publish", "--dry-run",
+      ])
+      let out = out.text()
+      if out.contains("Dry run completed successfully") {
+        println("would   \{name}@\{version}")
+      } else if !pending.is_empty() && waits_for(out, pending) {
+        println(
+          "would   \{name}@\{version} (after \{pending.join(" ")}; not checkable before they exist)",
+        )
+      } else {
+        println(out.trim_end(chars="\n"))
+        @sys.exit(1)
+      }
+      pending.push(name)
+    } else {
+      println("publish \{name}@\{version}")
+      let code = @shell.Cmd("moon", ["-C", dir, "publish"]).status()
+      if code != 0 {
+        @sys.exit(code)
+      }
+      moon_update()
+    }
+  }
+}
+
+///|
+async fn main {
+  let args = @env.args()[1:].to_owned()
+  match args {
+    ["bump", dir, version, ..] => bump(dir, version)
+    ["note", dir, section, text, ..] => changelog_note(dir, section, text)
+    ["check", ..] => check()
+    ["publish", .. rest] => publish(rest is ["--dry-run", ..])
+    _ => {
+      println(usage)
+      @sys.exit(2)
+    }
+  }
+}

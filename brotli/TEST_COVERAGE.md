@@ -5,7 +5,7 @@ Line coverage of `gaato/brotli`, measured on native with `moon test
 ledger:
 
 > **Every uncovered line is either covered by a test or listed below with a
-> reason.** `scripts/coverage_report.sh` enforces this: a file with uncovered
+> reason.** `scripts/coverage_report.mbtx` enforces this: a file with uncovered
 > lines must have a row here whose budget is at least the actual count, and
 > the script fails otherwise. Rows for fully covered files are flagged as
 > stale and rows with slack are noted, so budgets only ever shrink.
@@ -13,8 +13,8 @@ ledger:
 ## Running it
 
 ```fish
-scripts/coverage_report.sh brotli                    # measure, print tables, check the ledger
-scripts/coverage_report.sh brotli --from-json _build/coverage_report.brotli.json   # recheck only
+moon run scripts/coverage_report.mbtx -- brotli   # measure, print tables, check the ledger
+moon run scripts/coverage_report.mbtx -- brotli --from-json _build/coverage_report.brotli.json   # recheck only
 ```
 
 CI runs it after the gates on every push and pull request. Exit status: 0 =

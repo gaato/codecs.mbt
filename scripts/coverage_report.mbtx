@@ -1,0 +1,381 @@
+// Test-coverage report for the modules of the workspace.
+//
+// Runs a module's native test suite with coverage instrumentation, writes a
+// Coveralls JSON report, prints per-file and total tables, and checks every
+// remaining uncovered file against the module's TEST_COVERAGE.md ledger: a file
+// with uncovered lines must have a ledger row whose budget covers them.
+//
+// Usage, from the repository root:
+//   moon run scripts/coverage_report.mbtx -- [MODULE [--from-json FILE]]
+// Without MODULE it reports on every ledgered module of scripts/modules.json in
+// turn, and exits with the worst status.
+//   --from-json FILE  recheck an existing Coveralls JSON report against the
+//                     ledger instead of re-running the instrumented tests.
+//
+// Exit status: 0 = every uncovered line is ledgered, 1 = unexplained coverage
+// gaps or over-budget files, 2 = setup/run failure.
+//
+// Measurement pitfalls this script works around (see TEST_COVERAGE.md):
+// - In a moon.work workspace `moon -C <member> test` tests every member. Run
+//   `moon test --target native --enable-coverage <package dirs>` from the
+//   workspace root instead, and pass only this module's trace maps.
+// - The reporter merges every `moonbit_coverage_*` counter file it is given or
+//   finds; counters from earlier runs and trace maps of moved or deleted
+//   packages corrupt the totals. Drop both before measuring, and pass the
+//   trace maps and counters explicitly.
+// - The reporter names files by their workspace-relative path; the ledger uses
+//   module-relative paths, so the module's directory is stripped.
+// - `-f summary` omits fully covered files; use the Coveralls JSON.
+// - moon's bundled tcc cannot link on some hosts (openSUSE); use the system cc.
+
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/async@0.22.5/stdio",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/core/string",
+  "moonbitlang/x@0.5.6/sys",
+}
+
+///|
+let usage : String = "usage: moon run scripts/coverage_report.mbtx -- [MODULE [--from-json FILE]]"
+
+///|
+/// Prints `message` on stderr and exits with `code`.
+async fn[T] die(code : Int, message : String) -> T {
+  @stdio.stderr.write("\{message}\n")
+  @sys.exit(code)
+  panic()
+}
+
+///|
+/// Raised for a failed setup or run; the module's status is then 2.
+suberror Setup {
+  Setup(String)
+}
+
+///|
+/// scripts/modules.json.
+async fn config() -> Json {
+  let path = "scripts/modules.json"
+  guard @fs.exists(path) else {
+    die(2, "no \{path}: run from the repository root")
+  }
+  @json.parse(@fs.read_file(path).text())
+}
+
+///|
+fn strings(json : Json?) -> Array[String] {
+  guard json is Some(Array(list)) else { return [] }
+  list.filter_map(item => if item is String(s) { Some(s) } else { None })
+}
+
+///|
+/// Byte order; `String::compare` puts shorter strings first.
+fn lexical(a : String, b : String) -> Int {
+  for i in 0..<a.length().min(b.length()) {
+    if a[i] != b[i] {
+      return a[i].to_int() - b[i].to_int()
+    }
+  }
+  a.length() - b.length()
+}
+
+///|
+fn sorted(keys : Iter[String]) -> Array[String] {
+  let keys = keys.to_array()
+  keys.sort_by(lexical)
+  keys
+}
+
+///|
+/// Whether module-relative `file` is a `.mbt` file directly in one of the
+/// `scope` directories.
+fn in_scope(file : String, scope : Array[String]) -> Bool {
+  guard file.rev_find("/") is Some(slash) else { return false }
+  let base = file.view(start_offset=slash + 1)
+  base.length() > 4 &&
+  base.has_suffix(".mbt") &&
+  scope.contains(file.view(end_offset=slash).to_owned())
+}
+
+///|
+/// The paths under `root` whose last component satisfies `keep`, sorted; none
+/// when `root` does not exist.
+async fn find(root : String, keep : (String) -> Bool) -> Array[String] {
+  let found = []
+  @fs.walk(root, (dir, entries) => {
+    for entry in entries {
+      if keep(entry) {
+        found.push("\{dir}/\{entry}")
+      }
+    }
+  }) catch {
+    _ => ()
+  }
+  found.sort_by(lexical)
+  found
+}
+
+///|
+/// Runs the instrumented tests of `dir` and writes their Coveralls report,
+/// returning its path.
+async fn measure(dir : String) -> String {
+  let json_file = "_build/coverage_report.\{dir}.json"
+  let drivers = find("\{dir}/src", name => name == "moon.pkg").map(path => {
+    path.view(end_offset=path.length() - "/moon.pkg".length()).to_owned()
+  })
+  for counter in find("_build", name => name.has_prefix("moonbit_coverage_")) {
+    @fs.remove(counter) catch {
+      _ => ()
+    }
+  }
+  if @fs.exists("_build/native/debug/test") {
+    @fs.rmdir("_build/native/debug/test", recursive=true)
+  }
+  let cc = match @env.get_env_var("MOON_CC") {
+    Some(cc) if cc != "" => cc
+    _ => "cc"
+  }
+  let tested = @shell.Cmd(
+    "moon",
+    ["test", "--target", "native", "--enable-coverage", ..drivers],
+    env={ "MOON_CC": cc },
+    stdout=Discard,
+    stderr=Inherit,
+  ).status()
+  if tested != 0 {
+    raise Setup("error: instrumented native test run failed")
+  }
+  let name = module_name(dir)
+  let traces = find("_build/native/debug/test/\{name}", name => {
+    name.has_suffix(".trace.source")
+  })
+  let counters = find("_build", name => name.has_prefix("moonbit_coverage_"))
+  if traces.is_empty() || counters.is_empty() {
+    raise Setup("error: no trace maps or counters after the instrumented run")
+  }
+  let args = ["coverage", "report", "--", ..traces]
+  for counter in counters {
+    args.append(["-t", counter])
+  }
+  args.append(["-f", "coveralls", "-o", json_file])
+  let reported = @shell.Cmd("moon", args, stdout=Discard, stderr=Discard).status()
+  if reported != 0 {
+    raise Setup("error: moon coverage report failed")
+  }
+  json_file
+}
+
+///|
+/// The `name = "..."` of `dir`/moon.mod.
+async fn module_name(dir : String) -> String {
+  for line in @fs.read_file("\{dir}/moon.mod").text().split("\n") {
+    if line.strip_prefix("name = \"") is Some(rest) &&
+      rest.strip_suffix("\"") is Some(name) {
+      return name.to_owned()
+    }
+  }
+  ""
+}
+
+///|
+/// The budgets of TEST_COVERAGE.md: rows like "| src/foo.mbt | 12 | reason |".
+async fn budgets(ledger : String, scope : Array[String]) -> Map[String, Int] {
+  let budget = Map([])
+  if !@fs.exists(ledger) {
+    return budget
+  }
+  for line in @fs.read_file(ledger).text().split("\n") {
+    guard line.has_prefix("|") else { continue }
+    let cell = line.split("|").to_array()
+    guard cell.length() > 2 else { continue }
+    let file = cell[1].trim(chars=" ").to_owned()
+    if !in_scope(file, scope) {
+      continue
+    }
+    let count = cell[2].trim(chars=" ")
+    if count.length() > 0 && count.iter().all(c => c is ('0'..<='9')) {
+      budget[file] = @string.parse_int(count) catch { _ => continue }
+    }
+  }
+  budget
+}
+
+///|
+/// `n` in `width` columns, right-aligned, as printf's `%<width>d`.
+fn right(n : Int, width : Int) -> String {
+  n.to_string().pad_start(width, ' ')
+}
+
+///|
+/// `100 * part / whole` with one decimal, as printf's `%.1f`: rounded to the
+/// nearest tenth, a tie to the even one.
+fn percent(part : Int, whole : Int) -> String {
+  let scaled = part.to_int64() * 1000L
+  let whole = whole.to_int64()
+  let mut tenths = scaled / whole
+  let twice = scaled % whole * 2L
+  if twice > whole || (twice == whole && tenths % 2L == 1L) {
+    tenths += 1L
+  }
+  "\{tenths / 10L}.\{tenths % 10L}"
+}
+
+///|
+/// Checks `json_file` against the ledger of `dir`; the module's exit status.
+async fn check(
+  dir : String,
+  json_file : String,
+  scope : Array[String],
+) -> Int {
+  guard @fs.exists(json_file) else { raise Setup("error: no \{json_file}") }
+  let report = @json.parse(@fs.read_file(json_file).text()) catch {
+    _ => raise Setup("error: \{json_file} is not JSON")
+  }
+  guard report is { "source_files": Array(files), .. } else {
+    raise Setup("error: \{json_file} has no source_files")
+  }
+  let budget = budgets("\{dir}/TEST_COVERAGE.md", scope)
+  let covered : Map[String, (Int, Int)] = Map([])
+  let uncovered : Map[String, Int] = Map([])
+  let mut lcov = 0
+  let mut ltot = 0
+  for source in files {
+    guard source is { "name": String(name), "coverage": Array(lines), .. } else {
+      continue
+    }
+    let file = name
+      .strip_prefix("\{dir}/")
+      .map(f => f.to_owned())
+      .unwrap_or(name)
+    if !in_scope(file, scope) {
+      continue
+    }
+    let tot = lines.filter(l => l is Number(_, ..)).length()
+    let cov = lines.filter(l => l is Number(n, ..) && n > 0).length()
+    // Declaration-only files have no executable points.
+    if tot == 0 {
+      continue
+    }
+    covered[file] = (cov, tot)
+    lcov += cov
+    ltot += tot
+    if tot > cov {
+      uncovered[file] = tot - cov
+    }
+  }
+  if ltot == 0 {
+    raise Setup("error: \{json_file} measures no line of \{dir}")
+  }
+  println(
+    "\{"file".pad_end(36, ' ')} \{"covered".pad_start(11, ' ')} \{"%".pad_start(8, ' ')}",
+  )
+  let row = (label : String, cov : Int, tot : Int) => {
+    let fraction = "\{right(cov, 5)}/\{tot.to_string().pad_end(5, ' ')}"
+    println(
+      "\{label.pad_end(36, ' ')} \{fraction} \{percent(cov, tot).pad_start(7, ' ')}%",
+    )
+  }
+  for file in sorted(covered.keys()) {
+    let (cov, tot) = covered[file]
+    row(file, cov, tot)
+  }
+  row("TOTAL", lcov, ltot)
+  println("")
+  let mut bad = false
+  for file in sorted(uncovered.keys()) {
+    let count = uncovered[file]
+    match budget.get(file) {
+      None => {
+        println(
+          "UNEXPLAINED  \{file.pad_end(32, ' ')} \{right(count, 4)} uncovered (no ledger row)",
+        )
+        bad = true
+      }
+      Some(limit) if count > limit => {
+        println(
+          "OVER BUDGET  \{file.pad_end(32, ' ')} \{right(count, 4)} uncovered > budget \{limit}",
+        )
+        bad = true
+      }
+      Some(_) => ()
+    }
+  }
+  for file in sorted(budget.keys()) {
+    let limit = budget[file]
+    if !covered.contains(file) {
+      println(
+        "STALE LEDGER \{file.pad_end(32, ' ')} file not in coverage output",
+      )
+    } else if uncovered.get(file) is Some(count) {
+      if count < limit {
+        println(
+          "note: budget slack \{file.pad_end(21, ' ')} \{right(count, 4)} uncovered < budget \{limit}",
+        )
+      }
+    } else {
+      println(
+        "STALE LEDGER \{file.pad_end(32, ' ')} fully covered; drop the row",
+      )
+    }
+  }
+  if bad {
+    println("\nledger check: FAIL")
+    return 1
+  }
+  println("ledger check: OK - every uncovered line is ledgered")
+  0
+}
+
+///|
+/// Measures (or rechecks `from_json` for) `dir`; its exit status.
+async fn report(dir : String, from_json : String?, scopes : Json?) -> Int {
+  guard scopes is Some(Object(scopes)) && scopes.get(dir) is Some(scope) else {
+    @stdio.stderr.write(
+      "no coverage scope for \{dir} in scripts/modules.json\n",
+    )
+    return 2
+  }
+  let scope = strings(Some(scope))
+  try {
+    let json_file = match from_json {
+      Some(file) => file
+      None => measure(dir)
+    }
+    check(dir, json_file, scope)
+  } catch {
+    Setup(message) => {
+      @stdio.stderr.write("\{message}\n")
+      2
+    }
+    err => raise err
+  }
+}
+
+///|
+async fn main {
+  let config = config()
+  let (ledgered, scopes) = match config {
+    { "ledgered": ledgered, "coverage_scope": scopes, .. } =>
+      (strings(Some(ledgered)), Some(scopes))
+    _ =>
+      die(2, "scripts/modules.json has no \"ledgered\" or \"coverage_scope\"")
+  }
+  let status = match @env.args()[1:] {
+    [] => {
+      let mut worst = 0
+      for dir in ledgered {
+        worst = worst.max(report(dir, None, scopes))
+      }
+      worst
+    }
+    ["--from-json", ..] => die(2, usage)
+    [dir, "--from-json", file, ..] => report(dir, Some(file), scopes)
+    [_, "--from-json"] => die(2, "--from-json needs a file")
+    [dir, ..] => report(dir, None, scopes)
+  }
+  @sys.exit(status)
+}

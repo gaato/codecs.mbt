@@ -7,8 +7,8 @@ with its bound**. A new one needs a row before it ships.
 **Every row of "Enforced limits" names a test that checks the bound**, in its
 Tests column: a backticked file path, then the quoted names of that file's
 tests. A test counts only if it drives the structure to its limit, or checks
-the bound after every step over streams that push it. `scripts/bounds_check.sh`,
-run by `scripts/gates.sh`, enforces the naming; whether a named test really
+the bound after every step over streams that push it. `scripts/bounds_check.mbtx`,
+run by `scripts/gates.mbtx`, enforces the naming; whether a named test really
 reaches the bound is checked in review. The other tables are prose.
 
 Sizes a frame header declares are untrusted: they are read in 64 bits and

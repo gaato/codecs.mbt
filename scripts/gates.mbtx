@@ -1,0 +1,107 @@
+// Runs the repository validation suite.
+//
+// Usage, from the repository root:
+//   moon run scripts/gates.mbtx -- [--no-js] [--no-wasm]
+//
+// Each step is echoed as "+ <command>" and streams its output as it runs; the
+// first failing step ends the suite with that step's exit status.
+
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/async@0.22.5/stdio",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/x@0.5.6/sys",
+}
+
+///|
+/// Prints `message` on stderr and exits with `code`.
+async fn[T] die(code : Int, message : String) -> T {
+  @stdio.stderr.write("\{message}\n")
+  @sys.exit(code)
+  panic()
+}
+
+///|
+/// Echoes and runs `program args`, exiting with its status if it fails.
+async fn run(
+  program : String,
+  args : Array[String],
+  env~ : Map[String, String] = Map([]),
+) -> Unit {
+  println("+ \{[program, ..args].join(" ")}")
+  let code = @shell.Cmd(program, args, env~).status()
+  if code != 0 {
+    @sys.exit(code)
+  }
+}
+
+///|
+/// The ledgered modules of scripts/modules.json.
+async fn ledgered() -> Array[String] {
+  let path = "scripts/modules.json"
+  guard @fs.exists(path) else {
+    die(2, "no \{path}: run from the repository root")
+  }
+  let config = @json.parse(@fs.read_file(path).text())
+  guard config is { "ledgered": Array(list), .. } else {
+    die(2, "\{path} has no \"ledgered\" list")
+  }
+  list.filter_map(m => if m is String(m) { Some(m) } else { None })
+}
+
+///|
+async fn main {
+  let targets = ["native"]
+  let mut skip_js = false
+  let mut skip_wasm = false
+  for arg in @env.args()[1:] {
+    match arg {
+      "--no-js" => skip_js = true
+      "--no-wasm" => skip_wasm = true
+      _ => die(2, "unknown option: \{arg}")
+    }
+  }
+  if !skip_js {
+    targets.push("js")
+  }
+  if !skip_wasm {
+    targets.append(["wasm", "wasm-gc"])
+  }
+  // Every module's CHANGELOG opens with [Unreleased] and has a heading for its version.
+  run("moon", ["run", "scripts/release.mbtx", "--", "check"])
+  for dir in ledgered() {
+    // Every enforced limit in RESOURCE_BOUNDS.md names tests that exist.
+    run("moon", ["run", "scripts/bounds_check.mbtx", "--", dir])
+  }
+  // The registry index, for the workspace and the scripts' imports.
+  run("moon", ["update"])
+  // Generated inputs are current: the conformance suite's vectors (an extract of
+  // each format's vectors) and the benchmarks' (the zstd and brotli commands decompress
+  // them to what the generator produces).
+  run("moon", ["run", "scripts/gen_conformance_vectors.mbtx", "--", "--check"])
+  run("moon", ["run", "scripts/gen_bench_data.mbtx", "--", "--check"])
+  // From the workspace root, check and test cover every member.
+  let cc = match @env.get_env_var("MOON_CC") {
+    Some(cc) if cc != "" => cc
+    _ => "cc"
+  }
+  for t in targets {
+    run("moon", ["check", "--deny-warn", "--target", t])
+    run("timeout", ["600", "moon", "test", "--target", t], env={ "MOON_CC": cc })
+  }
+  run("moon", ["fmt", "--check"])
+  run("moon", ["info"])
+  // Only meaningful in CI: in a jj working copy `git diff` compares against the parent change,
+  // so uncommitted edits would look stale. Set CHECK_MBTI=1 to enforce locally.
+  if @env.get_env_var("CI") == Some("true") ||
+    @env.get_env_var("CHECK_MBTI") == Some("1") {
+    let code = @shell.Cmd("git", ["diff", "--exit-code", "--", "*.mbti"]).status()
+    if code != 0 {
+      die(1, "pkg.generated.mbti is stale: run 'moon info' and commit")
+    }
+  }
+  println("gates: OK")
+}

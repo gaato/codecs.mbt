@@ -1,0 +1,14 @@
+{
+  "$comment": [
+    "The workspace's modules, read by the scripts in this directory.",
+    "modules: the published modules, bottom-up: a module comes after everything it imports.",
+    "ledgered: the modules that hold stream-sized state, with the ledgers that bound it (RESOURCE_BOUNDS.md, TEST_COVERAGE.md). The contract modules define types only.",
+    "coverage_scope: the directories, module-relative, whose .mbt files each module's coverage ledger measures: the library and the internal packages it ships, not test-only packages."
+  ],
+  "modules": ["codec", "codec_bytes", "zstd", "brotli"],
+  "ledgered": ["zstd", "brotli"],
+  "coverage_scope": {
+    "zstd": ["src", "src/internal/header", "src/internal/xxhash"],
+    "brotli": ["src", "src/internal/huffman", "src/internal/lz77", "src/internal/rules"]
+  }
+}

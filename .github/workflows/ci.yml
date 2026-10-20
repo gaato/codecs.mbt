@@ -41,16 +41,18 @@ jobs:
       - name: Install the scripts' tools
         # zstd and brotli check the benchmarks' inputs; python3-brotli is the
         # reference decoder of the brotli cross-check.
-        run: apt-get update && apt-get install -y --no-install-recommends zstd brotli python3 python3-brotli jq gawk
+        run: apt-get update && apt-get install -y --no-install-recommends zstd brotli python3 python3-brotli
+
+      - name: Registry index
+        # The scripts are .mbtx files; moon resolves their imports from it.
+        run: moon update
 
       - name: Gates
-        run: scripts/gates.sh
+        run: moon run scripts/gates.mbtx
 
       - name: Coverage ledgers
-        run: |
-          source scripts/modules.sh
-          for m in "${LEDGERED[@]}"; do scripts/coverage_report.sh "$m"; done
-        shell: bash
+        # Every ledgered module of scripts/modules.json.
+        run: moon run scripts/coverage_report.mbtx
 
       - name: Cross-check the brotli encoder with the reference decoder
         run: |
