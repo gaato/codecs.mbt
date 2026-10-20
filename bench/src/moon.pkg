@@ -1,0 +1,10 @@
+// The package holds only benchmarks: every import is a test import.
+
+import {
+  "gaato/zstd",
+  "gaato/brotli",
+  "moonbitlang/core/bench",
+  "moonbitlang/core/encoding/base64",
+} for "test"
+
+supported_targets = "js + native + wasm + wasm-gc"

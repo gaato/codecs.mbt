@@ -3,6 +3,7 @@ members = [
   "codec_bytes",
   "harness",
   "conformance",
+  "bench",
   "zstd",
   "brotli",
 ]
