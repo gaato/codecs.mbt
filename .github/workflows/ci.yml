@@ -39,7 +39,9 @@ jobs:
         run: moon version --all
 
       - name: Install the scripts' tools
-        run: apt-get update && apt-get install -y --no-install-recommends python3 python3-brotli jq gawk
+        # zstd and brotli check the benchmarks' inputs; python3-brotli is the
+        # reference decoder of the brotli cross-check.
+        run: apt-get update && apt-get install -y --no-install-recommends zstd brotli python3 python3-brotli jq gawk
 
       - name: Gates
         run: scripts/gates.sh
