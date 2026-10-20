@@ -242,11 +242,10 @@ fn Huffman::decode(
   if s4 >= end {
     raise corrupt("a Huffman jump table past its streams")
   }
+  // The caller rejects four streams with fewer than 6 literals, and for 6 or
+  // more the last segment is never negative.
   let segment = (count + 3) / 4
   let last = count - 3 * segment
-  if last < 0 {
-    raise corrupt("too few literals for four Huffman streams")
-  }
   self.decode_stream(data, s1, s2, out, 0, segment)
   self.decode_stream(data, s2, s3, out, segment, segment)
   self.decode_stream(data, s3, s4, out, 2 * segment, segment)

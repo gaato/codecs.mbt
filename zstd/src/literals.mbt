@@ -70,6 +70,11 @@ fn Decoder::decode_literals(self : Decoder, size : Int32) -> Int32 raise Stop {
   if regenerated > self.block_max {
     raise corrupt("more literals than the block limit")
   }
+  // Four streams need at least 6 literals, or the last stream's length would
+  // be negative (RFC 8878 erratum 7297).
+  if size_format != 0 && regenerated < 6 {
+    raise corrupt("fewer than 6 literals in four Huffman streams")
+  }
   let end = header + compressed
   if end > size {
     raise corrupt("compressed literals past their block")

@@ -488,7 +488,7 @@ test "Huffman streams" {
     outcome(
       compressed(
         [
-          ..huffman_header(2, 1, 4, 2 + 5),
+          ..huffman_header(2, 1, 8, 2 + 5),
           ..tree,
           ..Array::make(5, b'\x01'),
           b'\x00',
@@ -502,7 +502,7 @@ test "Huffman streams" {
     outcome(
       compressed(
         [
-          ..huffman_header(2, 1, 4, 2 + 10),
+          ..huffman_header(2, 1, 8, 2 + 10),
           ..tree,
           ..le(1, 2),
           ..le(1, 2),
@@ -514,23 +514,26 @@ test "Huffman streams" {
     ),
     content="Corrupt: a Huffman jump table past its streams",
   )
-  // One literal cannot fill four streams.
-  inspect(
-    outcome(
-      compressed(
-        [
-          ..huffman_header(2, 1, 1, 2 + 10),
-          ..tree,
-          ..le(1, 2),
-          ..le(1, 2),
-          ..le(1, 2),
-          ..Array::make(4, b'\x01'),
-          b'\x00',
-        ],
+  // Four streams need at least 6 literals (RFC 8878 erratum 7297), whatever
+  // the streams hold; the reference decoder rejects these too.
+  for regenerated in [0, 1, 4, 5] {
+    inspect(
+      outcome(
+        compressed(
+          [
+            ..huffman_header(2, 1, regenerated, 2 + 10),
+            ..tree,
+            ..le(1, 2),
+            ..le(1, 2),
+            ..le(1, 2),
+            ..Array::make(4, b'\x01'),
+            b'\x00',
+          ],
+        ),
       ),
-    ),
-    content="Corrupt: too few literals for four Huffman streams",
-  )
+      content="Corrupt: fewer than 6 literals in four Huffman streams",
+    )
+  }
 }
 
 ///|
