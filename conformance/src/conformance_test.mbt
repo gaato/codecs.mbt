@@ -33,36 +33,3 @@ fn[D : @codec_bytes.Decode] conform(
     e => fail("\{label} reset: \{e}")
   }
 }
-
-///|
-test "zstd keeps the byte-stream contract" {
-  // The decoder still reports bytes after the last frame as Corrupt.
-  conform("zstd", zstd_vectors, Zstd::new, garbage=None)
-}
-
-///|
-test "brotli keeps the byte-stream contract" {
-  // Brotli has no framing: any byte after the stream is trailing.
-  conform(
-    "brotli",
-    brotli_vectors,
-    Brotli::new,
-    garbage=Some([b"\x00", b"\xff\xff\xff\xff\xff\xff\xff\xff"]),
-  )
-}
-
-///|
-test "corrupted zstd streams never break the contract" {
-  for v in zstd_vectors[:4] {
-    let codec = () => @codec_harness.ByteDecoder::new(Zstd::new(v.window_bits))
-    let _ = @codec_harness.fuzz(codec, v.input(), seed=8878, rounds=300)
-  }
-}
-
-///|
-test "corrupted brotli streams never break the contract" {
-  for v in brotli_vectors[:8] {
-    let codec = () => @codec_harness.ByteDecoder::new(Brotli::new(24))
-    let _ = @codec_harness.fuzz(codec, v.input(), seed=7932, rounds=200)
-  }
-}

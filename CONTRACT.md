@@ -119,19 +119,18 @@ complete would otherwise get a silently truncated result.
 `reset` returns the codec to the state of a new one with the same options. A
 codec reused after `reset` behaves exactly as a fresh one.
 
-`memory_usage` is the number of bytes the codec has allocated for this stream.
-It never exceeds the limit the codec was configured with, and it grows only
-when the stream asks for more (a larger window, more tables), never because of
-how the input was split.
+`memory_usage` is the number of bytes the codec holds for the current stream
+in buffers whose size depends on the stream (windows, blocks, tables sized by
+a header). It never exceeds what the codec's limits allow, and it may drop
+between members, when a codec releases what the next member does not need.
 
-## Errors in two layers
+## Errors
 
-Each codec raises its own error type from its own methods, with a format
-specific kind (`ZstdError(ZstdErrorKind, String)`), so that callers who use
-one format see everything it can report. Each format kind has a total
-`common()` that maps it to an `ErrorKind`, and the trait implementation raises
-`CodecError` with that kind and the same message. A format can add kinds
-without waiting for `gaato/codec`.
+Every codec raises `gaato/codec`'s `CodecError`, from its own methods as well
+as through the traits, so that callers handle every format's failures with
+one type. What is particular to a format goes in the message. A kind of
+failure that no existing kind describes is added to `gaato/codec`; the enum
+is `#non_exhaustive`, so adding one breaks no one.
 
 ## What the contract leaves to each format
 

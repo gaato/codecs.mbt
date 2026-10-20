@@ -54,7 +54,7 @@ let max_steps : Int32 = 50_000_000
 ///   `end`: at the end a codec finishes or reports `Truncated`;
 /// - `NeedMoreOutput` filled the room, and a step with room makes progress;
 /// - `Done` comes only with `end` and every byte consumed;
-/// - memory never shrinks during a stream and never exceeds `memory_limit`;
+/// - memory never exceeds `memory_limit`;
 /// - an error sticks: another step raises the same kind.
 pub fn[S : Stepper] drive(
   codec : S,
@@ -68,8 +68,7 @@ pub fn[S : Stepper] drive(
   let mut pos = 0
   let mut pending = input[0:0]
   let mut steps = 0
-  let mut memory = codec.memory_usage()
-  let mut peak = memory
+  let mut peak = codec.memory_usage()
   for ;; {
     if pending.length() == 0 && pos < input.length() {
       let next = (pos + (input_sizes.next)().max(1)).min(input.length())
@@ -107,13 +106,9 @@ pub fn[S : Stepper] drive(
       fail("no end after \{max_steps} steps")
     }
     let now = codec.memory_usage()
-    if now < memory {
-      fail("memory went down from \{memory} to \{now} during a stream")
-    }
     if memory_limit is Some(limit) && now > limit {
       fail("memory \{now} over the limit \{limit}")
     }
-    memory = now
     peak = peak.max(now)
     output.write_bytes(step.produced)
     pending = pending[step.consumed:]

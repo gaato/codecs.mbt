@@ -16,7 +16,7 @@ that turns its contract into this view and checks its own rules on the way;
 `drive` runs a codec over an input split by two `Sizes` sequences and checks
 the rules every kind shares after every step: nothing is asked for after the
 end, a full slice is really full, a step with room makes progress, memory
-never shrinks within a stream or passes its limit, and errors stick. Its
+never passes its limit, and errors stick. Its
 `Transcript` (output, events, error kind) is what two runs must agree on.
 
 On top of `drive`: `check_splits` (every split agrees with the whole run),
