@@ -13,7 +13,7 @@ fn max_decoder_table_bytes() -> Int32 {
       max_table_size(MAX_ALPHABET) +
       max_table_size(MAX_DISTANCE_ALPHABET)
     ) +
-    3 * (max_table_size(258) + max_table_size(NUM_BLOCK_COUNT_CODES)) +
+    3 * (max_table_size(258) + max_table_size(@rules.NUM_BLOCK_COUNT_CODES)) +
     max_table_size(256 + 16) +
     max_table_size(18)
   2 * entries
@@ -51,7 +51,8 @@ fn check_bounds(d : Decoder, room : Int32) -> Unit raise {
   for c in 0..<3 {
     assert_true(d.type_codes[c].pool.length() <= max_table_size(258))
     assert_true(
-      d.count_codes[c].pool.length() <= max_table_size(NUM_BLOCK_COUNT_CODES),
+      d.count_codes[c].pool.length() <=
+      max_table_size(@rules.NUM_BLOCK_COUNT_CODES),
     )
   }
   assert_true(d.map_code.pool.length() <= max_table_size(256 + 16))

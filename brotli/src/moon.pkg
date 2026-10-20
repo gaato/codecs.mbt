@@ -3,6 +3,7 @@ import {
   "gaato/codec_bytes",
   "gaato/brotli/internal/huffman",
   "gaato/brotli/internal/lz77",
+  "gaato/brotli/internal/rules",
 }
 
 import {

@@ -24,10 +24,11 @@ streams built bit by bit, and seeded pseudo-random splits and corruptions.
 
 ### What is measured
 
-- Sources: every non-test `.mbt` directly under `src/`, the library package,
-  and under `src/internal/huffman/` and `src/internal/lz77/`, the encoder's
-  building blocks. The test-only checksum package and the crosscheck tool
-  under `src/internal/` are not measured.
+- Sources: every non-test `.mbt` directly under `src/`, the library package;
+  under `src/internal/huffman/` and `src/internal/lz77/`, the encoder's
+  building blocks; and under `src/internal/rules/`, the decoder's pure
+  functions of the values it has read. The test-only checksum package and
+  the crosscheck tool under `src/internal/` are not measured.
 - Counts are Coveralls lines: lines with at least one instrumented point,
   covered when any point on them ran.
 
@@ -42,7 +43,7 @@ streams built bit by bit, and seeded pseudo-random splits and corruptions.
 - moon's bundled tcc cannot link on some hosts (openSUSE); the script sets
   `MOON_CC=cc` unless it is already set.
 
-Snapshot at the last full measurement (2026-10-20): **99.9 %** (871/872
+Snapshot at the last full measurement (2026-10-20): **99.9 %** (904/905
 lines).
 
 ## Policy

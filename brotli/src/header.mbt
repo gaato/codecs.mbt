@@ -2,24 +2,11 @@
 
 ///|
 fn Decoder::stream_header(self : Decoder) -> Unit raise Stop {
-  let wbits = if self.read_bits(1) == 0 {
-    16
-  } else {
-    let n = self.read_bits(3)
-    if n != 0 {
-      17 + n
-    } else {
-      let m = self.read_bits(3)
-      if m == 1 {
-        raise corrupt("large-window streams are not RFC 7932")
-      }
-      if m != 0 {
-        8 + m
-      } else {
-        17
-      }
-    }
+  // The header starts the stream, so its first byte holds all 7 bits.
+  guard @rules.window_bits(self.peek_bits(7)) is Some((wbits, length)) else {
+    raise corrupt("large-window streams are not RFC 7932")
   }
+  self.drop_bits(length)
   if wbits > self.max_window_bits {
     let needed = window_size(wbits)
     let limit = window_size(self.max_window_bits)
@@ -53,33 +40,25 @@ fn Decoder::meta_header(self : Decoder) -> Unit raise Stop {
     if self.read_bits(1) != 0 {
       raise corrupt("reserved bit set")
     }
-    let count = self.read_bits(2)
-    let mut length = 0
-    for i in 0..<count {
-      let byte = self.read_bits(8)
-      if i + 1 == count && count > 1 && byte == 0 {
-        raise corrupt("metadata length has a needless zero byte")
-      }
-      length = length | (byte << (8 * i))
+    let bytes = self.read_bits(2)
+    guard @rules.metadata_length(self.read_bits(8 * bytes), bytes)
+      is Some(length) else {
+      raise corrupt("metadata length has a needless zero byte")
     }
     self.skip_padding()
     self.is_last = is_last
-    self.meta_remaining = if count == 0 { 0 } else { length + 1 }
+    self.meta_remaining = length
     self.state = Metadata
     return
   }
   let count = nibbles + 4
-  let mut length = 0
-  for i in 0..<count {
-    let nibble = self.read_bits(4)
-    if i + 1 == count && count > 4 && nibble == 0 {
-      raise corrupt("meta-block length has a needless zero nibble")
-    }
-    length = length | (nibble << (4 * i))
+  guard @rules.meta_block_length(self.read_bits(4 * count), count)
+    is Some(length) else {
+    raise corrupt("meta-block length has a needless zero nibble")
   }
   let uncompressed = !is_last && self.read_bits(1) == 1
   self.is_last = is_last
-  self.meta_remaining = length + 1
+  self.meta_remaining = length
   if uncompressed {
     self.skip_padding()
     self.state = Uncompressed
@@ -154,7 +133,7 @@ fn Decoder::num_block_types(self : Decoder) -> Unit raise Stop {
   self.num_types[self.cat] = n
   if n >= 2 {
     self.type_codes[self.cat].reset(1, n + 2)
-    self.count_codes[self.cat].reset(1, NUM_BLOCK_COUNT_CODES)
+    self.count_codes[self.cat].reset(1, @rules.NUM_BLOCK_COUNT_CODES)
     self.code.start(n + 2, self.type_codes[self.cat], 0)
     self.state = BlockTypeCode
   } else {
@@ -165,8 +144,8 @@ fn Decoder::num_block_types(self : Decoder) -> Unit raise Stop {
 ///|
 /// A block count: a symbol of category `cat`'s count code and extra bits.
 fn Decoder::read_block_count(self : Decoder, cat : Int32) -> Int32 raise Stop {
-  let sym = self.read_symbol(self.count_codes[cat], 0)
-  block_count_base[sym] + self.read_bits(block_count_extra[sym])
+  let code = self.read_symbol(self.count_codes[cat], 0)
+  @rules.block_count(code, self.read_bits(@rules.block_count_extra_bits(code)))
 }
 
 ///|
@@ -178,7 +157,7 @@ fn Decoder::next_category(self : Decoder) -> Unit {
 ///|
 fn Decoder::distance_params(self : Decoder) -> Unit raise Stop {
   let npostfix = self.read_bits(2)
-  let ndirect = self.read_bits(4) << npostfix
+  let ndirect = @rules.direct_distance_codes(npostfix, self.read_bits(4))
   self.npostfix = npostfix
   self.ndirect = ndirect
   self.index = 0
@@ -265,16 +244,7 @@ fn Decoder::context_map_imtf(self : Decoder) -> Unit raise Stop {
     } else {
       self.dist_context_map
     }
-    let mtf = FixedArray::makei(256, i => i.to_byte())
-    for i in 0..<self.map_size {
-      let index = map[i].to_int()
-      let value = mtf[index]
-      map[i] = value
-      for j = index; j > 0; j = j - 1 {
-        mtf[j] = mtf[j - 1]
-      }
-      mtf[0] = value
-    }
+    @rules.inverse_move_to_front(map, self.map_size)
   }
   self.after_context_map()
 }
@@ -300,7 +270,7 @@ fn Decoder::trees(self : Decoder, cat : Int32) -> (Group, Int32, Int32) {
       (
         self.dist_trees,
         self.dist_trees_count,
-        16 + self.ndirect + (48 << self.npostfix),
+        @rules.distance_alphabet_size(self.npostfix, self.ndirect),
       )
   }
 }

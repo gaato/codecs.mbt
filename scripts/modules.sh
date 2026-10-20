@@ -11,5 +11,5 @@ LEDGERED=(zstd brotli)
 # the library and the internal packages it ships, not test-only packages.
 declare -A COVERAGE_SCOPE=(
   [zstd]='^src/([^/]+|internal/(header|xxhash)/[^/]+)[.]mbt$'
-  [brotli]='^src/([^/]+|internal/(huffman|lz77)/[^/]+)[.]mbt$'
+  [brotli]='^src/([^/]+|internal/(huffman|lz77|rules)/[^/]+)[.]mbt$'
 )

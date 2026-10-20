@@ -6,14 +6,12 @@
 fn Decoder::switch_block(self : Decoder, cat : Int32) -> Unit raise Stop {
   let sym = self.read_symbol(self.type_codes[cat], 0)
   let len = self.read_block_count(cat)
-  let mut t = match sym {
-    0 => self.prev_block_type[cat]
-    1 => self.block_type[cat] + 1
-    _ => sym - 2
-  }
-  if t >= self.num_types[cat] {
-    t -= self.num_types[cat]
-  }
+  let t = @rules.next_block_type(
+    sym,
+    current=self.block_type[cat],
+    previous=self.prev_block_type[cat],
+    types=self.num_types[cat],
+  )
   self.prev_block_type[cat] = self.block_type[cat]
   self.block_type[cat] = t
   self.block_len[cat] = len
@@ -87,34 +85,33 @@ fn Decoder::distance(self : Decoder) -> Status? raise Stop {
     return Some(NeedMoreOutput)
   }
   self.checkpoint()
-  let code = if self.implicit_distance {
-    0
-  } else {
+  let mut code = 0
+  let mut extra = 0
+  if !self.implicit_distance {
     if self.block_len[2] == 0 {
       self.switch_block(2)
       return None
     }
     let context = (self.copy_len - 2).min(3)
     let tree = self.dist_context_map[self.dist_map_offset + context].to_int()
-    let code = self.read_symbol(self.dist_trees, tree)
-    let direct_end = 16 + self.ndirect
-    let code = if code < direct_end {
-      code
-    } else {
-      // Keep the extra bits with the code: decode both before committing.
-      let c = code - direct_end
-      let bits = 1 + (c >> (self.npostfix + 1))
-      let extra = self.read_bits(bits)
-      let offset = ((2 + ((c >> self.npostfix) & 1)) << bits) - 4
-      let postfix = c & ((1 << self.npostfix) - 1)
-      // Explicit distances are coded above every short code.
-      -(((offset + extra) << self.npostfix) + postfix + self.ndirect + 1)
-    }
+    code = self.read_symbol(self.dist_trees, tree)
+    // Keep the extra bits with the code: decode both before committing.
+    extra = self.read_bits(
+      @rules.distance_extra_bits(code, self.npostfix, self.ndirect),
+    )
     self.block_len[2] -= 1
-    code
   }
-  let dist = self.resolve_distance(code)
-  if dist <= 0 {
+  guard @rules.distance(
+      code,
+      extra,
+      npostfix=self.npostfix,
+      ndirect=self.ndirect,
+      last1=self.last_distance(1),
+      last2=self.last_distance(2),
+      last3=self.last_distance(3),
+      last4=self.last_distance(4),
+    )
+    is Some(dist) else {
     raise corrupt("distance below one")
   }
   if dist <= self.filled {
@@ -137,31 +134,9 @@ fn Decoder::distance(self : Decoder) -> Status? raise Stop {
 }
 
 ///|
-/// The distance of `code`: a short code (0..15) against the ring of last
-/// distances, a direct distance code (16..15 + NDIRECT), or the negated
-/// distance of a longer code.
-fn Decoder::resolve_distance(self : Decoder, code : Int32) -> Int32 {
-  if code < 0 {
-    return -code
-  }
-  if code >= 16 {
-    return code - 15
-  }
-  let ring = self.dist_ring
-  let i = self.dist_ring_index
-  match code {
-    0 | 1 | 2 | 3 => ring[(i - 1 - code) & 3]
-    _ => {
-      let base = if code < 10 { ring[(i - 1) & 3] } else { ring[(i - 2) & 3] }
-      let k = (code - 4) % 6
-      let delta = (k >> 1) + 1
-      if (k & 1) == 0 {
-        base - delta
-      } else {
-        base + delta
-      }
-    }
-  }
+/// The distance `k` (1 to 4) places back in the ring of last distances.
+fn Decoder::last_distance(self : Decoder, k : Int32) -> Int32 {
+  self.dist_ring[(self.dist_ring_index - k) & 3]
 }
 
 ///|

@@ -465,6 +465,25 @@ fn Decoder::read_bits(self : Decoder, n : Int32) -> Int32 raise Stop {
 }
 
 ///|
+/// The next `n` (at most 24) bits, left unread.
+fn Decoder::peek_bits(self : Decoder, n : Int32) -> Int32 raise Stop {
+  if self.nbits < n {
+    self.refill()
+    if self.nbits < n {
+      raise NeedInput
+    }
+  }
+  self.acc & ((1 << n) - 1)
+}
+
+///|
+/// Drops `n` bits that `peek_bits` has made sure are there.
+fn Decoder::drop_bits(self : Decoder, n : Int32) -> Unit {
+  self.acc = self.acc >> n
+  self.nbits -= n
+}
+
+///|
 /// The next symbol of tree `tree` of `group`.
 fn Decoder::read_symbol(
   self : Decoder,
@@ -701,7 +720,11 @@ fn Decoder::unit(self : Decoder) -> Status? raise Stop {
     NumBlockTypes => self.num_block_types()
     BlockTypeCode =>
       if self.read_code() {
-        self.code.start(NUM_BLOCK_COUNT_CODES, self.count_codes[self.cat], 0)
+        self.code.start(
+          @rules.NUM_BLOCK_COUNT_CODES,
+          self.count_codes[self.cat],
+          0,
+        )
         self.state = BlockCountCode
       }
     BlockCountCode => if self.read_code() { self.state = FirstBlockCount }

@@ -8,9 +8,6 @@ const MAX_ALPHABET : Int32 = 704
 const NUM_LITERALS : Int32 = 256
 
 ///|
-const NUM_BLOCK_COUNT_CODES : Int32 = 26
-
-///|
 /// The order code length code lengths come in (section 3.5).
 let code_length_order : FixedArray[Int32] = [
   1, 2, 3, 4, 0, 5, 17, 6, 16, 7, 8, 9, 10, 11, 12, 13, 14, 15,
@@ -26,19 +23,6 @@ let code_length_prefix_bits : FixedArray[Int32] = [
 ///|
 let code_length_prefix_value : FixedArray[Int32] = [
   0, 4, 3, 2, 0, 4, 3, 1, 0, 4, 3, 2, 0, 4, 3, 5,
-]
-
-///|
-/// Block count codes (section 6): base and extra bits.
-let block_count_base : FixedArray[Int32] = [
-  1, 5, 9, 13, 17, 25, 33, 41, 49, 65, 81, 97, 113, 145, 177, 209, 241, 305, 369,
-  497, 753, 1265, 2289, 4337, 8433, 16625,
-]
-
-///|
-let block_count_extra : FixedArray[Int32] = [
-  2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 7, 8, 9, 10, 11, 12, 13,
-  24,
 ]
 
 ///|

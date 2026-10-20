@@ -1,0 +1,35 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/brotli/internal/rules"
+
+// Values
+pub const NUM_BLOCK_COUNT_CODES : Int = 26
+
+pub fn block_count(Int, Int) -> Int
+
+pub fn block_count_extra_bits(Int) -> Int
+
+pub fn direct_distance_codes(Int, Int) -> Int
+
+pub fn distance(Int, Int, npostfix~ : Int, ndirect~ : Int, last1~ : Int, last2~ : Int, last3~ : Int, last4~ : Int) -> Int?
+
+pub fn distance_alphabet_size(Int, Int) -> Int
+
+pub fn distance_extra_bits(Int, Int, Int) -> Int
+
+pub fn inverse_move_to_front(FixedArray[Byte], Int) -> Unit
+
+pub fn meta_block_length(Int, Int) -> Int?
+
+pub fn metadata_length(Int, Int) -> Int?
+
+pub fn next_block_type(Int, current~ : Int, previous~ : Int, types~ : Int) -> Int
+
+pub fn window_bits(Int) -> (Int, Int)?
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+
+// Traits
