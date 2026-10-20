@@ -53,6 +53,39 @@ fn describe(run : Transcript) -> String {
 }
 
 ///|
+/// Checks a codec that stops after the first member: over `first` followed
+/// by `rest`, under every split of `splits()`, it ends with `Done` having
+/// consumed exactly `first`, with the output `expected` (a run over `first`
+/// alone). `make` builds a codec configured to stop after one member.
+pub fn[S : Stepper] check_member(
+  make : () -> S,
+  first : BytesView,
+  rest : BytesView,
+  expected : Transcript,
+) -> Unit raise {
+  let input = Bytes::from_array([..first, ..rest])
+  for split in splits() {
+    let (input_sizes, output_sizes) = split
+    let run = drive(
+      make(),
+      input,
+      input_sizes~,
+      output_sizes~,
+      first_member=true,
+    )
+    if run.error is Some(_) ||
+      run.output != expected.output ||
+      run.events != expected.events ||
+      run.consumed != first.length() {
+      fail(
+        "input in \{input_sizes.label}, output in \{output_sizes.label}: " +
+        "\{describe(run)} after consuming \{run.consumed} of the first \{first.length()} bytes",
+      )
+    }
+  }
+}
+
+///|
 /// Checks that every proper prefix of a valid `input` (all of them up to
 /// `max_prefixes`, then an even spread) either raises `Truncated`, or ends
 /// cleanly where a whole member ends, with output that begins the full

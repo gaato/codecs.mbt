@@ -139,8 +139,11 @@ concrete codec types:
 
 - **Limits.** How much memory a stream may use is set in the format's own
   terms (a window in bits for zstd and brotli, a block size, a dictionary
-  size). Exceeding it raises `LimitExceeded` with the bytes needed and the
-  limit, in bytes, so that callers can compare across formats.
+  size). Exceeding it raises `LimitExceeded` with the size the stream needs
+  and the size allowed, in bytes, for the structure the limit governs (the
+  window, the block), so that callers can compare across formats. These are
+  not totals: `memory_usage` counts everything the codec holds for the
+  stream, which can be more.
 - **Dictionaries**, given to the constructor.
 - **Metadata** (a gzip header, a frame's declared size, the check type of an
   xz stream), read from the concrete type.

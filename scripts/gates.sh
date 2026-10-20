@@ -21,7 +21,7 @@ run() { echo "+ $*"; "$@"; }
 
 # Every module's CHANGELOG opens with [Unreleased] and has a heading for its version.
 run scripts/release.sh check
-for m in "${MODULES[@]}"; do
+for m in "${LEDGERED[@]}"; do
   # Every enforced limit in RESOURCE_BOUNDS.md names tests that exist.
   run scripts/bounds_check.sh "$m"
 done

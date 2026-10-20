@@ -10,6 +10,8 @@ import {
 // Values
 pub fn[E : @codec_bytes.Encode, D : @codec_bytes.Decode] check_flush(() -> E, () -> D, BytesView, flush_at~ : Array[Int]) -> Unit raise
 
+pub fn[S : Stepper] check_member(() -> S, BytesView, BytesView, Transcript) -> Unit raise
+
 pub fn[S : Stepper] check_reset(() -> S, BytesView, BytesView) -> Unit raise
 
 pub fn[E : @codec_bytes.Encode, D : @codec_bytes.Decode] check_roundtrip(() -> E, () -> D, BytesView, encoder_memory_limit? : Int?, decoder_memory_limit? : Int?, small? : Int) -> Bytes raise
@@ -20,7 +22,7 @@ pub fn[S : Stepper] check_trailing(() -> S, BytesView, garbage~ : Array[Bytes]) 
 
 pub fn[S : Stepper] check_truncation(() -> S, BytesView, Transcript, max_prefixes? : Int) -> Unit raise
 
-pub fn[S : Stepper] drive(S, BytesView, input_sizes? : Sizes, output_sizes? : Sizes, memory_limit? : Int?) -> Transcript raise
+pub fn[S : Stepper] drive(S, BytesView, input_sizes? : Sizes, output_sizes? : Sizes, memory_limit? : Int?, first_member? : Bool) -> Transcript raise
 
 pub fn[S : Stepper] fuzz(() -> S, BytesView, seed~ : UInt, rounds~ : Int, memory_limit? : Int?) -> Map[String, Int] raise
 
@@ -82,6 +84,7 @@ pub(all) struct Transcript {
   output : Bytes
   events : Array[String]
   error : @codec.ErrorKind?
+  consumed : Int
   steps : Int
   peak_memory : Int
 }

@@ -18,6 +18,6 @@ import {
   "gaato/codec@0.1.0",
   "gaato/codec_bytes@0.1.0",
   "gaato/codec_harness@0.0.0",
-  "gaato/zstd@0.2.0",
-  "gaato/brotli@0.3.0",
+  "gaato/zstd@0.3.0",
+  "gaato/brotli@0.4.0",
 }

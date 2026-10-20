@@ -7,6 +7,8 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-20
+
 ### Fixed
 
 - A stream whose literals use four Huffman streams for fewer than 6 literals raises `Corrupt`, as RFC 8878 erratum 7297 and the reference decoder require; regenerated sizes 0, 3 and 4 were accepted.

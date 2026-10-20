@@ -25,42 +25,15 @@ fn brotli_encoder_limit(window_bits : Int32) -> Int32? {
 
 ///|
 test "brotli keeps the byte-stream contract" {
-  // `conform`'s checks, with the decoder's memory bound after every step.
   // Brotli has no framing: any byte after the stream is trailing.
-  let garbage = [b"\x00", b"\xff\xff\xff\xff\xff\xff\xff\xff"]
-  for v in brotli_vectors {
-    let input = v.input()
-    let codec = () => {
-      @codec_harness.ByteDecoder::new(
-        @brotli.Decoder(max_window_bits=v.window_bits),
-      )
-    }
-    let label = "brotli \{v.name}"
-    let whole = @codec_harness.check_splits(
-      codec,
-      input,
-      memory_limit=brotli_decoder_limit(v.window_bits),
-    ) catch {
-      e => fail("\{label}: \{e}")
-    }
-    if whole.error is Some(_) ||
-      whole.output.length() != v.size ||
-      @codec_harness.sha256(whole.output) != v.sha256 {
-      fail("\{label}: does not decode to its original")
-    }
-    @codec_harness.check_truncation(codec, input, whole, max_prefixes=64) catch {
-      e => fail("\{label}: \{e}")
-    }
-    @codec_harness.check_trailing(codec, input, garbage~) catch {
-      e => fail("\{label}: \{e}")
-    }
-  }
-  let first = brotli_vectors[0].input()
-  let last = brotli_vectors[brotli_vectors.length() - 1].input()
-  let wide = () => @codec_harness.ByteDecoder::new(@brotli.Decoder())
-  @codec_harness.check_reset(wide, last, first) catch {
-    e => fail("brotli reset: \{e}")
-  }
+  conform(
+    "brotli",
+    brotli_vectors,
+    (window_bits, until) => @brotli.Decoder(max_window_bits=window_bits, until~),
+    memory_limit=bits => brotli_decoder_limit(bits).unwrap(),
+    garbage=[b"\x00", b"\xff\xff\xff\xff\xff\xff\xff\xff"],
+    one_member=_ => true,
+  )
 }
 
 ///|

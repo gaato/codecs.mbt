@@ -6,13 +6,13 @@
 
 name = "gaato/brotli"
 
-version = "0.3.0"
+version = "0.4.0"
 
 license = "Apache-2.0"
 
 readme = "src/README.mbt.md"
 
-repository = "https://github.com/gaato/brotli.mbt"
+repository = "https://github.com/gaato/codecs.mbt"
 
 keywords = [
   "brotli",

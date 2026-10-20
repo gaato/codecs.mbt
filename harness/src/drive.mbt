@@ -1,12 +1,14 @@
 ///|
 /// Everything a run of a codec over one input shows: what it wrote, the
-/// events it stopped at, and the kind of error that ended it, if any. Two
-/// runs agree when these agree; how many steps they took and how much
-/// memory they peaked at are kept for the bounds checks.
+/// events it stopped at, the kind of error that ended it, if any, and how
+/// much input it consumed. Two runs agree when these agree; how many steps
+/// they took and how much memory they peaked at are kept for the bounds
+/// checks.
 pub(all) struct Transcript {
   output : Bytes
   events : Array[String]
   error : @codec.ErrorKind?
+  consumed : Int32
   steps : Int32
   peak_memory : Int32
 }
@@ -16,7 +18,8 @@ pub(all) struct Transcript {
 pub fn Transcript::agrees(self : Transcript, other : Transcript) -> Bool {
   self.output == other.output &&
   self.events == other.events &&
-  self.error == other.error
+  self.error == other.error &&
+  (self.error is Some(_) || self.consumed == other.consumed)
 }
 
 ///|
@@ -53,7 +56,9 @@ let max_steps : Int32 = 50_000_000
 /// - `NeedMoreInput` consumed everything handed over, and never comes after
 ///   `end`: at the end a codec finishes or reports `Truncated`;
 /// - `NeedMoreOutput` filled the room, and a step with room makes progress;
-/// - `Done` comes only with `end` and every byte consumed;
+/// - `Done` comes only with `end` and every byte consumed; with
+///   `first_member=true` (a codec that stops after the first member), `Done` may
+///   leave input unread, and the transcript says how much was consumed;
 /// - memory never exceeds `memory_limit`;
 /// - an error sticks: another step raises the same kind.
 pub fn[S : Stepper] drive(
@@ -62,6 +67,7 @@ pub fn[S : Stepper] drive(
   input_sizes~ : Sizes = Sizes::fixed(1 << 20),
   output_sizes~ : Sizes = Sizes::fixed(1 << 16),
   memory_limit~ : Int32? = None,
+  first_member~ : Bool = false,
 ) -> Transcript raise {
   let output = Buffer()
   let events = []
@@ -95,6 +101,7 @@ pub fn[S : Stepper] drive(
           output: output.to_bytes(),
           events,
           error: Some(kind),
+          consumed: pos - pending.length(),
           steps,
           peak_memory: peak,
         }
@@ -114,7 +121,7 @@ pub fn[S : Stepper] drive(
     pending = pending[step.consumed:]
     match step.stop {
       Done => {
-        if !end || pending.length() != 0 {
+        if !first_member && (!end || pending.length() != 0) {
           fail(
             "Done with \{pending.length() + input.length() - pos} bytes unread",
           )
@@ -123,6 +130,7 @@ pub fn[S : Stepper] drive(
           output: output.to_bytes(),
           events,
           error: None,
+          consumed: pos - pending.length(),
           steps,
           peak_memory: peak,
         }

@@ -45,7 +45,7 @@ jobs:
         run: |
           command -v jq >/dev/null && command -v gawk >/dev/null || { apt-get update && apt-get install -y --no-install-recommends jq gawk; }
           source scripts/modules.sh
-          for m in "${MODULES[@]}"; do scripts/coverage_report.sh "$m"; done
+          for m in "${LEDGERED[@]}"; do scripts/coverage_report.sh "$m"; done
         shell: bash
 
       - name: Cross-check the brotli encoder with the reference decoder

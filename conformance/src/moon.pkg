@@ -1,7 +1,6 @@
 // The package holds only tests: every import is a test import.
 
 import {
-  "gaato/codec",
   "gaato/codec_bytes",
   "gaato/codec_harness",
   "gaato/zstd",

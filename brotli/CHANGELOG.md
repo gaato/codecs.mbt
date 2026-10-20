@@ -7,6 +7,8 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-20
+
 ### Added
 
 - `Decoder` implements `Decode` and `Encoder` implements `Encode` from `gaato/codec_bytes`, the contract the codecs of codecs.mbt share, so code written once against it drives them. The module now depends on `gaato/codec` and `gaato/codec_bytes`.

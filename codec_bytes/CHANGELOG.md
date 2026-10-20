@@ -8,6 +8,8 @@ note.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-20
+
 ### Added
 
 - `Status`, `Until`, `EncodeAction`, and the `Decode` and `Encode` traits.
