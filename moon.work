@@ -1,4 +1,8 @@
 members = [
+  "codec",
+  "codec_bytes",
+  "harness",
+  "conformance",
   "zstd",
   "brotli",
 ]

@@ -1,0 +1,84 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/codec_harness"
+
+import {
+  "gaato/codec",
+  "gaato/codec_bytes",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn[S : Stepper] check_reset(() -> S, BytesView, BytesView) -> Unit raise
+
+pub fn[S : Stepper] check_splits(() -> S, BytesView, memory_limit? : Int?, small? : Int) -> Transcript raise
+
+pub fn[S : Stepper] check_trailing(() -> S, BytesView, garbage~ : Array[Bytes]) -> Unit raise
+
+pub fn[S : Stepper] check_truncation(() -> S, BytesView, Transcript, max_prefixes? : Int) -> Unit raise
+
+pub fn[S : Stepper] drive(S, BytesView, input_sizes? : Sizes, output_sizes? : Sizes, memory_limit? : Int?) -> Transcript raise
+
+pub fn[S : Stepper] fuzz(() -> S, BytesView, seed~ : UInt, rounds~ : Int, memory_limit? : Int?) -> Map[String, Int] raise
+
+pub fn sha256(BytesView) -> String
+
+pub fn splits() -> Array[(Sizes, Sizes)]
+
+// Errors
+
+// Types and methods
+pub struct ByteDecoder[D] {
+  decoder : D
+}
+pub fn[D : @codec_bytes.Decode] ByteDecoder::memory_usage(Self[D]) -> Int
+pub fn[D] ByteDecoder::new(D) -> Self[D]
+pub fn[D : @codec_bytes.Decode] ByteDecoder::reset(Self[D]) -> Unit
+pub fn[D : @codec_bytes.Decode] ByteDecoder::step(Self[D], BytesView, Int, end~ : Bool) -> Step raise
+pub impl[D : @codec_bytes.Decode] Stepper for ByteDecoder[D]
+
+pub struct Rng {
+  mut state : UInt
+}
+pub fn Rng::below(Self, Int) -> Int
+pub fn Rng::new(UInt) -> Self
+
+pub(all) struct Sizes {
+  next : () -> Int
+  label : String
+}
+pub fn Sizes::fixed(Int) -> Self
+pub fn Sizes::random(UInt, Int) -> Self
+
+pub(all) struct Step {
+  consumed : Int
+  produced : Bytes
+  stop : Stop
+}
+
+pub(all) enum Stop {
+  NeedMoreInput
+  NeedMoreOutput
+  Event(String)
+  Done
+} derive(Eq, @debug.Debug)
+pub fn Stop::equal(Self, Self) -> Bool
+pub fn Stop::not_equal(Self, Self) -> Bool
+pub fn Stop::to_repr(Self) -> @debug.Repr
+
+pub(all) struct Transcript {
+  output : Bytes
+  events : Array[String]
+  error : @codec.ErrorKind?
+  steps : Int
+  peak_memory : Int
+}
+pub fn Transcript::agrees(Self, Self) -> Bool
+
+// Type aliases
+
+// Traits
+pub(open) trait Stepper {
+  fn step(Self, BytesView, Int, end~ : Bool) -> Step raise
+  fn reset(Self) -> Unit
+  fn memory_usage(Self) -> Int
+}

@@ -1,0 +1,57 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/codec_bytes"
+
+import {
+  "gaato/codec",
+  "moonbitlang/core/debug",
+}
+
+// Values
+
+// Errors
+
+// Types and methods
+pub(all) enum EncodeAction {
+  Continue
+  Flush
+  Finish
+} derive(Eq, @debug.Debug)
+pub fn EncodeAction::equal(Self, Self) -> Bool
+pub fn EncodeAction::not_equal(Self, Self) -> Bool
+pub fn EncodeAction::to_repr(Self) -> @debug.Repr
+
+pub(all) enum Status {
+  Done
+  NeedMoreInput
+  NeedMoreOutput
+} derive(Eq, @debug.Debug)
+pub fn Status::equal(Self, Self) -> Bool
+pub fn Status::not_equal(Self, Self) -> Bool
+pub fn Status::to_repr(Self) -> @debug.Repr
+
+pub(all) enum Until {
+  EndOfInput
+  EndOfMember
+} derive(Eq, @debug.Debug)
+pub fn Until::equal(Self, Self) -> Bool
+pub fn Until::not_equal(Self, Self) -> Bool
+pub fn Until::to_repr(Self) -> @debug.Repr
+
+// Type aliases
+
+// Traits
+pub(open) trait Decode {
+  fn step(Self, BytesView, MutArrayView[Byte], end~ : Bool) -> Status raise @codec.CodecError
+  fn last_consumed(Self) -> Int
+  fn last_produced(Self) -> Int
+  fn reset(Self) -> Unit
+  fn memory_usage(Self) -> Int
+}
+
+pub(open) trait Encode {
+  fn step(Self, BytesView, MutArrayView[Byte], action~ : EncodeAction) -> Status raise @codec.CodecError
+  fn last_consumed(Self) -> Int
+  fn last_produced(Self) -> Int
+  fn reset(Self) -> Unit
+  fn memory_usage(Self) -> Int
+}

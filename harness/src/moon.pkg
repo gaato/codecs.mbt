@@ -1,0 +1,7 @@
+import {
+  "gaato/codec",
+  "gaato/codec_bytes",
+  "moonbitlang/core/debug",
+}
+
+supported_targets = "js + native + wasm + wasm-gc"

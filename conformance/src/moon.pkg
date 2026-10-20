@@ -1,0 +1,12 @@
+// The package holds only tests: every import is a test import.
+
+import {
+  "gaato/codec",
+  "gaato/codec_bytes",
+  "gaato/codec_harness",
+  "gaato/zstd",
+  "gaato/brotli",
+  "moonbitlang/core/encoding/base64",
+} for "test"
+
+supported_targets = "js + native + wasm + wasm-gc"

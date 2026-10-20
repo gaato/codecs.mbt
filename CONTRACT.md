@@ -89,16 +89,19 @@ output slice; `last_consumed` and `last_produced` report how much.
 1. **`NeedMoreInput` means everything is out.** The whole input was consumed,
    and every byte that this input determines has been written. A caller may
    treat "`NeedMoreInput` with nothing left to give" as a message boundary.
+   Once `end` is `true`, a codec never asks for more input: it finishes, or
+   raises `Truncated`.
 2. **`NeedMoreOutput` means the slice is full.** A call with a non-empty
    output slice always makes progress or returns `NeedMoreInput`; looping on a
    codec cannot spin.
 3. **Ending a stream.** With `Until::EndOfInput`, `Done` is returned only when
-   `end` is `true` and the whole input was consumed; bytes after the last
-   member raise `TrailingData`. With `Until::EndOfMember`, `Done` is returned
-   right after the first member and nothing past it is consumed, so
-   `input[last_consumed():]` is exactly what follows. Formats that cannot tell
-   where a member ends without reading past it reject `EndOfMember` with
-   `Unsupported`.
+   `end` is `true` and the whole input was consumed. Bytes after a member that
+   cannot begin another member raise `TrailingData`; bytes that begin another
+   member but end inside it raise `Truncated`, as any cut stream does. With
+   `Until::EndOfMember`, `Done` is returned right after the first member and
+   nothing past it is consumed, so `input[last_consumed():]` is exactly what
+   follows. Formats that cannot tell where a member ends without reading past
+   it reject `EndOfMember` with `Unsupported`.
 4. **Errors stick.** A call that raises reports zero consumed and zero
    produced, and every later call raises the same kind until `reset`. A codec
    may document a resumable error on its own type (for example raising a

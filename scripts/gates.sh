@@ -25,6 +25,8 @@ for m in "${MODULES[@]}"; do
   # Every enforced limit in RESOURCE_BOUNDS.md names tests that exist.
   run scripts/bounds_check.sh "$m"
 done
+# The conformance suite's vectors are the current extract of each format's vectors.
+run scripts/gen_conformance_vectors.py --check
 run moon update
 # From the workspace root, check and test cover every member.
 for t in "${targets[@]}"; do

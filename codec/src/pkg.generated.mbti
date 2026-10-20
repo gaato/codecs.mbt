@@ -1,0 +1,53 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/codec"
+
+import {
+  "moonbitlang/core/debug",
+}
+
+// Values
+
+// Errors
+pub(all) suberror CodecError {
+  CodecError(ErrorKind, String)
+} derive(@debug.Debug)
+pub fn CodecError::kind(Self) -> ErrorKind
+pub fn CodecError::to_repr(Self) -> @debug.Repr
+
+// Types and methods
+#non_exhaustive
+pub(all) enum ErrorKind {
+  Truncated
+  Corrupt
+  ChecksumMismatch
+  TrailingData
+  LimitExceeded(Limit)
+  DictionaryRequired(UInt?)
+  DictionaryMismatch
+  Unsupported
+} derive(Eq, @debug.Debug)
+pub fn ErrorKind::equal(Self, Self) -> Bool
+pub fn ErrorKind::not_equal(Self, Self) -> Bool
+pub fn ErrorKind::to_repr(Self) -> @debug.Repr
+
+pub(all) struct Limit {
+  resource : Resource
+  needed : UInt64?
+  limit : UInt64
+} derive(Eq, @debug.Debug)
+pub fn Limit::equal(Self, Self) -> Bool
+pub fn Limit::not_equal(Self, Self) -> Bool
+pub fn Limit::to_repr(Self) -> @debug.Repr
+
+#non_exhaustive
+pub(all) enum Resource {
+  Memory
+  Output
+} derive(Eq, @debug.Debug)
+pub fn Resource::equal(Self, Self) -> Bool
+pub fn Resource::not_equal(Self, Self) -> Bool
+pub fn Resource::to_repr(Self) -> @debug.Repr
+
+// Type aliases
+
+// Traits
