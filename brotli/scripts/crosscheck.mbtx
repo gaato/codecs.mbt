@@ -1,0 +1,261 @@
+// Decodes the encoder's streams with the reference decoder, google/brotli's.
+//
+// Runs src/internal/crosscheck, which prints one line per stream: a name, the
+// length and SHA-256 of the input so far, and the base64 of the stream so far.
+// Each stream must decode to exactly that input:
+// - a whole stream with the `brotli -d` command, which fails on a stream that
+//   is cut short, corrupt or followed by more bytes;
+// - a stream cut after a flush with Node's zlib (which bundles google/brotli),
+//   since it must give out everything without being told the end, and the
+//   command gives out nothing for a stream without its end. Node is given
+//   finishFlush BROTLI_OPERATION_FLUSH: it then runs the decoder over the
+//   bytes and returns what it gave out, instead of raising "unexpected end of
+//   file" as it does when told that the input is complete. It raises only on
+//   corrupt input; a stream that holds back some output decodes to fewer
+//   bytes, and the length and SHA-256 catch that.
+//
+// Usage, from the repository root (needs the brotli command and node):
+//   moon run brotli/scripts/crosscheck.mbtx [-- --target native|js|wasm|wasm-gc] [--compare]
+//   --compare  also print the sizes from gzip -6 (the gzip command) and
+//              google/brotli (Node's) at qualities 1, 4 and 11 with the same
+//              window, for the ratio record; it also needs gzip.
+// Exit status: 0 = every stream decodes, 1 = one does not, 2 = setup failure.
+
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/async@0.22.5/stdio",
+  "moonbitlang/core/encoding/base64",
+  "moonbitlang/core/encoding/hex",
+  "moonbitlang/core/env",
+  "moonbitlang/core/string",
+  "moonbitlang/x@0.5.6/crypto",
+  "moonbitlang/x@0.5.6/sys",
+}
+
+///|
+/// Decodes each line of stdin (the base64 of a stream cut after a flush) and
+/// prints the length and SHA-256 of what came out, or `error` and why.
+let node_decoder : String =
+  #|const zlib = require("node:zlib");
+  #|const crypto = require("node:crypto");
+  #|const lines = require("node:fs").readFileSync(0, "latin1").split("\n");
+  #|lines.pop();
+  #|const flush = { finishFlush: zlib.constants.BROTLI_OPERATION_FLUSH };
+  #|for (const line of lines) {
+  #|  try {
+  #|    const out = zlib.brotliDecompressSync(Buffer.from(line, "base64"), flush);
+  #|    const digest = crypto.createHash("sha256").update(out).digest("hex");
+  #|    console.log(`${out.length} ${digest}`);
+  #|  } catch (err) {
+  #|    console.log(`error ${err.message}`);
+  #|  }
+  #|}
+
+///|
+/// Compresses stdin in one call, as an application compressing a buffer
+/// would (`brotli -q` reads its input in pieces and may compress worse), at
+/// qualities 1, 4 and 11 with the window in argv, and prints the sizes.
+let node_encoder : String =
+  #|const zlib = require("node:zlib");
+  #|const data = require("node:fs").readFileSync(0);
+  #|const P = zlib.constants;
+  #|const size = quality => zlib.brotliCompressSync(data, { params: {
+  #|  [P.BROTLI_PARAM_QUALITY]: quality,
+  #|  [P.BROTLI_PARAM_LGWIN]: Number(process.argv[1]),
+  #|  [P.BROTLI_PARAM_SIZE_HINT]: data.length,
+  #|} }).length;
+  #|console.log(`q1 ${size(1)}, q4 ${size(4)}, q11 ${size(11)}`);
+
+///|
+/// 1 GiB: more than the crosscheck tool prints and any stream decodes to.
+let max_output : Int = 1 << 30
+
+///|
+async fn setup_failure(message : String) -> Unit {
+  @stdio.stderr.write("\{message}\n")
+  @sys.exit(2)
+}
+
+///|
+struct Stream {
+  name : String
+  size : Int
+  digest : String
+  data : Bytes
+}
+
+///|
+fn sha256_hex(data : Bytes) -> String {
+  @hex.encode(Bytes::from_array(@crypto.sha256(data)))
+}
+
+///|
+/// `n / d` with three decimals.
+fn ratio(n : Int, d : Int) -> String {
+  let thousandths = (n.to_int64() * 1000 + (d / 2).to_int64()) / d.to_int64()
+  let frac = (thousandths % 1000).to_string()
+  "\{thousandths / 1000}.\{"0".repeat(3 - frac.length())}\{frac}"
+}
+
+///|
+async fn main {
+  let mut target = "native"
+  let mut compare = false
+  let args = @env.args()[1:]
+  let mut i = 0
+  while i < args.length() {
+    match args[i] {
+      "--compare" => compare = true
+      "--target" if i + 1 < args.length() => {
+        target = args[i + 1]
+        i += 1
+      }
+      arg if arg.strip_prefix("--target=") is Some(value) =>
+        target = value.to_owned()
+      arg => {
+        setup_failure(
+          "unknown argument \{arg}\nusage: moon run brotli/scripts/crosscheck.mbtx [-- --target native|js|wasm|wasm-gc] [--compare]",
+        )
+        return
+      }
+    }
+    i += 1
+  }
+  if !@fs.exists("brotli/moon.mod") {
+    setup_failure("run from the repository root")
+    return
+  }
+  for tool in ["brotli", "node"] {
+    @shell.Cmd(tool, ["--version"]).output().check() catch {
+      _ => {
+        setup_failure("crosscheck.mbtx needs the \{tool} command")
+        return
+      }
+    }
+  }
+  let env = if @env.get_env_var("MOON_CC") is None {
+    { "MOON_CC": "cc" }
+  } else {
+    {}
+  }
+  let run = @shell.Cmd(
+    "moon",
+    ["run", "--release", "--target", target, "src/internal/crosscheck"],
+    cwd="brotli",
+    env~,
+  ).output(max_output_bytes=max_output)
+  if run.exit_code() != 0 {
+    setup_failure(run.stderr())
+    return
+  }
+  let streams = []
+  for line in run.stdout().split("\n") {
+    if line.is_empty() {
+      continue
+    }
+    guard line.split("\t").collect() is [name, size, digest, data] else {
+      setup_failure("unexpected line from the crosscheck tool: \{line}")
+      return
+    }
+    streams.push({
+      name: name.to_owned(),
+      size: @string.parse_int(size),
+      digest: digest.to_owned(),
+      data: @base64.decode(data),
+    })
+  }
+  // The flushed streams, all through one Node process.
+  let flushed = streams.filter(s => s.name.contains(" flush "))
+  let input = StringBuilder()
+  for s in flushed {
+    input.write_string("\{@base64.encode(s.data)}\n")
+  }
+  let node = @shell.Cmd(
+    "node",
+    ["-e", node_decoder],
+    stdin=Text(input.to_string()),
+  ).output(max_output_bytes=max_output)
+  if node.exit_code() != 0 {
+    setup_failure("node: \{node.stderr()}")
+    return
+  }
+  let node_results = node.stdout().split("\n").map(l => l.to_owned()).collect()
+  if node_results.length() != flushed.length() + 1 {
+    setup_failure(
+      "node answered \{node_results.length() - 1} of \{flushed.length()} streams",
+    )
+    return
+  }
+  let mut next_flushed = 0
+  let mut failures = 0
+  let mut checked = 0
+  for s in streams {
+    if s.name.contains(" flush ") {
+      let result = node_results[next_flushed]
+      next_flushed += 1
+      if result.strip_prefix("error ") is Some(err) {
+        println("FAIL \{s.name}: \{err}")
+        failures += 1
+      } else if result != "\{s.size} \{s.digest}" {
+        let length = result.split(" ").collect()[0]
+        println("FAIL \{s.name}: decodes to \{length} different bytes")
+        failures += 1
+      } else {
+        checked += 1
+      }
+      continue
+    }
+    let output = @shell.Cmd("brotli", ["-d", "-c"], stdin=Binary(s.data)).output(
+      max_output_bytes=max_output,
+    )
+    if output.exit_code() != 0 {
+      println("FAIL \{s.name}: \{output.stderr().trim()}")
+      failures += 1
+      continue
+    }
+    let decoded = output.stdout_bytes()
+    if decoded.length() != s.size || sha256_hex(decoded) != s.digest {
+      println("FAIL \{s.name}: decodes to \{decoded.length()} different bytes")
+      failures += 1
+      continue
+    }
+    checked += 1
+    println(
+      "ok   \{s.name}: \{s.size} -> \{s.data.length()} bytes (\{ratio(s.data.length(), s.size.max(1))})",
+    )
+    if compare && !decoded.is_empty() {
+      guard s.name.split(" w").collect() is [_, rest, ..] &&
+        rest.split(" ").collect() is [bits, ..] else {
+        setup_failure("no window in \{s.name}")
+        return
+      }
+      let lgwin = @string.parse_int(bits).max(10).to_string()
+      let gzip = @shell.Cmd("gzip", ["-6", "-c", "-n"], stdin=Binary(decoded)).output(
+        max_output_bytes=max_output,
+      )
+      gzip.check()
+      let brotli = @shell.Cmd(
+        "node",
+        ["-e", node_encoder, lgwin],
+        stdin=Binary(decoded),
+      ).output()
+      brotli.check()
+      println(
+        "       gzip -6 \{gzip.stdout_bytes().length()}, brotli \{brotli.stdout().trim()}",
+      )
+    }
+  }
+  if checked == 0 {
+    setup_failure("no streams checked")
+    return
+  }
+  let failed = if failures > 0 { ", \{failures} FAILED" } else { "" }
+  println(
+    "crosscheck: \{checked} streams decode with the reference decoder\{failed}",
+  )
+  if failures > 0 {
+    @sys.exit(1)
+  }
+}

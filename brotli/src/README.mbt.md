@@ -115,7 +115,7 @@ test "stop at the end of the stream" {
 - Takes input in chunks of any size, down to one byte, and writes output into buffers of any size; the same `step` / `Status` shape as `moonbit-community/flate`.
 - Memory is the window (at most 16 MiB, and no more than the output so far) plus tables of at most 1.3 MiB; `memory_usage()` reports it. `Decoder(max_window_bits=n)` refuses streams that need a window over `2^n - 16` bytes with `LimitExceeded`, saying how much the stream needs.
 - Every malformed stream raises `CodecError(kind, message)` with `Truncated`, `Corrupt` or `TrailingData` (bytes after the stream); `decompress(max_output=n)` raises `LimitExceeded` past `n` bytes. It does not abort.
-- Encodes with greedy LZ77 (lazy by one byte) and one prefix code per meta-block: about google/brotli's quality 4, and close to gzip -6. Its streams decode with google/brotli's decoder (`scripts/crosscheck.py`).
+- Encodes with greedy LZ77 (lazy by one byte) and one prefix code per meta-block: about google/brotli's quality 4, and close to gzip -6. Its streams decode with google/brotli's decoder (`scripts/crosscheck.mbtx`).
 - The encoder's memory is its window (`Encoder(window_bits=n)`, 22 by default: 4 MiB, growing with the input to at most twice what it has taken, and up to a quarter more before it slides) plus a 64 KiB meta-block, its output and about 1 MiB of fixed tables.
 
 Not included: higher-quality encoding (context modeling, block splitting, static dictionary references), and Shared Brotli (RFC 9841): its shared dictionaries, its large window and its framing format. A large-window stream raises `Corrupt`.

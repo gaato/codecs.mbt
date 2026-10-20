@@ -56,5 +56,5 @@ jobs:
 
       - name: Cross-check the brotli encoder with the reference decoder
         run: |
-          brotli/scripts/crosscheck.py
+          moon run brotli/scripts/crosscheck.mbtx
 

@@ -1,4 +1,4 @@
-// Prints streams made by the encoder, for scripts/crosscheck.py to decode
+// Prints streams made by the encoder, for scripts/crosscheck.mbtx to decode
 // with the reference decoder. Not part of the library.
 
 import {

@@ -7,6 +7,10 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+### Changed
+
+- The scripts that generate `src/static_data.mbt` and `src/vectors_wbtest.mbt`, and the cross-check of the encoder with google/brotli's decoder, are MoonBit scripts (`scripts/*.mbtx`, run with `moon run`) instead of Python ones; they use google/brotli through the `brotli` command and Node's zlib. The four vectors made from seeded pseudo-random inputs (`gen/window24_far`, `gen/random_window10`, `gen/samples16`, `gen/transforms`) have new contents and test the same things.
+
 ## [0.4.0] - 2026-10-20
 
 ### Added

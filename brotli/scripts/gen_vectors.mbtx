@@ -1,0 +1,458 @@
+// Generates brotli/src/vectors_wbtest.mbt: the decoder's test vectors.
+//
+// Each vector is a compressed stream (base64) with the length and SHA-256 of
+// the bytes it must decode to. Two sources:
+// - a subset of google/brotli's tests/testdata at a pinned commit, compressed
+//   files only (their originals are represented by length and SHA-256);
+// - streams made here with the `brotli` command (google/brotli's encoder,
+//   tested with 1.2.0) from deterministic inputs, for what the subset lacks: a
+//   16 MiB window with a distance past 4 MiB, the smallest window (also with
+//   uncompressed meta-blocks), every encoder quality, and dictionary words
+//   under many transforms. The inputs come from a seeded 32-bit LCG, the same
+//   on every platform; the streams are checked to decode, with `brotli -d`, to
+//   their inputs.
+//
+// Usage, from the repository root (needs the brotli command, and curl unless
+// a directory is given):
+//   moon run brotli/scripts/gen_vectors.mbtx [-- GOOGLE_TESTDATA_DIR]
+// Without an argument the google files are downloaded from the pinned commit;
+// the dictionary and the RFC (for the transforms) are always downloaded. The
+// file is left as `moon fmt` leaves it.
+
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/core/encoding/base64",
+  "moonbitlang/core/encoding/hex",
+  "moonbitlang/core/encoding/utf8",
+  "moonbitlang/core/env",
+  "moonbitlang/x@0.5.6/crypto",
+}
+
+///|
+let target : String = "brotli/src/vectors_wbtest.mbt"
+
+///|
+let brotli_commit : String = "86ee1f65f62d6272345dee751d49e7d1f01c2b11"
+
+///|
+let raw : String = "https://raw.githubusercontent.com/google/brotli/\{brotli_commit}/"
+
+///|
+let rfc_url : String = "https://www.rfc-editor.org/rfc/rfc7932.txt"
+
+///|
+/// (original, compressed) file names from google/brotli's tests/testdata.
+let google : Array[(String, String)] = {
+  let files = [("empty", "empty.compressed")]
+  for i in 0..<18 {
+    files.push(("empty", "empty.compressed.\{two_digits(i)}"))
+  }
+  files.push(("x", "x.compressed"))
+  for i in 0..<4 {
+    files.push(("x", "x.compressed.\{two_digits(i)}"))
+  }
+  let rest = [
+    "10x10y", "64x", "xyzzy", "quickfox", "quickfox_repeated", "ukkonooa", "monkey",
+    "cp852-utf8", "cp1251-utf16le", "backward65536", "zeros", "zerosukkanooa",
+    "random_org_10k.bin", "compressed_file", "compressed_repeated", "alice29.txt",
+  ]
+  for name in rest {
+    files.push((name, "\{name}.compressed"))
+  }
+  files
+}
+
+///|
+fn two_digits(i : Int) -> String {
+  if i < 10 {
+    "0\{i}"
+  } else {
+    i.to_string()
+  }
+}
+
+///|
+/// RFC 7932 Appendix B names, in the order of the decoder's transform types.
+let transform_types : Array[String] = [
+  "Identity", "OmitLast1", "OmitLast2", "OmitLast3", "OmitLast4", "OmitLast5", "OmitLast6",
+  "OmitLast7", "OmitLast8", "OmitLast9", "FermentFirst", "FermentAll", "OmitFirst1",
+  "OmitFirst2", "OmitFirst3", "OmitFirst4", "OmitFirst5", "OmitFirst6", "OmitFirst7",
+  "OmitFirst8", "OmitFirst9",
+]
+
+///|
+/// A seeded 32-bit LCG: the same numbers on every platform and version.
+struct Rng {
+  mut state : UInt
+}
+
+///|
+fn Rng::next(self : Rng) -> UInt {
+  self.state = self.state * 1664525 + 1013904223
+  self.state
+}
+
+///|
+/// A number in `0..<bound`, from the high 24 bits.
+fn Rng::below(self : Rng, bound : Int) -> Int {
+  (self.next() >> 8).reinterpret_as_int() % bound
+}
+
+///|
+/// A byte from the top 8 bits: the low bits of an LCG repeat soon.
+fn Rng::byte(self : Rng) -> Byte {
+  (self.next() >> 24).reinterpret_as_int().to_byte()
+}
+
+///|
+fn Rng::bytes(self : Rng, n : Int) -> Bytes {
+  Bytes::makei(n, _ => self.byte())
+}
+
+///|
+async fn run(program : String, args : Array[String], input? : Bytes) -> Bytes {
+  let cmd = match input {
+    Some(data) => @shell.Cmd(program, args, stdin=Binary(data))
+    None => @shell.Cmd(program, args)
+  }
+  let output = cmd.output(max_output_bytes=1 << 26)
+  output.check()
+  output.stdout_bytes()
+}
+
+///|
+async fn fetch(url : String) -> Bytes {
+  run("curl", ["-fsSL", url])
+}
+
+///|
+async fn compress(data : Bytes, quality : Int, lgwin : Int) -> Bytes {
+  run(
+    "brotli",
+    ["-c", "-q", quality.to_string(), "-w", lgwin.to_string()],
+    input=data,
+  )
+}
+
+///|
+async fn google_file(source : String?, name : String) -> Bytes {
+  match source {
+    Some(dir) => @fs.read_file("\{dir}/\{name}").binary()
+    None => fetch("\{raw}tests/testdata/\{name}")
+  }
+}
+
+///|
+fn is_space(c : Char) -> Bool {
+  c is (' ' | '\t' | '\r' | '\n' | '\u{b}' | '\u{c}')
+}
+
+///|
+fn hex_digit(c : Char) -> Int raise {
+  match c {
+    '0'..<='9' => c.to_int() - '0'.to_int()
+    'a'..<='f' => c.to_int() - 'a'.to_int() + 10
+    'A'..<='F' => c.to_int() - 'A'.to_int() + 10
+    _ => fail("bad hex digit \{c} in a transform")
+  }
+}
+
+///|
+/// A quoted string at `cs[i]` (`"(?:[^"\\]|\\.)*"`), decoded as a bytes
+/// literal; the index after it. As in gen_static_data.mbtx.
+fn quoted(cs : Array[Char], i : Int) -> (Bytes, Int)? raise {
+  let n = cs.length()
+  if i >= n || cs[i] != '"' {
+    return None
+  }
+  let out = Buffer()
+  let mut i = i + 1
+  while i < n && cs[i] != '"' {
+    let c = cs[i]
+    if c != '\\' {
+      guard c.to_int() < 0x80 else { fail("non-ASCII byte in a transform") }
+      out.write_byte(c.to_int().to_byte())
+      i += 1
+      continue
+    }
+    guard i + 1 < n else { return None }
+    match cs[i + 1] {
+      '"' => out.write_byte(b'"')
+      '\'' => out.write_byte(b'\'')
+      '\\' => out.write_byte(b'\\')
+      'n' => out.write_byte(b'\n')
+      't' => out.write_byte(b'\t')
+      'r' => out.write_byte(b'\r')
+      'x' => {
+        guard i + 3 < n else { return None }
+        out.write_byte(
+          (hex_digit(cs[i + 2]) * 16 + hex_digit(cs[i + 3])).to_byte(),
+        )
+        i += 2
+      }
+      other => fail("unsupported escape \\\{other} in a transform")
+    }
+    i += 2
+  }
+  if i >= n {
+    return None
+  }
+  Some((out.to_bytes(), i + 1))
+}
+
+///|
+/// A row of RFC 7932 Appendix B
+/// (`^\s+(\d+)\s+("...")\s+(\w+)\s+("...")\s*$`). As in gen_static_data.mbtx.
+fn transform_row(line : String) -> (Int, Bytes, String, Bytes)? raise {
+  let cs = line.to_array()
+  let n = cs.length()
+  fn spaces(i : Int) -> Int {
+    let mut j = i
+    while j < n && is_space(cs[j]) {
+      j += 1
+    }
+    j
+  }
+
+  let mut i = spaces(0)
+  if i == 0 {
+    return None
+  }
+  let start = i
+  let mut index = 0
+  while i < n && cs[i] >= '0' && cs[i] <= '9' {
+    index = index * 10 + (cs[i].to_int() - '0'.to_int())
+    i += 1
+  }
+  if i == start || spaces(i) == i {
+    return None
+  }
+  guard quoted(cs, spaces(i)) is Some((prefix, after)) else { return None }
+  i = after
+  if spaces(i) == i {
+    return None
+  }
+  i = spaces(i)
+  let word = StringBuilder()
+  while i < n &&
+        (
+          cs[i].is_ascii_alphabetic() ||
+          (cs[i] >= '0' && cs[i] <= '9') ||
+          cs[i] == '_'
+        ) {
+    word.write_char(cs[i])
+    i += 1
+  }
+  if word.is_empty() || spaces(i) == i {
+    return None
+  }
+  guard quoted(cs, spaces(i)) is Some((suffix, after)) else { return None }
+  if spaces(after) != n {
+    return None
+  }
+  Some((index, prefix, word.to_string(), suffix))
+}
+
+///|
+/// The 121 transforms of RFC 7932 Appendix B: (prefix, type, suffix).
+fn transforms(rfc : String) -> Array[(Bytes, Int, Bytes)] raise {
+  let lines = rfc.replace_all(old="\u{c}", new="\n").split("\n")
+  let found = []
+  let mut inside = false
+  for line in lines {
+    let line = line.to_owned()
+    inside = inside ||
+      line.contains("Appendix B.  List of Word Transformations")
+    guard inside && transform_row(line) is Some((index, prefix, name, suffix)) else {
+      continue
+    }
+    if index != found.length() {
+      fail("transform \{index} out of order")
+    }
+    guard transform_types.search(name) is Some(kind) else {
+      fail("transform \{index}: unknown type \{name}")
+    }
+    found.push((prefix, kind, suffix))
+  }
+  if found.length() != 121 {
+    fail("found \{found.length()} transforms, expected 121")
+  }
+  found
+}
+
+///|
+/// A random dictionary word under a random transform, as the decoder would
+/// produce it from one dictionary reference.
+fn transformed_word(
+  dictionary : Bytes,
+  transforms : Array[(Bytes, Int, Bytes)],
+  rng : Rng,
+) -> Bytes {
+  let bits = [
+    0, 0, 0, 0, 10, 10, 11, 11, 10, 10, 10, 10, 10, 9, 9, 8, 7, 7, 8, 7, 7, 6, 6,
+    5, 5,
+  ]
+  let offsets = Array::make(25, 0)
+  for length in 4..<24 {
+    offsets[length + 1] = offsets[length] + (length << bits[length])
+  }
+  let length = 4 + rng.below(21)
+  let index = rng.below(1 << bits[length])
+  let start = offsets[length] + index * length
+  let word = dictionary[start:start + length].to_array()
+  let (prefix, kind, suffix) = transforms[rng.below(transforms.length())]
+  let word = if kind >= 1 && kind <= 9 {
+    word[:(length - kind).max(0)].to_owned()
+  } else if kind >= 12 {
+    word[(kind - 11).min(length):].to_owned()
+  } else {
+    word
+  }
+  if kind == 10 || kind == 11 {
+    let mut i = 0
+    while i < word.length() {
+      let c = word[i].to_int()
+      if c < 192 {
+        if c >= 97 && c <= 122 {
+          word[i] = word[i] ^ b'\x20'
+        }
+        i += 1
+      } else if c < 224 {
+        if i + 1 < word.length() {
+          word[i + 1] = word[i + 1] ^ b'\x20'
+        }
+        i += 2
+      } else {
+        if i + 2 < word.length() {
+          word[i + 2] = word[i + 2] ^ b'\x05'
+        }
+        i += 3
+      }
+      if kind == 10 {
+        break
+      }
+    }
+  }
+  prefix + Bytes::from_array(word) + suffix
+}
+
+///|
+async fn generated(alice : Bytes) -> Array[(String, Bytes, Bytes)] {
+  let rng = { state: 7932, }
+  let out = []
+  // A 3000-byte block repeated 5 MiB later: only a 16 MiB window reaches it.
+  let block = rng.bytes(3000)
+  let filler = Bytes::makei(1 << 22, i => (i * 7).to_byte()) +
+    Bytes::make(1 << 20, b'\x00')
+  let data = block + filler + block
+  out.push(("gen/window24_far", compress(data, 11, 24), data))
+  // The smallest window: distances wrap a 1 KiB ring.
+  let data = alice[:40000].to_owned()
+  out.push(("gen/window10", compress(data, 11, 10), data))
+  // Random bytes under a 1 KiB window: uncompressed meta-blocks longer
+  // than the window.
+  let data = rng.bytes(5000)
+  out.push(("gen/random_window10", compress(data, 5, 10), data))
+  // Every quality on mixed text and binary.
+  let data = alice[50000:56000].to_owned() +
+    Bytes::makei(3000, i => (i * i).to_byte()) +
+    alice[:2000].to_owned()
+  for q in 0..<12 {
+    out.push(("gen/quality\{q}", compress(data, q, 18), data))
+  }
+  // Signed 16-bit samples, a candidate for the signed context mode.
+  let samples = Buffer()
+  for i in 0..<8000 {
+    let wave = 3000.0 * (i % 64 - 32).to_double() / 32.0
+    let sample = (wave + (rng.below(80) - 40).to_double()).to_int()
+    samples.write_int16_le(Int16::from_int(sample))
+  }
+  let samples = samples.to_bytes()
+  out.push(("gen/samples16", compress(samples, 11, 20), samples))
+  // Dictionary words under many transforms.
+  let dictionary = fetch("\{raw}c/common/dictionary.bin")
+  let transforms = transforms(@utf8.decode(fetch(rfc_url)))
+  let words = Buffer()
+  for _ in 0..<3000 {
+    words.write_bytes(transformed_word(dictionary, transforms, rng))
+  }
+  let data = words.to_bytes()
+  out.push(("gen/transforms", compress(data, 11, 22), data))
+  out
+}
+
+///|
+fn literal(text : String) -> String {
+  let out = StringBuilder()
+  out.write_string("(\n")
+  for i = 0; i < text.length().max(1); i = i + 76 {
+    let line = text.view(start_offset=i, end_offset=(i + 76).min(text.length()))
+    out.write_string("      #|\{line}\n")
+  }
+  out.write_string("    )")
+  out.to_string()
+}
+
+///|
+async fn main {
+  guard @fs.exists("brotli/moon.mod") else {
+    fail("run from the repository root")
+  }
+  let source = match @env.args()[1:] {
+    [] => None
+    [dir] => Some(dir)
+    _ =>
+      fail(
+        "usage: moon run brotli/scripts/gen_vectors.mbtx [-- GOOGLE_TESTDATA_DIR]",
+      )
+  }
+  let vectors = []
+  for file in google {
+    let (original, compressed) = file
+    vectors.push(
+      (
+        compressed,
+        google_file(source, compressed),
+        google_file(source, original),
+      ),
+    )
+  }
+  vectors.append(generated(google_file(source, "alice29.txt")))
+  let version = @utf8.decode(run("brotli", ["--version"])).trim()
+  let out = StringBuilder()
+  out.write_string(
+    (
+      $|// Generated by scripts/gen_vectors.mbtx, DON'T EDIT IT.
+      $|// google/brotli tests/testdata at \{brotli_commit}, and streams
+      $|// made with the \{version} command-line encoder.
+      $|
+      $|///|
+      $|let vectors : Array[Vector] = [
+      $|
+    ),
+  )
+  for vector in vectors {
+    let (name, compressed, original) = vector
+    if run("brotli", ["-d", "-c"], input=compressed) != original {
+      fail("\{name}: does not decode to its original")
+    }
+    let digest = @hex.encode(Bytes::from_array(@crypto.sha256(original)))
+    out.write_string(
+      (
+        $|  {
+        $|    name: "\{name}",
+        $|    compressed: \{literal(@base64.encode(compressed))},
+        $|    size: \{original.length()},
+        $|    sha256: "\{digest}",
+        $|  },
+        $|
+      ),
+    )
+  }
+  out.write_string("]\n")
+  @fs.write_file(target, out.to_string())
+  @shell.Cmd("moon", ["fmt", target]).run()
+  println("wrote \{target}: \{vectors.length()} vectors")
+}

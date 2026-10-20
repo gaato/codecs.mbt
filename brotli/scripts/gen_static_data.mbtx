@@ -1,0 +1,377 @@
+// Generates brotli/src/static_data.mbt: the RFC 7932 static dictionary, the
+// 121 word transforms and the literal context lookup tables.
+//
+// Sources, both pinned:
+// - the dictionary: google/brotli's c/common/dictionary.bin (MIT, see
+//   LICENSE-dictionary), byte-identical to RFC 7932 Appendix A;
+// - the transforms (Appendix B) and Lut0/Lut1/Lut2 (section 7.1): the RFC text.
+//
+// src/static_data_wbtest.mbt checks the result against the check values the
+// RFC and google publish, so a regenerated file cannot drift silently.
+//
+// Usage, from the repository root (needs curl unless both files are given):
+//   moon run brotli/scripts/gen_static_data.mbtx [-- DICTIONARY_BIN RFC7932_TXT]
+// Without arguments both are downloaded from the pinned URLs below. The file
+// is left as `moon fmt` leaves it, so the gates' format check passes.
+
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/core/encoding/utf8",
+  "moonbitlang/core/env",
+}
+
+///|
+let target : String = "brotli/src/static_data.mbt"
+
+///|
+let brotli_commit : String = "86ee1f65f62d6272345dee751d49e7d1f01c2b11"
+
+///|
+let dictionary_url : String = "https://raw.githubusercontent.com/google/brotli/\{brotli_commit}/c/common/dictionary.bin"
+
+///|
+let rfc_url : String = "https://www.rfc-editor.org/rfc/rfc7932.txt"
+
+///|
+/// Dictionary bytes per source line.
+let chunk : Int = 512
+
+///|
+/// RFC 7932 Appendix B names, in the order of the decoder's transform types.
+let transform_types : Array[String] = [
+  "Identity", "OmitLast1", "OmitLast2", "OmitLast3", "OmitLast4", "OmitLast5", "OmitLast6",
+  "OmitLast7", "OmitLast8", "OmitLast9", "FermentFirst", "FermentAll", "OmitFirst1",
+  "OmitFirst2", "OmitFirst3", "OmitFirst4", "OmitFirst5", "OmitFirst6", "OmitFirst7",
+  "OmitFirst8", "OmitFirst9",
+]
+
+///|
+async fn fetch(url : String) -> Bytes {
+  let output = @shell.Cmd("curl", ["-fsSL", url]).output()
+  output.check()
+  output.stdout_bytes()
+}
+
+///|
+fn bytes_literal(data : BytesView) -> String {
+  let out = StringBuilder()
+  out.write_string("b\"")
+  for b in data {
+    if b >= b'\x20' && b < b'\x7f' && b != b'"' && b != b'\\' {
+      out.write_char(b.to_int().unsafe_to_char())
+    } else {
+      let hex = "0123456789abcdef"
+      out.write_string("\\x")
+      out.write_char(
+        hex.code_unit_at(b.to_int() >> 4).to_int().unsafe_to_char(),
+      )
+      out.write_char(
+        hex.code_unit_at(b.to_int() & 15).to_int().unsafe_to_char(),
+      )
+    }
+  }
+  out.write_string("\"")
+  out.to_string()
+}
+
+///|
+/// The lines of `text`; a form feed (a page break) also ends a line.
+fn lines(text : String) -> Array[String] {
+  text
+  .replace_all(old="\u{c}", new="\n")
+  .split("\n")
+  .map(l => l.to_owned())
+  .collect()
+}
+
+///|
+fn is_space(c : Char) -> Bool {
+  c is (' ' | '\t' | '\r' | '\n' | '\u{b}' | '\u{c}')
+}
+
+///|
+fn is_digit(c : Char) -> Bool {
+  c >= '0' && c <= '9'
+}
+
+///|
+fn is_blank(line : String) -> Bool {
+  line.iter().all(is_space)
+}
+
+///|
+/// The numbers of a line that is only numbers separated by commas, with an
+/// optional trailing comma (`\s*(\d+,\s*)*\d+,?\s*`).
+fn number_row(line : String) -> Array[Int]? {
+  let cs = line.to_array()
+  let n = cs.length()
+  let mut i = 0
+  while i < n && is_space(cs[i]) {
+    i += 1
+  }
+  let numbers = []
+  for ;; {
+    let start = i
+    let mut value = 0
+    while i < n && is_digit(cs[i]) {
+      value = value * 10 + (cs[i].to_int() - '0'.to_int())
+      i += 1
+    }
+    if i == start {
+      return None
+    }
+    numbers.push(value)
+    let comma = i < n && cs[i] == ','
+    if comma {
+      i += 1
+    }
+    while i < n && is_space(cs[i]) {
+      i += 1
+    }
+    if i == n {
+      return Some(numbers)
+    }
+    if !comma {
+      return None
+    }
+  }
+}
+
+///|
+/// The 256 values of `name` in RFC 7932 section 7.1. Page breaks (blank
+/// lines, the page header and footer) may fall inside a table.
+fn lut(rfc : Array[String], name : String) -> Array[Int] raise {
+  guard rfc.search_by(l => l.contains("      \{name} :=")) is Some(start) else {
+    fail("\{name}: not found")
+  }
+  let numbers = []
+  for line in rfc[start + 1:] {
+    if number_row(line) is Some(row) {
+      numbers.append(row)
+      if numbers.length() == 256 {
+        return numbers
+      }
+    } else if !numbers.is_empty() &&
+      !is_blank(line) &&
+      !line.has_prefix("RFC") &&
+      !line.has_prefix("Alakuijala") {
+      break
+    }
+  }
+  fail("\{name}: found \{numbers.length()} values, expected 256")
+}
+
+///|
+fn hex_digit(c : Char) -> Int raise {
+  match c {
+    '0'..<='9' => c.to_int() - '0'.to_int()
+    'a'..<='f' => c.to_int() - 'a'.to_int() + 10
+    'A'..<='F' => c.to_int() - 'A'.to_int() + 10
+    _ => fail("bad hex digit \{c} in a transform")
+  }
+}
+
+///|
+/// A quoted string at `cs[i]` (`"(?:[^"\\]|\\.)*"`), decoded as a Python
+/// bytes literal; the index after it.
+fn quoted(cs : Array[Char], i : Int) -> (Bytes, Int)? raise {
+  let n = cs.length()
+  if i >= n || cs[i] != '"' {
+    return None
+  }
+  let out = Buffer()
+  let mut i = i + 1
+  while i < n && cs[i] != '"' {
+    let c = cs[i]
+    if c != '\\' {
+      guard c.to_int() < 0x80 else { fail("non-ASCII byte in a transform") }
+      out.write_byte(c.to_int().to_byte())
+      i += 1
+      continue
+    }
+    guard i + 1 < n else { return None }
+    match cs[i + 1] {
+      '"' => out.write_byte(b'"')
+      '\'' => out.write_byte(b'\'')
+      '\\' => out.write_byte(b'\\')
+      'n' => out.write_byte(b'\n')
+      't' => out.write_byte(b'\t')
+      'r' => out.write_byte(b'\r')
+      'x' => {
+        guard i + 3 < n else { return None }
+        out.write_byte(
+          (hex_digit(cs[i + 2]) * 16 + hex_digit(cs[i + 3])).to_byte(),
+        )
+        i += 2
+      }
+      other => fail("unsupported escape \\\{other} in a transform")
+    }
+    i += 2
+  }
+  if i >= n {
+    return None
+  }
+  Some((out.to_bytes(), i + 1))
+}
+
+///|
+/// A row of RFC 7932 Appendix B
+/// (`^\s+(\d+)\s+("...")\s+(\w+)\s+("...")\s*$`).
+fn transform_row(line : String) -> (Int, Bytes, String, Bytes)? raise {
+  let cs = line.to_array()
+  let n = cs.length()
+  fn spaces(i : Int) -> Int {
+    let mut j = i
+    while j < n && is_space(cs[j]) {
+      j += 1
+    }
+    j
+  }
+
+  let mut i = spaces(0)
+  if i == 0 {
+    return None
+  }
+  let start = i
+  let mut index = 0
+  while i < n && is_digit(cs[i]) {
+    index = index * 10 + (cs[i].to_int() - '0'.to_int())
+    i += 1
+  }
+  if i == start || spaces(i) == i {
+    return None
+  }
+  guard quoted(cs, spaces(i)) is Some((prefix, after)) else { return None }
+  i = after
+  if spaces(i) == i {
+    return None
+  }
+  i = spaces(i)
+  let word = StringBuilder()
+  while i < n &&
+        (cs[i].is_ascii_alphabetic() || is_digit(cs[i]) || cs[i] == '_') {
+    word.write_char(cs[i])
+    i += 1
+  }
+  if word.is_empty() || spaces(i) == i {
+    return None
+  }
+  guard quoted(cs, spaces(i)) is Some((suffix, after)) else { return None }
+  if spaces(after) != n {
+    return None
+  }
+  Some((index, prefix, word.to_string(), suffix))
+}
+
+///|
+fn transforms(rfc : Array[String]) -> Array[(Bytes, Int, Bytes)] raise {
+  guard rfc.search_by(l => {
+      l.contains("Appendix B.  List of Word Transformations")
+    })
+    is Some(start) else {
+    fail("Appendix B: not found")
+  }
+  let found = []
+  for line in rfc[start:] {
+    guard transform_row(line) is Some((index, prefix, name, suffix)) else {
+      continue
+    }
+    if index != found.length() {
+      fail("transform \{index} out of order")
+    }
+    guard transform_types.search(name) is Some(kind) else {
+      fail("transform \{index}: unknown type \{name}")
+    }
+    found.push((prefix, kind, suffix))
+  }
+  if found.length() != 121 {
+    fail("found \{found.length()} transforms, expected 121")
+  }
+  found
+}
+
+///|
+fn render(dictionary : Bytes, rfc : Array[String]) -> String raise {
+  let rows = transforms(rfc)
+  let out = [
+    "// Generated by scripts/gen_static_data.mbtx, DON'T EDIT IT.",
+    "// The dictionary is google/brotli's c/common/dictionary.bin at",
+    "// \{brotli_commit} (MIT, see LICENSE-dictionary); the",
+    "// transforms and context tables are transcribed from RFC 7932.",
+    "",
+  ]
+  for name in ["Lut0", "Lut1", "Lut2"] {
+    let values = lut(rfc, name).map(v => v.to_string()).join(", ")
+    out.append([
+      "///|",
+      "/// RFC 7932 section 7.1, `\{name}`.",
+      "let \{name.to_lower()} : FixedArray[Byte] = [\{values}]",
+      "",
+    ])
+  }
+  let prefixes = rows.map(r => bytes_literal(r.0)).join(", ")
+  let types = rows.map(r => r.1.to_string()).join(", ")
+  let suffixes = rows.map(r => bytes_literal(r.2)).join(", ")
+  out.append([
+    "///|",
+    "/// RFC 7932 Appendix B: the prefix of each transform.",
+    "let transform_prefixes : FixedArray[Bytes] = [\{prefixes}]",
+    "",
+    "///|",
+    "/// RFC 7932 Appendix B: the elementary transform of each transform:",
+    "/// 0 Identity, 1-9 OmitLast1-9, 10 FermentFirst, 11 FermentAll,",
+    "/// 12-20 OmitFirst1-9.",
+    "let transform_types : FixedArray[Byte] = [\{types}]",
+    "",
+    "///|",
+    "/// RFC 7932 Appendix B: the suffix of each transform.",
+    "let transform_suffixes : FixedArray[Bytes] = [\{suffixes}]",
+    "",
+    "///|",
+    "/// RFC 7932 Appendix A: the static dictionary, 122,784 bytes, in",
+    "/// chunks that keep each source line short.",
+    "let dictionary : Bytes = {",
+    "  let chunks : FixedArray[Bytes] = [",
+  ])
+  for i = 0; i < dictionary.length(); i = i + chunk {
+    let end = (i + chunk).min(dictionary.length())
+    out.push("    \{bytes_literal(dictionary[i:end])},")
+  }
+  out.append([
+    "  ]",
+    "  let buffer = Buffer(size_hint=\{dictionary.length()})",
+    "  for chunk in chunks {",
+    "    buffer.write_bytes(chunk)",
+    "  }",
+    "  buffer.to_bytes()",
+    "}",
+    "",
+  ])
+  out.join("\n")
+}
+
+///|
+async fn main {
+  guard @fs.exists("brotli/moon.mod") else {
+    fail("run from the repository root")
+  }
+  let args = @env.args()[1:]
+  let (dictionary, rfc) = match args {
+    [] => (fetch(dictionary_url), @utf8.decode(fetch(rfc_url)))
+    [dictionary, rfc] =>
+      (@fs.read_file(dictionary).binary(), @fs.read_file(rfc).text())
+    _ =>
+      fail(
+        "usage: moon run brotli/scripts/gen_static_data.mbtx [-- DICTIONARY_BIN RFC7932_TXT]",
+      )
+  }
+  if dictionary.length() != 122784 {
+    fail("dictionary is \{dictionary.length()} bytes, expected 122784")
+  }
+  @fs.write_file(target, render(dictionary, lines(rfc)))
+  // Leave the file as `moon fmt` would, so the gates' fmt check passes.
+  @shell.Cmd("moon", ["fmt", target]).run()
+  println("wrote \{target}")
+}
