@@ -11,6 +11,23 @@ never does. Every breaking change is listed with a migration note.
 
 - A stream whose literals use four Huffman streams for fewer than 6 literals raises `Corrupt`, as RFC 8878 erratum 7297 and the reference decoder require; regenerated sizes 0, 3 and 4 were accepted.
 
+### Changed
+
+- **Errors are `gaato/codec`'s `CodecError`.** Every function and method raises `@codec.CodecError(kind, message)` with an `@codec.ErrorKind`, the error every codec of codecs.mbt raises. Migration: add `gaato/codec` to your imports, then `ZstdError(kind, msg)` → `@codec.CodecError(kind, msg)`; `WindowTooLarge` → `LimitExceeded({ resource: Memory, needed: Some(window), limit })`, where `limit` is `1 << max_window_bits`; `OutputLimitExceeded` → `LimitExceeded({ resource: Output, needed: None, limit: max_output })`; `DictionaryUnsupported` → `DictionaryRequired(Some(id))`, with the dictionary id the frame names. `Truncated`, `Corrupt` and `ChecksumMismatch` keep their names.
+- **Bytes after the last frame raise `TrailingData`**, not `Corrupt`: four bytes after a frame (or a skippable frame) that start no frame, and any bytes after a stream that has ended. Bytes that start no frame at the very beginning are still `Corrupt` (not a zstd stream), and fewer than four bytes after the last frame are still `Truncated`. Migration: code that took `Corrupt` for garbage after the stream matches `TrailingData`.
+- **`end` is required** on `Decoder::step` and `Decoder::step_into`; it no longer defaults to `false`, since a caller that forgets it would get a silently truncated stream. Migration: pass `end=false` where the default was relied on.
+- **`Status` is `gaato/codec_bytes`'s**, re-exported as `@zstd.Status`, with the same constructors. Migration: `@zstd.Done` no longer resolves; write `Done` where the type is known, or `@zstd.Status::Done`.
+
+### Added
+
+- `Decoder` implements `gaato/codec_bytes`'s `Decode`, so code written against that contract drives it like any other decoder of codecs.mbt.
+- `Decoder(until=EndOfMember)` stops right after the first frame (a skippable frame counts as one) and consumes nothing past it, so `input[last_consumed():]` is what follows; `end=true` before that frame is complete raises `Truncated`. The default, `until=EndOfInput`, decodes every frame up to the end of the input, as before.
+- `Decoder::memory_usage`: the bytes held in the window and the block buffers, at most `(1 << max_window_bits) + 256 KiB`. It may drop between frames.
+
+### Removed
+
+- `ZstdError` and `ZstdErrorKind`, replaced by `gaato/codec`'s `CodecError` and `ErrorKind` (see Changed).
+
 ## [0.2.0] - 2026-10-19
 
 ### Changed

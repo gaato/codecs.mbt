@@ -14,7 +14,7 @@ fn Decoder::magic(self : Decoder) -> Unit raise Stop {
   } else if self.frames == 0 {
     raise corrupt("not a zstd stream")
   } else {
-    raise corrupt("data after the last frame that starts no frame")
+    raise Fail(TrailingData, "data after the last frame that starts no frame")
   }
 }
 
@@ -35,8 +35,7 @@ fn Decoder::skippable_data(self : Decoder) -> Unit raise Stop {
   if self.remaining > 0 {
     raise NeedInput
   }
-  self.frames += 1
-  self.state = Magic
+  self.end_member()
 }
 
 ///|
@@ -73,10 +72,8 @@ fn Decoder::frame_header(self : Decoder) -> Unit raise Stop {
     at += 1
   }
   if did_size > 0 && self.hdr_le(at, did_size) != 0 {
-    raise Fail(
-      DictionaryUnsupported,
-      "the frame needs dictionary \{self.hdr_le(at, did_size)}",
-    )
+    let id = self.hdr_le(at, did_size).to_uint()
+    raise Fail(DictionaryRequired(Some(id)), "the frame needs dictionary \{id}")
   }
   at += did_size
   self.content_size = if fcs_size > 0 {
@@ -91,7 +88,7 @@ fn Decoder::frame_header(self : Decoder) -> Unit raise Stop {
   let limit = 1UL << self.max_window_bits
   if window > limit {
     raise Fail(
-      WindowTooLarge,
+      LimitExceeded({ resource: Memory, needed: Some(window), limit, }),
       "the frame needs a \{window}-byte window, over the \{limit}-byte limit",
     )
   }
@@ -276,6 +273,13 @@ fn Decoder::end_frame(self : Decoder) -> Unit raise Stop {
   if self.content_size is Some(size) && self.frame_out != size {
     raise corrupt("the frame holds less than its declared content size")
   }
+  self.end_member()
+}
+
+///|
+/// Counts a whole frame, skippable or not. Under `EndOfMember` the stream
+/// ends here; otherwise another frame may follow.
+fn Decoder::end_member(self : Decoder) -> Unit {
   self.frames += 1
-  self.state = Magic
+  self.state = if self.until is EndOfMember { Done } else { Magic }
 }

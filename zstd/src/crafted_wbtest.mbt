@@ -155,7 +155,7 @@ fn state_of(table : Fse, symbol : Int32) -> Int32 {
 /// decoded length.
 fn outcome(input : Bytes, max_window_bits~ : Int32 = 27) -> String {
   try decompress(input, max_window_bits~) catch {
-    ZstdError(kind, message) => "\{Repr(kind)}: \{message}"
+    CodecError(kind, message) => "\{Repr(kind)}: \{message}"
   } noraise {
     out => "decoded \{out.length()}"
   }
@@ -182,15 +182,21 @@ test "frame headers: reserved and unused bits, dictionaries" {
   )
   inspect(
     outcome(frame([b'\x01', b'\x00', b'\x07'], empty)),
-    content="DictionaryUnsupported: the frame needs dictionary 7",
+    content=(
+      #|DictionaryRequired(Some(7)): the frame needs dictionary 7
+    ),
   )
   inspect(
     outcome(frame([b'\x02', b'\x00', ..le(0x1234, 2)], empty)),
-    content="DictionaryUnsupported: the frame needs dictionary 4660",
+    content=(
+      #|DictionaryRequired(Some(4660)): the frame needs dictionary 4660
+    ),
   )
   inspect(
     outcome(frame([b'\x03', b'\x00', ..le(0xFFFFFFFF, 4)], empty)),
-    content="DictionaryUnsupported: the frame needs dictionary 4294967295",
+    content=(
+      #|DictionaryRequired(Some(4294967295)): the frame needs dictionary 4294967295
+    ),
   )
 }
 
@@ -200,15 +206,17 @@ test "windows are refused before anything is allocated" {
   let decoder = Decoder(max_window_bits=30)
   let huge = frame([b'\x00', b'\xFF'], block(0, []))
   let refused = try
-    decoder.step_into(huge, FixedArray::make(16, b'\x00'))
+    decoder.step_into(huge, FixedArray::make(16, b'\x00'), end=false)
   catch {
-    ZstdError(kind, message) => "\{Repr(kind)}: \{message}"
+    CodecError(kind, message) => "\{Repr(kind)}: \{message}"
   } noraise {
     _ => fail("accepted")
   }
   inspect(
     refused,
-    content="WindowTooLarge: the frame needs a 4123168604160-byte window, over the 1073741824-byte limit",
+    content=(
+      #|LimitExceeded({ resource: Memory, needed: Some(4123168604160), limit: 1073741824 }): the frame needs a 4123168604160-byte window, over the 1073741824-byte limit
+    ),
   )
   assert_eq(decoder.ring.length(), 0)
   assert_eq(decoder.block.length(), 0)
@@ -218,7 +226,15 @@ test "windows are refused before anything is allocated" {
       frame([b'\xE0', ..le(1UL << 63, 8)], block(0, [])),
       max_window_bits=30,
     ),
-    content="WindowTooLarge: the frame needs a 9223372036854775808-byte window, over the 1073741824-byte limit",
+    content=(
+      #|LimitExceeded(
+      #|  {
+      #|    resource: Memory,
+      #|    needed: Some(9223372036854775808),
+      #|    limit: 1073741824,
+      #|  },
+      #|): the frame needs a 9223372036854775808-byte window, over the 1073741824-byte limit
+    ),
   )
   // Exactly 1 << max_window_bits is accepted.
   inspect(
@@ -325,7 +341,10 @@ test "skippable frames are skipped without being kept" {
   inspect(outcome(skip), content="Truncated: the stream ends inside a frame")
   let decoder = Decoder()
   let out = FixedArray::make(16, b'\x00')
-  debug_inspect(decoder.step_into(skip, out), content="NeedMoreInput")
+  debug_inspect(
+    decoder.step_into(skip, out, end=false),
+    content="NeedMoreInput",
+  )
   inspect(decoder.last_consumed(), content="9")
   inspect(decoder.remaining, content="4294967294")
   assert_eq(decoder.block.length(), 0)

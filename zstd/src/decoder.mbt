@@ -49,6 +49,7 @@ const INITIAL_WINDOW : Int32 = 1024
 /// input or output.
 pub struct Decoder {
   priv max_window_bits : Int32
+  priv until : @codec_bytes.Until
   // The input of the current step.
   priv mut view : BytesView
   priv mut in_pos : Int32
@@ -72,7 +73,7 @@ pub struct Decoder {
   // Stream state.
   priv mut state : State
   priv mut frames : Int32
-  priv mut failure : ZstdError?
+  priv mut failure : @codec.CodecError?
   priv mut step_consumed : Int32
   priv mut step_produced : Int32
   // The current frame.
@@ -108,15 +109,24 @@ pub struct Decoder {
 }
 
 ///|
-/// A decoder at the start of a stream. It refuses, with `WindowTooLarge`,
-/// a frame whose `Window_Size` exceeds `1 << max_window_bits` bytes (the
-/// window memory it would need). The default 27 is the reference decoder's
-/// default limit; RFC 9659 asks HTTP clients to accept 23 (8 MiB). Values
-/// are clamped to 10..30.
-pub fn Decoder::Decoder(max_window_bits~ : Int32 = 27) -> Decoder {
+/// A decoder at the start of a stream. It refuses, with
+/// `LimitExceeded({ resource: Memory, .. })`, a frame whose `Window_Size`
+/// exceeds `1 << max_window_bits` bytes (the window memory it would need).
+/// The default 27 is the reference decoder's default limit; RFC 9659 asks
+/// HTTP clients to accept 23 (8 MiB). Values are clamped to 10..30.
+///
+/// `until` says where the stream ends. `EndOfInput`, the default, decodes
+/// every frame up to the end of the input. `EndOfMember` stops right after
+/// the first frame, a skippable frame included, and consumes nothing past
+/// it, so that `input[last_consumed():]` is what follows.
+pub fn Decoder::Decoder(
+  max_window_bits~ : Int32 = 27,
+  until~ : @codec_bytes.Until = EndOfInput,
+) -> Decoder {
   let empty_out = FixedArray::make(0, b'\x00')
   {
     max_window_bits: max_window_bits.clamp(min=10, max=30),
+    until,
     view: b""[:],
     in_pos: 0,
     hdr: FixedArray::make(14, b'\x00'),
@@ -165,8 +175,8 @@ pub fn Decoder::Decoder(max_window_bits~ : Int32 = 27) -> Decoder {
 }
 
 ///|
-/// Starts a new stream, keeping the tables' memory. The window and the
-/// block buffers are released.
+/// Starts a new stream with the same options, keeping the tables' memory.
+/// The window and the block buffers are released.
 pub fn Decoder::reset(self : Decoder) -> Unit {
   self.release_step()
   self.hdr_len = 0
@@ -185,6 +195,15 @@ pub fn Decoder::reset(self : Decoder) -> Unit {
   self.block_len = 0
   self.literals = FixedArray::make(0, b'\x00')
   self.literals_len = 0
+}
+
+///|
+/// Bytes held in buffers sized by the stream: the window, the compressed
+/// block and its literals. The fixed-size tables are not counted. At most
+/// `(1 << max_window_bits) + 2 * 128 KiB`; the window is released when a
+/// frame needs a smaller one, so it may drop between frames.
+pub fn Decoder::memory_usage(self : Decoder) -> Int32 {
+  self.ring.length() + self.block.length() + self.literals.length()
 }
 
 ///|
@@ -211,17 +230,19 @@ pub fn Decoder::last_produced(self : Decoder) -> Int32 {
 /// `last_produced` for how much of each it used.
 ///
 /// A stream is one or more frames, and nothing marks its last one, so pass
-/// `end=true` once `input` holds the last bytes: the stream then ends after
-/// the frame in progress, and a stream cut short raises `Truncated`. Without
-/// `end`, the decoder answers `NeedMoreInput` between frames. Bytes after the
-/// last frame that start no frame raise `Corrupt`. After an error the
-/// decoder raises it again until `reset`.
+/// `end=true` once `input` holds the last bytes and `end=false` before: the
+/// stream then ends after the frame in progress, and a stream cut short
+/// raises `Truncated`. Without `end`, the decoder answers `NeedMoreInput`
+/// between frames. Bytes after the last frame that start no frame raise
+/// `TrailingData`. Under `until=EndOfMember` the stream ends after its first
+/// frame, whatever `end` says. After an error the decoder raises it again
+/// until `reset`.
 pub fn Decoder::step(
   self : Decoder,
   input : BytesView,
   output : MutArrayView[Byte],
-  end~ : Bool = false,
-) -> Status raise ZstdError {
+  end~ : Bool,
+) -> Status raise @codec.CodecError {
   self.step_with(input, output, None, end~)
 }
 
@@ -231,8 +252,8 @@ pub fn Decoder::step_into(
   self : Decoder,
   input : BytesView,
   output : FixedArray[Byte],
-  end~ : Bool = false,
-) -> Status raise ZstdError {
+  end~ : Bool,
+) -> Status raise @codec.CodecError {
   self.step_with(input, output.mut_view(), Some(output), end~)
 }
 
@@ -243,7 +264,7 @@ fn Decoder::step_with(
   output : MutArrayView[Byte],
   fixed_output : FixedArray[Byte]?,
   end~ : Bool,
-) -> Status raise ZstdError {
+) -> Status raise @codec.CodecError {
   self.step_consumed = 0
   self.step_produced = 0
   if self.failure is Some(err) {
@@ -258,9 +279,9 @@ fn Decoder::step_with(
   let status = match status {
     NeedMoreInput if end =>
       if !(self.state is Magic && self.hdr_len == 0) {
-        self.fail(ZstdError(Truncated, "the stream ends inside a frame"))
+        self.fail(CodecError(Truncated, "the stream ends inside a frame"))
       } else if self.frames == 0 {
-        self.fail(ZstdError(Truncated, "the stream holds no frame"))
+        self.fail(CodecError(Truncated, "the stream holds no frame"))
       } else {
         self.state = Done
         Status::Done
@@ -281,7 +302,10 @@ fn Decoder::finish_step(self : Decoder, status : Status) -> Status {
 
 ///|
 /// Records a terminal error and raises it.
-fn[T] Decoder::fail(self : Decoder, err : ZstdError) -> T raise ZstdError {
+fn[T] Decoder::fail(
+  self : Decoder,
+  err : @codec.CodecError,
+) -> T raise @codec.CodecError {
   self.failure = Some(err)
   self.release_step()
   raise err
@@ -486,11 +510,11 @@ fn Decoder::write_out(self : Decoder, start : Int32, n : Int32) -> Unit {
 
 ///|
 /// Runs units until the input or the output runs out or the stream ends.
-fn Decoder::run(self : Decoder) -> Status raise ZstdError {
+fn Decoder::run(self : Decoder) -> Status raise @codec.CodecError {
   for ;; {
     let status = self.unit() catch {
       NeedInput => return NeedMoreInput
-      Fail(kind, message) => raise ZstdError(kind, message)
+      Fail(kind, message) => raise CodecError(kind, message)
     }
     if status is Some(status) {
       return status
@@ -513,11 +537,36 @@ fn Decoder::unit(self : Decoder) -> Status? raise Stop {
     CompressedBlock => return self.compressed_block()
     Checksum => self.checksum()
     Done => {
-      if self.in_pos < self.view.length() {
-        raise corrupt("data after the end of the stream")
+      if self.until is EndOfInput && self.in_pos < self.view.length() {
+        raise Fail(TrailingData, "data after the end of the stream")
       }
       return Some(Done)
     }
   }
   None
+}
+
+///|
+pub impl @codec_bytes.Decode for Decoder with fn step(self, input, output, end~) {
+  Decoder::step(self, input, output, end~)
+}
+
+///|
+pub impl @codec_bytes.Decode for Decoder with fn last_consumed(self) {
+  Decoder::last_consumed(self)
+}
+
+///|
+pub impl @codec_bytes.Decode for Decoder with fn last_produced(self) {
+  Decoder::last_produced(self)
+}
+
+///|
+pub impl @codec_bytes.Decode for Decoder with fn reset(self) {
+  Decoder::reset(self)
+}
+
+///|
+pub impl @codec_bytes.Decode for Decoder with fn memory_usage(self) {
+  Decoder::memory_usage(self)
 }

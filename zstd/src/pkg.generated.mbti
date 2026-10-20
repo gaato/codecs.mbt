@@ -2,52 +2,30 @@
 package "gaato/zstd"
 
 import {
-  "moonbitlang/core/debug",
+  "gaato/codec",
+  "gaato/codec_bytes",
 }
 
 // Values
-pub fn decompress(BytesView, max_output? : Int, max_window_bits? : Int) -> Bytes raise ZstdError
+pub fn decompress(BytesView, max_output? : Int, max_window_bits? : Int) -> Bytes raise @codec.CodecError
 
 // Errors
-pub suberror ZstdError {
-  ZstdError(ZstdErrorKind, String)
-} derive(@debug.Debug)
-pub fn ZstdError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 pub struct Decoder {
   // private fields
 }
-pub fn Decoder::Decoder(max_window_bits? : Int) -> Self
+pub fn Decoder::Decoder(max_window_bits? : Int, until? : @codec_bytes.Until) -> Self
 pub fn Decoder::is_finished(Self) -> Bool
 pub fn Decoder::last_consumed(Self) -> Int
 pub fn Decoder::last_produced(Self) -> Int
+pub fn Decoder::memory_usage(Self) -> Int
 pub fn Decoder::reset(Self) -> Unit
-pub fn Decoder::step(Self, BytesView, MutArrayView[Byte], end? : Bool) -> Status raise ZstdError
-pub fn Decoder::step_into(Self, BytesView, FixedArray[Byte], end? : Bool) -> Status raise ZstdError
-
-pub(all) enum Status {
-  Done
-  NeedMoreInput
-  NeedMoreOutput
-} derive(Eq, @debug.Debug)
-pub fn Status::equal(Self, Self) -> Bool
-pub fn Status::not_equal(Self, Self) -> Bool
-pub fn Status::to_repr(Self) -> @debug.Repr
-
-#non_exhaustive
-pub(all) enum ZstdErrorKind {
-  Truncated
-  Corrupt
-  ChecksumMismatch
-  WindowTooLarge
-  DictionaryUnsupported
-  OutputLimitExceeded
-} derive(Eq, @debug.Debug)
-pub fn ZstdErrorKind::equal(Self, Self) -> Bool
-pub fn ZstdErrorKind::not_equal(Self, Self) -> Bool
-pub fn ZstdErrorKind::to_repr(Self) -> @debug.Repr
+pub fn Decoder::step(Self, BytesView, MutArrayView[Byte], end~ : Bool) -> @codec_bytes.Status raise @codec.CodecError
+pub fn Decoder::step_into(Self, BytesView, FixedArray[Byte], end~ : Bool) -> @codec_bytes.Status raise @codec.CodecError
+pub impl @codec_bytes.Decode for Decoder
 
 // Type aliases
+pub using @codec_bytes {type Status}
 
 // Traits

@@ -18,6 +18,17 @@ fn mutate(input : Bytes, rng : Rng) -> Bytes {
 }
 
 ///|
+/// A tally key for an error kind: limits by resource, dictionaries without
+/// their id.
+fn outcome_name(kind : @codec.ErrorKind) -> String {
+  match kind {
+    LimitExceeded(limit) => "LimitExceeded(\{Repr(limit.resource)})"
+    DictionaryRequired(_) => "DictionaryRequired"
+    kind => Repr(kind).to_string()
+  }
+}
+
+///|
 test "corrupted streams raise errors or decode, within bounds, never abort" {
   let rng = Rng::new(20261019)
   let sources = vectors.filter(v => v.size <= 300000).map(v => v.input())
@@ -35,7 +46,7 @@ test "corrupted streams raise errors or decode, within bounds, never abort" {
         check=check_bounds,
       )
     catch {
-      ZstdError(kind, _) => Repr(kind).to_string()
+      @codec.CodecError(kind, _) => outcome_name(kind)
       err => fail("unexpected error: \{Repr(err)}")
     } noraise {
       _ => "decoded"
@@ -48,10 +59,11 @@ test "corrupted streams raise errors or decode, within bounds, never abort" {
       #|{
       #|  "Truncated": 823,
       #|  "ChecksumMismatch": 449,
-      #|  "Corrupt": 1575,
-      #|  "WindowTooLarge": 6,
+      #|  "Corrupt": 1574,
+      #|  "LimitExceeded(Memory)": 6,
       #|  "decoded": 142,
-      #|  "DictionaryUnsupported": 5,
+      #|  "DictionaryRequired": 5,
+      #|  "TrailingData": 1,
       #|}
     ),
   )
