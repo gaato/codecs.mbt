@@ -54,8 +54,8 @@ test "decode" (b : @bench.T) {
   assert_eq(zstd_decode(zb), binary_size)
   assert_eq(brotli_decode(bt), text_size)
   assert_eq(brotli_decode(bb), binary_size)
-  b.bench(name="zstd text 1 MiB", () => b.keep(zstd_decode(zt)))
-  b.bench(name="zstd binary 512 KiB", () => b.keep(zstd_decode(zb)))
-  b.bench(name="brotli text 1 MiB", () => b.keep(brotli_decode(bt)))
-  b.bench(name="brotli binary 512 KiB", () => b.keep(brotli_decode(bb)))
+  b.bench(name="zstd text 512 KiB", () => b.keep(zstd_decode(zt)))
+  b.bench(name="zstd binary 128 KiB", () => b.keep(zstd_decode(zb)))
+  b.bench(name="brotli text 512 KiB", () => b.keep(brotli_decode(bt)))
+  b.bench(name="brotli binary 128 KiB", () => b.keep(brotli_decode(bb)))
 }
