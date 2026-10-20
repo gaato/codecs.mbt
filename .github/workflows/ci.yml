@@ -39,9 +39,10 @@ jobs:
         run: moon version --all
 
       - name: Install the scripts' tools
-        # zstd and brotli check the benchmarks' inputs; python3-brotli is the
-        # reference decoder of the brotli cross-check.
-        run: apt-get update && apt-get install -y --no-install-recommends zstd brotli python3 python3-brotli
+        # The reference zstd and brotli, which the generators' checks and the
+        # brotli cross-check decode with (Node's zlib, the other brotli decoder
+        # the cross-check uses, comes with Node).
+        run: apt-get update && apt-get install -y --no-install-recommends zstd brotli
 
       - name: Registry index
         # The scripts are .mbtx files; moon resolves their imports from it.
@@ -55,6 +56,5 @@ jobs:
         run: moon run scripts/coverage_report.mbtx
 
       - name: Cross-check the brotli encoder with the reference decoder
-        run: |
-          moon run brotli/scripts/crosscheck.mbtx
+        run: moon run brotli/scripts/crosscheck.mbtx
 
