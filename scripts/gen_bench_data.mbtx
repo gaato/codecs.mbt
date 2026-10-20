@@ -14,9 +14,9 @@
 // of an encoder may produce other, equally valid, bytes.
 
 import {
-  "moonbitlang/async",
-  "moonbitlang/async/fs",
-  "moonbitlang/async/shell",
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/async@0.22.5/shell",
   "moonbitlang/core/encoding/base64",
   "moonbitlang/core/env",
 }
