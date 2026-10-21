@@ -13,7 +13,9 @@
       "src",
       "src/internal/frame",
       "src/internal/header",
+      "src/internal/huffman",
       "src/internal/proof_bits",
+      "src/internal/proof_codes",
       "src/internal/proof_fields",
       "src/internal/xxhash"
     ],
@@ -23,7 +25,9 @@
       "src/internal/huffman",
       "src/internal/lz77",
       "src/internal/proof_bits",
-      "src/internal/rules"
+      "src/internal/proof_codes",
+      "src/internal/rules",
+      "src/internal/transform"
     ],
     "deflate": [
       "src",
@@ -37,7 +41,8 @@
       "src/internal/inflate",
       "src/internal/lz77",
       "src/internal/deflate",
-      "src/internal/proof_bits"
+      "src/internal/proof_bits",
+      "src/internal/proof_codes"
     ]
   },
   "copies": {
@@ -45,17 +50,20 @@
       "bits": ["bit_packer.mbt", "bit_packer_test.mbt"],
       "huffman": [
         "huffman.mbt",
+        "huffman.mbtp",
         "huffman_test.mbt",
         "huffman_spec_test.mbt",
         "decode_table.mbt",
         "decode_table_spec_test.mbt"
       ],
       "lz77": ["hash.mbt", "hash_test.mbt", "matcher.mbt", "matcher_test.mbt"],
-      "proof_bits": ["shifts.mbt", "shifts.mbtp", "shifts_test.mbt"]
+      "proof_bits": ["shifts.mbt", "shifts.mbtp", "shifts_test.mbt"],
+      "proof_codes": ["codes.mbt", "codes.mbtp", "codes_test.mbt"]
     },
     "deflate": {
       "huffman": [
         "huffman.mbt",
+        "huffman.mbtp",
         "huffman_test.mbt",
         "huffman_spec_test.mbt",
         "decode_table.mbt",
@@ -74,37 +82,51 @@
         "ht_matchfinder.mbt",
         "ht_matchfinder_test.mbt"
       ],
-      "proof_bits": ["shifts.mbt", "shifts.mbtp", "shifts_test.mbt"]
+      "proof_bits": ["shifts.mbt", "shifts.mbtp", "shifts_test.mbt"],
+      "proof_codes": ["codes.mbt", "codes.mbtp", "codes_test.mbt"]
     },
     "zstd": {
       "proof_bits": ["shifts.mbt", "shifts.mbtp", "shifts_test.mbt"],
+      "proof_codes": ["codes.mbt", "codes.mbtp", "codes_test.mbt"],
       "proof_fields": ["fields.mbt", "fields.mbtp"]
     }
   },
   "proved": {
     "parts": {
       "proof_bits": { "prelude": "unbounded", "solvers": ["z3", "cvc5"] },
-      "proof_fields": { "prelude": "unbounded", "solvers": ["z3", "cvc5"] }
+      "proof_fields": { "prelude": "unbounded", "solvers": ["z3", "cvc5"] },
+      "proof_codes": { "prelude": "unbounded", "solvers": ["z3", "cvc5"] },
+      "proof_reverse": { "prelude": "unbounded", "solvers": ["z3", "cvc5"] },
+      "proof_canonical": { "prelude": "unbounded", "solvers": ["z3", "cvc5"] },
+      "huffman": { "prelude": "unbounded", "solvers": ["z3", "cvc5"] }
     },
     "zstd": {
       "src/internal/header": { "prelude": "unbounded", "solvers": ["z3", "cvc5"] },
-      "src/internal/frame": { "prelude": "machine-int", "solvers": ["z3", "cvc5"] }
+      "src/internal/frame": { "prelude": "machine-int", "solvers": ["z3", "cvc5"] },
+      "src/internal/huffman": {
+        "prelude": "unbounded",
+        "solvers": ["z3", "cvc5"],
+        "z3_only": ["build_table", "fill", "place_apart"]
+      }
     },
     "brotli": {
       "src/internal/rules": {
         "prelude": "unbounded",
         "solvers": ["z3", "cvc5"],
         "z3_only": ["long_distance"]
-      }
+      },
+      "src/internal/transform": { "prelude": "unbounded", "solvers": ["z3", "cvc5"] }
     },
     "deflate": {
       "src/zlib/internal/header": { "prelude": "unbounded", "solvers": ["z3", "cvc5"] },
       "src/gzip/internal/header": { "prelude": "unbounded", "solvers": ["z3", "cvc5"] },
-      "src/zlib/internal/adler32": { "prelude": "machine-int", "solvers": ["z3"] }
+      "src/zlib/internal/adler32": { "prelude": "machine-int", "solvers": ["z3"] },
+      "src/internal/inflate": { "prelude": "unbounded", "solvers": ["z3", "cvc5"] }
     }
   },
   "proof_controls": {
     "parts/proof_controls/unbounded": "unbounded",
+    "parts/proof_controls/codes": "unbounded",
     "parts/proof_controls/machine_int": "machine-int"
   }
 }

@@ -9,7 +9,9 @@
 //   Bridge budget: N
 //
 // Function and Bridge cells hold a backticked name (`f` or `T::f`), Package a
-// backticked package directory relative to the module, Bridges backticked
+// backticked package directory relative to the module (or `parts/<pkg>`, a
+// package that scripts/modules.json proves under "proved"."parts", which the
+// module copies or which proves a theorem about one it copies), Bridges backticked
 // bridge names (or "none"), Backing test a backticked test file relative to
 // the module followed by the quoted names of its tests, as bounds_check.mbtx
 // reads them.
@@ -194,6 +196,17 @@ fn signature(text : String, name : String) -> String? {
     }
   }
   None
+}
+
+///|
+/// The directory, from the repository root, of a ledger's package: one of
+/// the module's, or `parts/<pkg>`.
+fn package_dir(module_dir : String, pkg : String) -> String {
+  if pkg.has_prefix("parts/") {
+    pkg
+  } else {
+    "\{module_dir}/\{pkg}"
+  }
 }
 
 ///|
@@ -449,6 +462,26 @@ async fn main {
       }
     }
   }
+  // The proved packages of parts/, which a ledger names as `parts/<pkg>`:
+  // the module's copies of them are what they hold (gen_parts.mbtx --check).
+  if module_dir != "parts" && all.get("parts") is Some(Object(parts)) {
+    for pkg, entry in parts {
+      guard entry is { "prelude": String(prelude), "solvers": Array(solvers), .. } else {
+        die(2, "\{config_path}: proved.parts.\{pkg} needs a prelude and solvers")
+      }
+      packages["parts/\{pkg}"] = (
+        prelude,
+        solvers.iter().any(s => s is String("cvc5")),
+      )
+      if entry is { "z3_only": Array(names), .. } {
+        for n in names {
+          if n is String(n) {
+            z3_only.push(n)
+          }
+        }
+      }
+    }
+  }
   let ledger = "\{module_dir}/PROOFS.md"
   guard is_file(ledger) else { die(2, "proof_check.mbtx: no ledger at \{ledger}") }
   let text = @fs.read_file(ledger).text()
@@ -571,7 +604,7 @@ async fn main {
       }
     }
     let mut ok = false
-    for file in sources("\{module_dir}/\{pkg}") {
+    for file in sources(package_dir(module_dir, pkg)) {
       guard file.has_suffix(".mbt") else { continue }
       if signature(@fs.read_file(file).text(), name) is Some(sig) {
         ok = sig.contains("proof_ensure:")
@@ -585,7 +618,7 @@ async fn main {
   }
   // The logic of the proved packages.
   for pkg, _ in packages {
-    for file in sources("\{module_dir}/\{pkg}") {
+    for file in sources(package_dir(module_dir, pkg)) {
       let source = @fs.read_file(file).text()
       let logic = if file.has_suffix(".mbtp") {
         [source]

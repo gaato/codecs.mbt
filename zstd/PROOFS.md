@@ -41,6 +41,7 @@ against the code.
 | `content_size_size` | `src/internal/frame` | FCS_Field_Size from Frame_Content_Size_Flag and Single_Segment_Flag: 0 or 1, 2, 4, 8 (section 3.1.1.1.1.1) | machine-int | none | Z3, CVC5 |
 | `header_len` | `src/internal/frame` | Core of `frame_header_len`: the descriptor, the Window_Descriptor unless single-segment, and the two fields, 2 to 14 bytes; refused exactly for the reserved bit | machine-int | none | Z3, CVC5 |
 | `window_size` | `src/internal/frame` | Core of the header package's `window_size`: `2^(10 + Exponent) + 2^(10 + Exponent) / 8 * Mantissa` (section 3.1.1.1.2), at most 2^41 + 7 * 2^38, with no overflow in 64 bits | machine-int | `shl1_u64`, `mantissa_u64` | Z3, CVC5 |
+| `build_table` | `src/internal/huffman` | Core of `Huffman::build` (section 4.2.1): refuses the weights, with the reason, exactly by the decoder's checks in order (a weight above 11; no weight but the implied one; Max_Number_of_Bits, the number of bits of the sum of 2^(Weight - 1), above 11; a gap to 2^Max_Number_of_Bits that is not a power of 2; no weight of 1, the implied one included), and never for overfilling the table; otherwise gives the implied last weight, `log2(gap) + 1`, returns Max_Number_of_Bits, and fills the table: the weights' shares make up its 2^Max_Number_of_Bits entries, and each symbol of weight `w > 0` has the 2^(w - 1) entries of its place in the order of weights and then symbols, each with the symbol and the code length `Max_Number_of_Bits + 1 - w`. It reads only inside its tables and writes the weights not at all | unbounded | `shl`, `byte_of` | Z3 only: CVC5 1.4.2 runs out of time on 11 of its goals at 30 s each, in `build_table`, `fill` and `place_apart`: the sums of the counts with a variable Max_Number_of_Bits, the case split on how two symbols' weights compare, and the frame of the table's blocks |
 
 ## Trusted bridges
 
@@ -51,6 +52,7 @@ against the code.
 | `shl` | `src/internal/proof_bits` | `x << k` is `x * 2^k` for `x >= 0`, `0 <= k <= 30`, while that fits an `Int` | `src/internal/proof_bits/shifts_test.mbt`: "shl is multiplication by 2^k while the product fits" |
 | `shl1_u64` | `src/internal/frame` | `1UL << k` is 2^k for `10 <= k <= 41` | `src/internal/frame/bridges_wbtest.mbt`: "shl1_u64 is 2^k for every window exponent" |
 | `mantissa_u64` | `src/internal/frame` | `m.to_uint64()` is `m` for `0 <= m <= 7` | `src/internal/frame/bridges_wbtest.mbt`: "mantissa_u64 is the mantissa for every mantissa" |
+| `byte_of` | `src/internal/huffman` | `x.to_byte().to_int()` is `x` for `0 <= x <= 255` | `src/internal/huffman/bridges_wbtest.mbt`: "byte_of is to_byte, for every byte" |
 
 `src/internal/proof_bits` is a copy of `parts/proof_bits`, where lemmas check
 that its table of powers of two doubles at every step. The proof of
@@ -61,4 +63,11 @@ and remainder is the field. The tables behind
 `window_size` from being proved); `scripts/proof_check.mbtx` checks their
 entries instead.
 
-Bridge budget: 5
+`Huffman::build` stores the implied last weight that `build_table` leaves
+in its scratch space after the others, and turns a refusal into the
+decoder's message. `build_table` counts the weights with `occ` of Why3's
+map.Occ, through `src/internal/proof_codes` (a copy of `parts/proof_codes`):
+its `#proof_import` declarations, of `occ` and of an array's elements, are
+trusted like the bridges to say what those Why3 symbols are.
+
+Bridge budget: 6

@@ -1,0 +1,14 @@
+// Generated from parts/proof_codes/moon.pkg by scripts/gen_parts.mbtx: edit it there, not here.
+// The arithmetic of prefix codes, for the proofs of the packages that build
+// and check them: how many code lengths have each value, Kraft's sum, and
+// codes in reverse bit order. Logic, and proof steps (codes.mbt) in place of
+// lemmas, so that the solvers see nothing else in the context of the proofs
+// that use it.
+
+import {
+  "gaato/deflate/internal/proof_bits",
+}
+
+proof_enabled = true
+
+supported_targets = "js + native + wasm + wasm-gc"

@@ -5,6 +5,7 @@ import {
   "gaato/brotli/internal/huffman",
   "gaato/brotli/internal/lz77",
   "gaato/brotli/internal/rules",
+  "gaato/brotli/internal/transform",
 }
 
 import {

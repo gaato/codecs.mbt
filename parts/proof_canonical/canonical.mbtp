@@ -1,0 +1,53 @@
+// The canonical codes of RFC 1951 section 3.2.2 as intervals of the 15-bit
+// code space.
+
+// Kraft's sum of the codes up to `m` bits (0 to 15): the sum of
+// `c[j] * 2^(15 - j)` for `j` from 1 to `m`. Where the canonical codes of
+// `m + 1` bits start, in units of 2^-15.
+fn kraft_upto(c : FixedArray[Int], m : Int) -> Int {
+  if m == 0 { 0 } else { if m == 1 { 16384 * c[1] } else { if m == 2 { 16384 * c[1] + 8192 * c[2] } else { if m == 3 { 16384 * c[1] + 8192 * c[2] + 4096 * c[3] } else { if m == 4 { 16384 * c[1] + 8192 * c[2] + 4096 * c[3] + 2048 * c[4] } else { if m == 5 { 16384 * c[1] + 8192 * c[2] + 4096 * c[3] + 2048 * c[4] + 1024 * c[5] } else { if m == 6 { 16384 * c[1] + 8192 * c[2] + 4096 * c[3] + 2048 * c[4] + 1024 * c[5] + 512 * c[6] } else { if m == 7 { 16384 * c[1] + 8192 * c[2] + 4096 * c[3] + 2048 * c[4] + 1024 * c[5] + 512 * c[6] + 256 * c[7] } else { if m == 8 { 16384 * c[1] + 8192 * c[2] + 4096 * c[3] + 2048 * c[4] + 1024 * c[5] + 512 * c[6] + 256 * c[7] + 128 * c[8] } else { if m == 9 { 16384 * c[1] + 8192 * c[2] + 4096 * c[3] + 2048 * c[4] + 1024 * c[5] + 512 * c[6] + 256 * c[7] + 128 * c[8] + 64 * c[9] } else { if m == 10 { 16384 * c[1] + 8192 * c[2] + 4096 * c[3] + 2048 * c[4] + 1024 * c[5] + 512 * c[6] + 256 * c[7] + 128 * c[8] + 64 * c[9] + 32 * c[10] } else { if m == 11 { 16384 * c[1] + 8192 * c[2] + 4096 * c[3] + 2048 * c[4] + 1024 * c[5] + 512 * c[6] + 256 * c[7] + 128 * c[8] + 64 * c[9] + 32 * c[10] + 16 * c[11] } else { if m == 12 { 16384 * c[1] + 8192 * c[2] + 4096 * c[3] + 2048 * c[4] + 1024 * c[5] + 512 * c[6] + 256 * c[7] + 128 * c[8] + 64 * c[9] + 32 * c[10] + 16 * c[11] + 8 * c[12] } else { if m == 13 { 16384 * c[1] + 8192 * c[2] + 4096 * c[3] + 2048 * c[4] + 1024 * c[5] + 512 * c[6] + 256 * c[7] + 128 * c[8] + 64 * c[9] + 32 * c[10] + 16 * c[11] + 8 * c[12] + 4 * c[13] } else { if m == 14 { 16384 * c[1] + 8192 * c[2] + 4096 * c[3] + 2048 * c[4] + 1024 * c[5] + 512 * c[6] + 256 * c[7] + 128 * c[8] + 64 * c[9] + 32 * c[10] + 16 * c[11] + 8 * c[12] + 4 * c[13] + 2 * c[14] } else { 16384 * c[1] + 8192 * c[2] + 4096 * c[3] + 2048 * c[4] + 1024 * c[5] + 512 * c[6] + 256 * c[7] + 128 * c[8] + 64 * c[9] + 32 * c[10] + 16 * c[11] + 8 * c[12] + 4 * c[13] + 2 * c[14] + 1 * c[15] } } } } } } } } } } } } } } }
+}
+
+// Where the codes that start with symbol `s`'s code start and end, scaled to
+// 15 bits: `s`'s code is a prefix exactly of the 15-bit sequences from
+// `code_start` up to before `code_end`.
+fn code_start(c : FixedArray[Int], lengths : FixedArray[Int], s : Int) -> Int {
+  scaled(@proof_codes.canonical(c, lengths, s), lengths[s])
+}
+
+fn code_end(c : FixedArray[Int], lengths : FixedArray[Int], s : Int) -> Int {
+  scaled(@proof_codes.canonical(c, lengths, s) + 1, lengths[s])
+}
+
+// `x * 2^(15 - l)`, a code of `l` bits (1 to 15) scaled to 15 bits, as a
+// table: CVC5 does not multiply by a power of 2 it has to look up.
+fn scaled(x : Int, l : Int) -> Int {
+  if l == 1 { x * 16384 } else { if l == 2 { x * 8192 } else { if l == 3 { x * 4096 } else { if l == 4 { x * 2048 } else { if l == 5 { x * 1024 } else { if l == 6 { x * 512 } else { if l == 7 { x * 256 } else { if l == 8 { x * 128 } else { if l == 9 { x * 64 } else { if l == 10 { x * 32 } else { if l == 11 { x * 16 } else { if l == 12 { x * 8 } else { if l == 13 { x * 4 } else { if l == 14 { x * 2 } else { x } } } } } } } } } } } } } }
+}
+
+predicate order_pre(
+  c : FixedArray[Int],
+  lengths : FixedArray[Int],
+  n : Int,
+  s : Int,
+  t : Int,
+) {
+  @proof_codes.lengths_within(lengths, n, 15) &&
+  @proof_codes.coded_counted(c, lengths, n) &&
+  @proof_codes.counts_nonneg(c) &&
+  0 <= s &&
+  s < n &&
+  0 <= t &&
+  t < n &&
+  @proof_codes.canonically_before(lengths, s, t)
+}
+
+// Symbol `s` of the counted lengths has a code.
+predicate coded_at(c : FixedArray[Int], lengths : FixedArray[Int], n : Int, s : Int) {
+  @proof_codes.lengths_within(lengths, n, 15) &&
+  @proof_codes.coded_counted(c, lengths, n) &&
+  @proof_codes.counts_nonneg(c) &&
+  0 <= s &&
+  s < n &&
+  lengths[s] > 0
+}

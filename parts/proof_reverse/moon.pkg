@@ -1,0 +1,13 @@
+// A theorem about the reversal of codes that parts/proof_codes defines:
+// reversing twice gives the code back. Nothing imports it; `moon prove`
+// proves it here, apart from the packages that use the reversal, whose
+// solvers would otherwise have its many steps in their context.
+
+import {
+  "gaato/codec_parts/proof_bits",
+  "gaato/codec_parts/proof_codes",
+}
+
+proof_enabled = true
+
+supported_targets = "js + native + wasm + wasm-gc"

@@ -1,0 +1,15 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/codec_parts/proof_controls/codes"
+
+// Values
+pub fn complete_or_over(FixedArray[Int]) -> Bool
+
+pub fn first_not_counted(FixedArray[Int]) -> Unit
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+
+// Traits

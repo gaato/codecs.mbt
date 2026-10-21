@@ -88,6 +88,9 @@ async fn main {
   run("moon", ["update"])
   // The modules' copies of parts/ are what parts/ holds.
   run("moon", ["run", "scripts/gen_parts.mbtx", "--", "--check"])
+  // The proof that reversing a code twice gives it back is what its generator
+  // writes.
+  run("moon", ["run", "scripts/gen_proof_reverse.mbtx", "--", "--check"])
   // Every proof ledger (PROOFS.md) agrees with the code: the proved functions
   // have contracts, every trusted bridge is listed with tests that exist.
   for dir in ledgered() {

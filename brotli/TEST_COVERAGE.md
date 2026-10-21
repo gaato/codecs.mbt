@@ -28,8 +28,10 @@ streams built bit by bit, and seeded pseudo-random splits and corruptions.
   under `src/internal/bits/`, `src/internal/huffman/` and
   `src/internal/lz77/`, the building blocks copied from `parts/` (the bit
   writer, prefix codes and decoding tables, the match finder), measured
-  here through the tests copied with them; and under `src/internal/rules/`,
-  the decoder's pure functions of the values it has read. The test-only
+  here through the tests copied with them, with the proof packages
+  `src/internal/proof_bits/` and `src/internal/proof_codes/`; and under
+  `src/internal/rules/` and `src/internal/transform/`, the decoder's pure
+  functions of the values it has read and its dictionary word transforms. The test-only
   checksum package and the crosscheck tool under `src/internal/` are not
   measured.
 - Counts are Coveralls lines: lines with at least one instrumented point,

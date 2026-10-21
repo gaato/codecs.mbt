@@ -227,33 +227,64 @@ priv enum Shape {
 }
 
 ///|
+/// The verdict on the lengths `lengths[0:n]`, each 0 to 15, with `counts`
+/// (16 entries) as scratch space.
 fn shape(
   lengths : FixedArray[Int32],
   n : Int32,
   counts : FixedArray[Int32],
-) -> Shape {
-  counts.fill(0)
-  for s in 0..<n {
-    counts[lengths[s]] += 1
+) -> Shape where {
+  proof_require: shape_pre(lengths, n, counts),
+  proof_ensure: result => shape_post(lengths, n, counts, result),
+} {
+  for l = 0; l < 16; {
+    counts[l] = 0
+    continue l + 1
+  } where {
+    proof_invariant: 0 <= l && l <= 16,
+    proof_invariant: counts.length() == 16,
+    proof_invariant: zero_below(counts, l),
   }
+  for s = 0; s < n; {
+    counts[lengths[s]] = counts[lengths[s]] + 1
+    continue s + 1
+  } where {
+    proof_invariant: 0 <= s && s <= n,
+    proof_invariant: counts.length() == 16,
+    proof_invariant: @proof_codes.counted(counts, lengths, s),
+  }
+  // The code space left after each length: below 0 is over-subscribed (and
+  // stays so), 0 at the end complete.
   let mut left = 1
   let mut longest = 0
-  for l in 1..<=15 {
-    left = (left << 1) - counts[l]
-    if left < 0 {
-      return Bad
-    }
+  for l = 1; l < 16; {
+    @proof_codes.space_left_step(counts, l - 1)
+    left = 2 * left - counts[l]
     if counts[l] > 0 {
       longest = l
     }
+    continue l + 1
+  } where {
+    proof_invariant: 1 <= l && l <= 16,
+    proof_invariant: left == @proof_codes.space_left(counts, l - 1),
+    proof_invariant: longest_upto(counts, l - 1, longest),
   }
-  if left == 0 {
+  proof_assert left == @proof_codes.space_left(counts, 15)
+  proof_assert @proof_codes.none_longer(counts, longest)
+  @proof_codes.kraft_space(counts)
+  if left < 0 {
+    Bad
+  } else if left == 0 {
     Complete
   } else if longest == 0 {
     Empty
   } else if longest == 1 {
+    @proof_codes.kraft_one_bit(counts)
+    proof_assert counts[1] == 1
     Lone
   } else {
+    proof_assert counts[longest] > 0
+    proof_assert !lone_code(counts)
     Bad
   }
 }

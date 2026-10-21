@@ -1,0 +1,61 @@
+// What `shape` judges (RFC 1951 section 3.2.2, as zlib's inftrees.c reads
+// it): code lengths of 0 to 15, by their counts and Kraft's sum.
+
+predicate shape_pre(lengths : FixedArray[Int], n : Int, counts : FixedArray[Int]) {
+  @proof_codes.lengths_within(lengths, n, 15) && counts.length() == 16
+}
+
+// `counts` ends up counting the lengths, and the verdict is the one their
+// Kraft's sum gives: over 2^15 is over-subscribed, 2^15 complete; below,
+// the code is a lone code of one bit, no code at all, or incomplete
+// otherwise.
+predicate shape_post(
+  lengths : FixedArray[Int],
+  n : Int,
+  counts : FixedArray[Int],
+  result : Shape,
+) {
+  @proof_codes.counted(counts, lengths, n) && verdict(counts, result)
+}
+
+predicate verdict(c : FixedArray[Int], result : Shape) {
+  match result {
+    Complete => @proof_codes.kraft(c) == 32768
+    Lone => @proof_codes.kraft(c) < 32768 && lone_code(c)
+    Empty => @proof_codes.kraft(c) < 32768 && @proof_codes.none_longer(c, 0)
+    Bad => @proof_codes.kraft(c) > 32768 || incomplete_bad(c)
+  }
+}
+
+// One symbol has a code, of one bit.
+predicate lone_code(c : FixedArray[Int]) {
+  c[1] == 1 && @proof_codes.none_longer(c, 1)
+}
+
+// Incomplete, and neither a lone code of one bit nor no code at all.
+predicate incomplete_bad(c : FixedArray[Int]) {
+  @proof_codes.kraft(c) < 32768 &&
+  !lone_code(c) &&
+  !@proof_codes.none_longer(c, 0)
+}
+
+// `longest` is the longest length up to `l` that some symbol has, or 0 when
+// none up to `l` has.
+predicate longest_upto(c : FixedArray[Int], l : Int, longest : Int) {
+  0 <= longest &&
+  longest <= l &&
+  none_between(c, longest, l) &&
+  longest_held(c, longest)
+}
+
+predicate none_between(c : FixedArray[Int], lo : Int, hi : Int) {
+  ∀ j : Int, lo < j && j <= hi → c[j] == 0
+}
+
+predicate longest_held(c : FixedArray[Int], longest : Int) {
+  longest == 0 || c[longest] > 0
+}
+
+predicate zero_below(c : FixedArray[Int], l : Int) {
+  ∀ j : Int, 0 <= j && j < l → c[j] == 0
+}

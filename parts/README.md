@@ -5,11 +5,14 @@ share; each format's module carries copies of the files it uses.
 
 | Package | Holds | Copied into |
 | --- | --- | --- |
-| `huffman` | Huffman code lengths and canonical codes for encoders, and `CodeMaker`, libdeflate's way of building length-limited codes; decoding tables (`Builder`) and their size bounds (`max_entries`) for decoders | brotli, deflate (`CodeMaker` deflate only) |
+| `huffman` | Huffman code lengths and canonical codes for encoders, and `CodeMaker`, libdeflate's way of building length-limited codes; decoding tables (`Builder`) and their size bounds (`max_entries`) for decoders. `moon prove` checks its reversal of bits and its canonical codes | brotli, deflate (`CodeMaker` deflate only) |
 | `bits` | `BitPacker`, an encoder's least-significant-bit-first bit writer and output buffer | brotli |
 | `lz77` | The hash and match length of LZ77 match finders; `Matcher`, a greedy one with bucketed hash chains; `HcMatchfinder` and `HtMatchfinder`, libdeflate's hash-chain and hash-table finders | brotli (`Matcher`), deflate (the other two) |
 | `proof_bits` | The trusted bridges of `moon prove`: shifts and masks behind contracts that state their arithmetic, with the tests that back them | zstd, brotli, deflate |
 | `proof_fields` | A lemma for proofs of header parsers: a bit field read with division and remainder is the field (apart from `proof_bits`, so that solvers prove it with nothing else in their context) | zstd |
+| `proof_codes` | The arithmetic of prefix codes for `moon prove`: counts of code lengths, Kraft's sum, canonical codes and codes in reverse bit order, with proof steps (functions whose contracts are facts about them) in place of lemmas, which would slow the solvers down in every package that imports it | zstd, brotli, deflate |
+| `proof_reverse` | A theorem: reversing a code's bits twice gives the code back. `scripts/gen_proof_reverse.mbtx` writes it (`-- --check` is part of the gates) | none |
+| `proof_canonical` | A theorem: canonical codes increase in canonical order, form a prefix code, and fit their lengths when Kraft's sum is at most 1 | none |
 | `proof_controls` | Negative controls for `moon prove`: false claims that every solver must refuse (`scripts/prove.mbtx`) | none |
 
 ## Why copies

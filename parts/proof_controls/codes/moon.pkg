@@ -1,0 +1,13 @@
+// A negative control for `moon prove` with unbounded integers: claims about
+// prefix codes that are false, through the logic of proof_codes.
+// scripts/prove.mbtx requires every solver to fail on it; one that proves
+// it is broken, or the counting that proof_codes imports from Why3 claims
+// more than it should.
+
+import {
+  "gaato/codec_parts/proof_codes",
+}
+
+proof_enabled = true
+
+supported_targets = "js + native + wasm + wasm-gc"

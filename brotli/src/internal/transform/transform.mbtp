@@ -1,0 +1,26 @@
+// Where `transform_into` and `ferment` write.
+
+predicate transform_pre(
+  out : FixedArray[Byte],
+  prefix : BytesView,
+  word : BytesView,
+  kind : Int,
+  suffix : BytesView,
+) {
+  prefix.length() + word.length() + suffix.length() <= out.length() &&
+  first_has_word(kind, word)
+}
+
+// FermentFirst uppercases the word's first character: there is one. (The
+// decoder's words are 4 to 24 bytes, and FermentFirst cuts nothing.)
+predicate first_has_word(kind : Int, word : BytesView) {
+  kind == 10 → word.length() > 0
+}
+
+// The word is `out[start:start + length]`, and `pos` a position in it.
+predicate ferment_pre(out : FixedArray[Byte], start : Int, length : Int, pos : Int) {
+  0 <= start &&
+  0 <= pos &&
+  pos < length &&
+  start + length <= out.length()
+}

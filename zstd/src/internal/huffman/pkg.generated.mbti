@@ -1,0 +1,25 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/zstd/internal/huffman"
+
+// Values
+pub const INCOMPLETE : Int = -4
+
+pub const NO_WEIGHT_ONE : Int = -5
+
+pub const ONE_SYMBOL : Int = -2
+
+pub const OVERFULL : Int = -6
+
+pub const TOO_DEEP : Int = -3
+
+pub const WEIGHT_TOO_LARGE : Int = -1
+
+pub fn build_table(FixedArray[Int], Int, FixedArray[Byte], FixedArray[Byte], FixedArray[Int], FixedArray[Int]) -> Int
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+
+// Traits

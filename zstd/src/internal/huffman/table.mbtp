@@ -1,0 +1,557 @@
+// RFC 8878 section 4.2.1: weights, the implied last weight, and the table
+// they give.
+
+// The sum of 2^(w - 1) over the weights `w` of `weights[0:u)` up to 11, the
+// total the RFC's Max_Number_of_Bits and last weight come from.
+fn weight_sum(weights : FixedArray[Int], u : Int) -> Int {
+  1 * @proof_codes.numof(weights, 1, 0, u) + 2 * @proof_codes.numof(weights, 2, 0, u) + 4 * @proof_codes.numof(weights, 3, 0, u) + 8 * @proof_codes.numof(weights, 4, 0, u) + 16 * @proof_codes.numof(weights, 5, 0, u) + 32 * @proof_codes.numof(weights, 6, 0, u) + 64 * @proof_codes.numof(weights, 7, 0, u) + 128 * @proof_codes.numof(weights, 8, 0, u) + 256 * @proof_codes.numof(weights, 9, 0, u) + 512 * @proof_codes.numof(weights, 10, 0, u) + 1024 * @proof_codes.numof(weights, 11, 0, u)
+}
+
+// The same sum from counts of the weights: `c[w]` weights of each `w`, up
+// to `m` (0 to 11).
+fn total_upto(c : FixedArray[Int], m : Int) -> Int {
+  if m == 0 { 0 } else { if m == 1 { 1 * c[1] } else { if m == 2 { 1 * c[1] + 2 * c[2] } else { if m == 3 { 1 * c[1] + 2 * c[2] + 4 * c[3] } else { if m == 4 { 1 * c[1] + 2 * c[2] + 4 * c[3] + 8 * c[4] } else { if m == 5 { 1 * c[1] + 2 * c[2] + 4 * c[3] + 8 * c[4] + 16 * c[5] } else { if m == 6 { 1 * c[1] + 2 * c[2] + 4 * c[3] + 8 * c[4] + 16 * c[5] + 32 * c[6] } else { if m == 7 { 1 * c[1] + 2 * c[2] + 4 * c[3] + 8 * c[4] + 16 * c[5] + 32 * c[6] + 64 * c[7] } else { if m == 8 { 1 * c[1] + 2 * c[2] + 4 * c[3] + 8 * c[4] + 16 * c[5] + 32 * c[6] + 64 * c[7] + 128 * c[8] } else { if m == 9 { 1 * c[1] + 2 * c[2] + 4 * c[3] + 8 * c[4] + 16 * c[5] + 32 * c[6] + 64 * c[7] + 128 * c[8] + 256 * c[9] } else { if m == 10 { 1 * c[1] + 2 * c[2] + 4 * c[3] + 8 * c[4] + 16 * c[5] + 32 * c[6] + 64 * c[7] + 128 * c[8] + 256 * c[9] + 512 * c[10] } else { 1 * c[1] + 2 * c[2] + 4 * c[3] + 8 * c[4] + 16 * c[5] + 32 * c[6] + 64 * c[7] + 128 * c[8] + 256 * c[9] + 512 * c[10] + 1024 * c[11] } } } } } } } } } } }
+}
+
+// Max_Number_of_Bits for a total (1 to 2^20): the number of its bits, so
+// that 2^Max_Number_of_Bits is the power of 2 just above it; 12 for any
+// past 11.
+fn bits_of(total : Int) -> Int {
+  if total < 2 { 1 } else { if total < 4 { 2 } else { if total < 8 { 3 } else { if total < 16 { 4 } else { if total < 32 { 5 } else { if total < 64 { 6 } else { if total < 128 { 7 } else { if total < 256 { 8 } else { if total < 512 { 9 } else { if total < 1024 { 10 } else { if total < 2048 { 11 } else { 12 } } } } } } } } } } }
+}
+
+// The implied weight whose share 2^(w - 1) is `left`, or 0 when `left` is
+// not a power of 2 up to 1,024.
+fn implied_of(left : Int) -> Int {
+  if left == 1 { 1 } else { if left == 2 { 2 } else { if left == 4 { 3 } else { if left == 8 { 4 } else { if left == 16 { 5 } else { if left == 32 { 6 } else { if left == 64 { 7 } else { if left == 128 { 8 } else { if left == 256 { 9 } else { if left == 512 { 10 } else { if left == 1024 { 11 } else { 0 } } } } } } } } } } }
+}
+
+// `x * 2^(w - 1)`, the entries of `x` symbols of weight `w` (1 to 11), as a
+// table: with `2^(w - 1)` looked up, the product is not linear, and Z3 does
+// not compare such sums.
+fn share(x : Int, w : Int) -> Int {
+  if w == 1 { 1 * x } else { if w == 2 { 2 * x } else { if w == 3 { 4 * x } else { if w == 4 { 8 * x } else { if w == 5 { 16 * x } else { if w == 6 { 32 * x } else { if w == 7 { 64 * x } else { if w == 8 { 128 * x } else { if w == 9 { 256 * x } else { if w == 10 { 512 * x } else { 1024 * x } } } } } } } } } }
+}
+
+predicate weights_ok(weights : FixedArray[Int], count : Int) {
+  0 <= count && count <= 255 && weights.length() == 256 && weights_nonneg(weights, count)
+}
+
+predicate weights_nonneg(weights : FixedArray[Int], count : Int) {
+  ∀ i : Int, 0 <= i && i < count → weights[i] >= 0
+}
+
+predicate all_small(weights : FixedArray[Int], count : Int) {
+  ∀ i : Int, 0 <= i && i < count → weights[i] <= 11
+}
+
+predicate build_pre(
+  weights : FixedArray[Int],
+  count : Int,
+  symbol : FixedArray[Byte],
+  nbits : FixedArray[Byte],
+  wcount : FixedArray[Int],
+  start : FixedArray[Int],
+) {
+  weights_ok(weights, count) &&
+  symbol.length() == 2048 &&
+  nbits.length() == 2048 &&
+  wcount.length() == 12 &&
+  start.length() == 13
+}
+
+// The verdict, in the decoder's order of checks, and for weights it
+// accepts, the table. Each refusal holds exactly when the checks before it
+// pass and it fails.
+predicate build_post(
+  weights : FixedArray[Int],
+  count : Int,
+  symbol : FixedArray[Byte],
+  nbits : FixedArray[Byte],
+  wcount : FixedArray[Int],
+  start : FixedArray[Int],
+  result : Int,
+) {
+  result == -1 && !all_small(weights, count) ||
+  all_small(weights, count) &&
+  small_post(weights, count, symbol, nbits, wcount, start, result)
+}
+
+predicate small_post(
+  weights : FixedArray[Int],
+  count : Int,
+  symbol : FixedArray[Byte],
+  nbits : FixedArray[Byte],
+  wcount : FixedArray[Int],
+  start : FixedArray[Int],
+  result : Int,
+) {
+  result == -2 && weight_sum(weights, count) == 0 ||
+  weight_sum(weights, count) > 0 &&
+  some_post(weights, count, symbol, nbits, wcount, start, result)
+}
+
+predicate some_post(
+  weights : FixedArray[Int],
+  count : Int,
+  symbol : FixedArray[Byte],
+  nbits : FixedArray[Byte],
+  wcount : FixedArray[Int],
+  start : FixedArray[Int],
+  result : Int,
+) {
+  result == -3 && bits_of(weight_sum(weights, count)) > 11 ||
+  bits_of(weight_sum(weights, count)) <= 11 &&
+  shallow_post(weights, count, symbol, nbits, wcount, start, result)
+}
+
+// The share left to the last weight, 2^Max_Number_of_Bits minus the total.
+fn left_of(weights : FixedArray[Int], count : Int) -> Int {
+  @proof_bits.pow2(bits_of(weight_sum(weights, count))) - weight_sum(weights, count)
+}
+
+predicate shallow_post(
+  weights : FixedArray[Int],
+  count : Int,
+  symbol : FixedArray[Byte],
+  nbits : FixedArray[Byte],
+  wcount : FixedArray[Int],
+  start : FixedArray[Int],
+  result : Int,
+) {
+  result == -4 && implied_of(left_of(weights, count)) == 0 ||
+  implied_of(left_of(weights, count)) > 0 &&
+  start[0] == implied_of(left_of(weights, count)) &&
+  complete_post(weights, count, start[0], symbol, nbits, wcount, result)
+}
+
+// With the last weight `last`, the weights' shares add up to
+// 2^Max_Number_of_Bits.
+predicate complete_post(
+  weights : FixedArray[Int],
+  count : Int,
+  last : Int,
+  symbol : FixedArray[Byte],
+  nbits : FixedArray[Byte],
+  wcount : FixedArray[Int],
+  result : Int,
+) {
+  result == -5 && ones(weights, count, last) == 0 ||
+  ones(weights, count, last) > 0 &&
+  result == bits_of(weight_sum(weights, count)) &&
+  table_ok(weights, count, last, symbol, nbits, wcount, result)
+}
+
+// The weights of 1, the last one's included.
+fn ones(weights : FixedArray[Int], count : Int, last : Int) -> Int {
+  @proof_codes.numof(weights, 1, 0, count) + indicator(last, 1)
+}
+
+// 1 when `a` is `b`, else 0.
+fn indicator(a : Int, b : Int) -> Int {
+  if a == b { 1 } else { 0 }
+}
+
+// The weight of symbol `s`: `weights[s]` for the symbols before `count`,
+// `last` for the symbol at `count`.
+fn weight_of(weights : FixedArray[Int], count : Int, last : Int, s : Int) -> Int {
+  if s == count { last } else { weights[s] }
+}
+
+// `c[0..12)` count the weights of `weights[0:u)`.
+predicate counted_weights(c : FixedArray[Int], weights : FixedArray[Int], u : Int) {
+  ∀ w : Int, 0 <= w && w <= 11 → c[w] == @proof_codes.numof(weights, w, 0, u)
+}
+
+// `c[0..12)` count the weights of `weights[0:count)` and `last`.
+predicate counted_all(c : FixedArray[Int], weights : FixedArray[Int], count : Int, last : Int) {
+  ∀ w : Int, 0 <= w && w <= 11 →
+    c[w] == @proof_codes.numof(weights, w, 0, count) + indicator(last, w)
+}
+
+// The table of the weights `weights[0:count)` and `last`, counted by `c`,
+// with codes of up to `max_bits` bits: the weights' shares fill the table
+// exactly, and each symbol of weight `w > 0` has the 2^(w - 1) entries of
+// its place in the order of weights and symbols, with its symbol and code
+// length `max_bits + 1 - w`.
+predicate table_ok(
+  weights : FixedArray[Int],
+  count : Int,
+  last : Int,
+  symbol : FixedArray[Byte],
+  nbits : FixedArray[Byte],
+  c : FixedArray[Int],
+  max_bits : Int,
+) {
+  counted_all(c, weights, count, last) &&
+  total_upto(c, max_bits) == @proof_bits.pow2(max_bits) &&
+  none_heavier(c, max_bits) &&
+  blocks_all(weights, count, last, c, max_bits) &&
+  entries_upto(weights, count, last, symbol, nbits, c, max_bits, count + 1)
+}
+
+predicate none_heavier(c : FixedArray[Int], max_bits : Int) {
+  ∀ w : Int, max_bits < w && w <= 11 → c[w] == 0
+}
+
+// Where symbol `s`'s entries start: after the blocks of the lighter weights
+// and the symbols of its weight before it.
+fn first_entry(
+  weights : FixedArray[Int],
+  count : Int,
+  last : Int,
+  c : FixedArray[Int],
+  s : Int,
+) -> Int {
+  total_upto(c, weight_of(weights, count, last, s) - 1) +
+  share(
+    @proof_codes.numof(weights, weight_of(weights, count, last, s), 0, s),
+    weight_of(weights, count, last, s),
+  )
+}
+
+// The symbols before `i` (up to `count + 1`) have their entries.
+predicate entries_upto(
+  weights : FixedArray[Int],
+  count : Int,
+  last : Int,
+  symbol : FixedArray[Byte],
+  nbits : FixedArray[Byte],
+  c : FixedArray[Int],
+  max_bits : Int,
+  i : Int,
+) {
+  ∀ s : Int, 0 <= s && s < i && weight_of(weights, count, last, s) > 0 →
+    entries_of(weights, count, last, symbol, nbits, c, max_bits, s)
+}
+
+predicate entries_of(
+  weights : FixedArray[Int],
+  count : Int,
+  last : Int,
+  symbol : FixedArray[Byte],
+  nbits : FixedArray[Byte],
+  c : FixedArray[Int],
+  max_bits : Int,
+  s : Int,
+) {
+  ∀ k : Int, in_range(weights, count, last, c, s, k) →
+    symbol[k].to_int() == s &&
+    nbits[k].to_int() == max_bits + 1 - weight_of(weights, count, last, s)
+}
+
+predicate zero_below(c : FixedArray[Int], w : Int) {
+  ∀ j : Int, 0 <= j && j < w → c[j] == 0
+}
+
+predicate count_weights_pre(weights : FixedArray[Int], count : Int, wcount : FixedArray[Int]) {
+  weights_ok(weights, count) && wcount.length() == 12
+}
+
+// Whether some weight of `weights[0:i)` is above 11.
+predicate big_upto(weights : FixedArray[Int], i : Int, big : Bool) {
+  if big { !all_small(weights, i) } else { all_small(weights, i) }
+}
+
+predicate counts_within(c : FixedArray[Int], u : Int) {
+  ∀ w : Int, 0 <= w && w <= 11 → 0 <= c[w] && c[w] <= u
+}
+
+predicate count_weights_post(
+  weights : FixedArray[Int],
+  count : Int,
+  wcount : FixedArray[Int],
+  big : Bool,
+) {
+  wcount.length() == 12 &&
+  counted_weights(wcount, weights, count) &&
+  counts_within(wcount, count) &&
+  big_upto(weights, count, big)
+}
+
+predicate not_power_below(left : Int, k : Int) {
+  ∀ j : Int, 0 <= j && j < k → @proof_bits.pow2(j) != left
+}
+
+predicate fill_pre(
+  weights : FixedArray[Int],
+  count : Int,
+  last : Int,
+  symbol : FixedArray[Byte],
+  nbits : FixedArray[Byte],
+  c : FixedArray[Int],
+  start : FixedArray[Int],
+  max_bits : Int,
+) {
+  weights_ok(weights, count) &&
+  all_small(weights, count) &&
+  1 <= last &&
+  last <= max_bits &&
+  1 <= max_bits &&
+  max_bits <= 11 &&
+  symbol.length() == 2048 &&
+  nbits.length() == 2048 &&
+  c.length() == 12 &&
+  start.length() == 13 &&
+  start[0] == last &&
+  counted_all(c, weights, count, last) &&
+  counts_within(c, 256) &&
+  total_upto(c, max_bits) == @proof_bits.pow2(max_bits) &&
+  none_heavier(c, max_bits)
+}
+
+// `start[1..=w]` are where the blocks of weights 1 to `w` start.
+predicate starts_upto(start : FixedArray[Int], c : FixedArray[Int], w : Int) {
+  ∀ v : Int, 1 <= v && v <= w → start[v] == total_upto(c, v - 1)
+}
+
+// The blocks of the weights below `w` have their code lengths.
+predicate blocks_upto(nbits : FixedArray[Byte], c : FixedArray[Int], max_bits : Int, w : Int) {
+  ∀ v : Int, 1 <= v && v < w → block_ok(nbits, c, max_bits, v)
+}
+
+predicate block_ok(nbits : FixedArray[Byte], c : FixedArray[Int], max_bits : Int, v : Int) {
+  ∀ j : Int, total_upto(c, v - 1) <= j && j < total_upto(c, v) →
+    nbits[j].to_int() == max_bits + 1 - v
+}
+
+// The entries of the block of weight `w` before `k` have its code length.
+predicate lengths_from(
+  nbits : FixedArray[Byte],
+  c : FixedArray[Int],
+  max_bits : Int,
+  w : Int,
+  k : Int,
+) {
+  ∀ j : Int, total_upto(c, w - 1) <= j && j < k → nbits[j].to_int() == max_bits + 1 - w
+}
+
+// The entries `symbol[first..k)` are symbol `i`'s.
+predicate symbols_from(symbol : FixedArray[Byte], first : Int, k : Int, i : Int) {
+  ∀ j : Int, first <= j && j < k → symbol[j].to_int() == i
+}
+
+// The sums grow with the weights.
+predicate totals_mono(c : FixedArray[Int]) {
+  totals_mono_upto(c, 11)
+}
+
+predicate totals_mono_upto(c : FixedArray[Int], b : Int) {
+  ∀ x : Int, ∀ y : Int, 0 <= x && x <= y && y <= b → total_upto(c, x) <= total_upto(c, y)
+}
+
+// Symbol `i`'s entries, from `first`, lie in the block of its weight.
+predicate in_block(
+  weights : FixedArray[Int],
+  count : Int,
+  last : Int,
+  c : FixedArray[Int],
+  max_bits : Int,
+  i : Int,
+  first : Int,
+) {
+  first == first_entry(weights, count, last, c, i) &&
+  total_upto(c, weight_of(weights, count, last, i) - 1) <= first &&
+  first + @proof_bits.pow2(weight_of(weights, count, last, i) - 1) <=
+  total_upto(c, weight_of(weights, count, last, i)) &&
+  weight_of(weights, count, last, i) <= max_bits
+}
+
+// After the symbols before `i` (up to `count`), `start[w]` is where the
+// next symbol of weight `w` goes.
+predicate next_entries(
+  start : FixedArray[Int],
+  weights : FixedArray[Int],
+  count : Int,
+  c : FixedArray[Int],
+  max_bits : Int,
+  i : Int,
+) {
+  i > count || all_next(start, weights, c, max_bits, i)
+}
+
+predicate all_next(
+  start : FixedArray[Int],
+  weights : FixedArray[Int],
+  c : FixedArray[Int],
+  max_bits : Int,
+  i : Int,
+) {
+  ∀ w : Int, 1 <= w && w <= max_bits →
+    start[w] ==
+      total_upto(c, w - 1) +
+      share(@proof_codes.numof(weights, w, 0, i), w)
+}
+
+predicate place_pre(
+  weights : FixedArray[Int],
+  count : Int,
+  last : Int,
+  c : FixedArray[Int],
+  start : FixedArray[Int],
+  max_bits : Int,
+  i : Int,
+) {
+  weights_ok(weights, count) &&
+  all_small(weights, count) &&
+  1 <= last &&
+  last <= max_bits &&
+  max_bits <= 11 &&
+  c.length() == 12 &&
+  start.length() == 13 &&
+  0 <= i &&
+  i <= count &&
+  weight_of(weights, count, last, i) > 0 &&
+  counted_all(c, weights, count, last) &&
+  none_heavier(c, max_bits) &&
+  all_next(start, weights, c, max_bits, i)
+}
+
+predicate apart_pre(
+  weights : FixedArray[Int],
+  count : Int,
+  last : Int,
+  c : FixedArray[Int],
+  start : FixedArray[Int],
+  max_bits : Int,
+  i : Int,
+) {
+  0 <= i &&
+  i <= count &&
+  weight_of(weights, count, last, i) > 0 &&
+  in_block(weights, count, last, c, max_bits, i, start[weight_of(weights, count, last, i)]) &&
+  blocks_all(weights, count, last, c, max_bits) &&
+  totals_mono(c) &&
+  all_small(weights, count) &&
+  last <= max_bits &&
+  max_bits <= 11
+}
+
+// The entries of the symbols before `i` lie outside the 2^(w - 1) entries
+// from `first`, `w` being `i`'s weight.
+predicate apart_upto(
+  weights : FixedArray[Int],
+  count : Int,
+  last : Int,
+  c : FixedArray[Int],
+  i : Int,
+  first : Int,
+) {
+  ∀ s : Int, 0 <= s && s < i && weight_of(weights, count, last, s) > 0 →
+    apart(weights, count, last, c, s, first, first + @proof_bits.pow2(weight_of(weights, count, last, i) - 1))
+}
+
+predicate apart(
+  weights : FixedArray[Int],
+  count : Int,
+  last : Int,
+  c : FixedArray[Int],
+  s : Int,
+  lo : Int,
+  hi : Int,
+) {
+  first_entry(weights, count, last, c, s) +
+  @proof_bits.pow2(weight_of(weights, count, last, s) - 1) <=
+  lo ||
+  first_entry(weights, count, last, c, s) >= hi
+}
+
+predicate fill_symbol_pre(
+  weights : FixedArray[Int],
+  count : Int,
+  last : Int,
+  symbol : FixedArray[Byte],
+  nbits : FixedArray[Byte],
+  c : FixedArray[Int],
+  max_bits : Int,
+  i : Int,
+  first : Int,
+  span : Int,
+) {
+  symbol.length() == 2048 &&
+  0 <= i &&
+  i <= count &&
+  count <= 255 &&
+  0 <= first &&
+  first + span <= 2048 &&
+  span == @proof_bits.pow2(weight_of(weights, count, last, i) - 1) &&
+  apart_upto(weights, count, last, c, i, first) &&
+  entries_upto(weights, count, last, symbol, nbits, c, max_bits, i)
+}
+
+predicate blocks_pre(
+  weights : FixedArray[Int],
+  count : Int,
+  last : Int,
+  c : FixedArray[Int],
+  max_bits : Int,
+) {
+  weights_ok(weights, count) &&
+  all_small(weights, count) &&
+  1 <= last &&
+  last <= max_bits &&
+  max_bits <= 11 &&
+  c.length() == 12 &&
+  counted_all(c, weights, count, last) &&
+  none_heavier(c, max_bits)
+}
+
+predicate blocks_all(
+  weights : FixedArray[Int],
+  count : Int,
+  last : Int,
+  c : FixedArray[Int],
+  max_bits : Int,
+) {
+  blocks_below(weights, count, last, c, max_bits, count + 1)
+}
+
+predicate blocks_below(
+  weights : FixedArray[Int],
+  count : Int,
+  last : Int,
+  c : FixedArray[Int],
+  max_bits : Int,
+  u : Int,
+) {
+  ∀ s : Int, 0 <= s && s < u && weight_of(weights, count, last, s) > 0 →
+    in_block(weights, count, last, c, max_bits, s, first_entry(weights, count, last, c, s))
+}
+
+predicate share_next_all(w : Int) {
+  ∀ x : Int, share(x + 1, w) == share(x, w) + @proof_bits.pow2(w - 1)
+}
+
+predicate share_grows_all(w : Int) {
+  ∀ x : Int, ∀ y : Int, x <= y → share(x, w) <= share(y, w)
+}
+
+// Entry `k` is none of the entries of the symbols before `i`.
+predicate avoided(
+  weights : FixedArray[Int],
+  count : Int,
+  last : Int,
+  c : FixedArray[Int],
+  i : Int,
+  k : Int,
+) {
+  ∀ s : Int, ∀ j : Int,
+    0 <= s && s < i && weight_of(weights, count, last, s) > 0 && in_range(weights, count, last, c, s, j) →
+      j != k
+}
+
+// Entry `j` of the table is one of symbol `s`'s.
+predicate in_range(
+  weights : FixedArray[Int],
+  count : Int,
+  last : Int,
+  c : FixedArray[Int],
+  s : Int,
+  j : Int,
+) {
+  0 <= j &&
+  j < 2048 &&
+  first_entry(weights, count, last, c, s) <= j &&
+  j < first_entry(weights, count, last, c, s) +
+  @proof_bits.pow2(weight_of(weights, count, last, s) - 1)
+}

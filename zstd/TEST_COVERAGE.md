@@ -26,7 +26,8 @@ and corruptions.
 ### What is measured
 
 - Sources: every non-test `.mbt` directly under `src/`, the library package,
-  and under `src/internal/header/` and `src/internal/xxhash/`. The test-only
+  and under the internal packages it ships (`src/internal/header/`,
+  `src/internal/huffman/`, `src/internal/xxhash/` and the proof packages). The test-only
   checksum package under `src/internal/` is not measured.
 - Counts are Coveralls lines: lines with at least one instrumented point,
   covered when any point on them ran.
@@ -81,5 +82,6 @@ Budgets are exact uncovered counts at the last measurement.
 | File | Budget | Reason |
 | --- | --- | --- |
 | src/fse.mbt | 2 | `Fse::build` returning false, and `Fse::read` raising on it: the spread of symbols over the table fills it exactly whenever the probabilities sum to the table size, and `Fse::read` only builds once they do (a probability never exceeds what remains: the largest value a field can hold is `remaining + 1`). RFC 8878 section 4.1.1 states the same guarantee. Kept because a table with unset rows could index past itself. |
-| src/huffman.mbt | 1 | In `Huffman::build`, weights that overfill the table: each weight `w` takes `2^(w-1)` of `2^max_bits` entries, and the implied last weight completes the sum to exactly `2^max_bits`, so the ranges never run past the table. Kept because the fill would otherwise write past it. |
+| src/huffman.mbt | 1 | In `Huffman::build`, the message for weights that overfill the table, which `@huffman.build_table` never reports: see the next row. |
+| src/internal/huffman/table.mbt | 2 | In `fill`, the check for weights that overfill the table and its OVERFULL: each weight `w` takes `2^(w-1)` of `2^max_bits` entries, and the implied last weight completes the sum to exactly `2^max_bits`, so the blocks never run past the table. `moon prove` proves it (PROOFS.md: `build_table` never returns OVERFULL). Kept because the reference decoder checks it. |
 | src/sequences.mbt | 1 | In `reserve_window`, no room for a compressed block's bytes: a block is decoded only when no output is pending, it decodes to at most `block_max` bytes, and `block_max` is at most the window (`ring_max`), so `ensure_space` always succeeds. |

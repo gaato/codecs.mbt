@@ -1,0 +1,8 @@
+// RFC 7932's word transforms (section 8 and Appendix B) on a word the
+// decoder has looked up: a prefix, the word cut and uppercased as the
+// transform says, and a suffix. `moon prove` checks that it writes only
+// inside the caller's buffer (PROOFS.md).
+
+proof_enabled = true
+
+supported_targets = "js + native + wasm + wasm-gc"

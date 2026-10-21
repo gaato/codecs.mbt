@@ -1,0 +1,150 @@
+// What the functions of huffman.mbt compute.
+
+// Codes of 0 to 15 bits, the longest DEFLATE and Brotli have. With the
+// facts of reversal that `@proof_codes.reverse_facts` proves: requiring them
+// rather than calling for them keeps every call out of `reverse_bits`, and
+// a proof that calls it gets them once.
+predicate reverse_pre(code : Int, n : Int) {
+  0 <= code && 0 <= n && n <= 15 && reversal_facts()
+}
+
+predicate reversal_facts() {
+  @proof_codes.rev_steps(0) && @proof_codes.halves(0)
+}
+
+predicate reverse_post(code : Int, n : Int, result : Int) {
+  result == @proof_codes.rev(code, n) &&
+  0 <= result &&
+  result < @proof_bits.pow2(n)
+}
+
+// After `i` steps, `c` is `code` without its low `i` bits and `r` those
+// bits reversed.
+predicate reverse_inv(code : Int, n : Int, i : Int, c : Int, r : Int) {
+  0 <= i &&
+  i <= n &&
+  n <= 15 &&
+  0 <= code &&
+  c == code / @proof_bits.pow2(i) &&
+  r == @proof_codes.rev(code, i) &&
+  0 <= r &&
+  r < @proof_bits.pow2(i)
+}
+
+predicate canonical_pre(
+  lengths : FixedArray[Int],
+  n : Int,
+  codes : FixedArray[Int],
+  count : FixedArray[Int],
+  next : FixedArray[Int],
+) {
+  @proof_codes.lengths_within(lengths, n, 15) &&
+  n <= codes.length() &&
+  count.length() == 32 &&
+  next.length() == 32 &&
+  zeros(count) &&
+  next[0] == 0
+}
+
+predicate zeros(a : FixedArray[Int]) {
+  ∀ i : Int, 0 <= i && i < a.length() → a[i] == 0
+}
+
+predicate none_past_15(count : FixedArray[Int]) {
+  ∀ l : Int, 15 < l && l < 32 → count[l] == 0
+}
+
+// `count` counts the lengths, and each symbol's code is its canonical code,
+// reversed (0 for a symbol without one).
+predicate canonical_post(
+  lengths : FixedArray[Int],
+  n : Int,
+  codes : FixedArray[Int],
+  count : FixedArray[Int],
+) {
+  @proof_codes.coded_counted(count, lengths, n) && codes_upto(lengths, codes, count, n)
+}
+
+predicate codes_upto(
+  lengths : FixedArray[Int],
+  codes : FixedArray[Int],
+  count : FixedArray[Int],
+  s : Int,
+) {
+  ∀ t : Int, 0 <= t && t < s → code_of(lengths, codes, count, t)
+}
+
+predicate code_of(
+  lengths : FixedArray[Int],
+  codes : FixedArray[Int],
+  count : FixedArray[Int],
+  t : Int,
+) {
+  no_code_zero(lengths, codes, t) && code_reversed(lengths, codes, count, t)
+}
+
+predicate no_code_zero(lengths : FixedArray[Int], codes : FixedArray[Int], t : Int) {
+  lengths[t] == 0 → codes[t] == 0
+}
+
+predicate code_reversed(
+  lengths : FixedArray[Int],
+  codes : FixedArray[Int],
+  count : FixedArray[Int],
+  t : Int,
+) {
+  lengths[t] > 0 →
+    codes[t] == @proof_codes.rev(@proof_codes.canonical(count, lengths, t), lengths[t])
+}
+
+// `next[1..=l]` (up to 15) are the first codes of their lengths.
+predicate firsts_upto(next : FixedArray[Int], count : FixedArray[Int], l : Int) {
+  ∀ j : Int, 1 <= j && j <= l && j <= 15 → next[j] == @proof_codes.first_code(count, j)
+}
+
+predicate nonneg_upto(next : FixedArray[Int], l : Int) {
+  ∀ j : Int, 0 <= j && j <= l && j < 32 → next[j] >= 0
+}
+
+// After the symbols before `s`, `next[l]` is the code of the next symbol of
+// length `l`.
+predicate next_codes(
+  next : FixedArray[Int],
+  count : FixedArray[Int],
+  lengths : FixedArray[Int],
+  s : Int,
+) {
+  ∀ l : Int, 1 <= l && l <= 15 →
+    next[l] == @proof_codes.first_code(count, l) + @proof_codes.numof(lengths, l, 0, s)
+}
+
+predicate counted_codes(count : FixedArray[Int], lengths : FixedArray[Int], n : Int) {
+  count.length() == 32 &&
+  @proof_codes.coded_counted(count, lengths, n) &&
+  count[0] == 0 &&
+  none_past_15(count) &&
+  nonneg_upto(count, 31)
+}
+
+predicate first_codes_pre(count : FixedArray[Int], next : FixedArray[Int]) {
+  count.length() == 32 &&
+  next.length() == 32 &&
+  count[0] == 0 &&
+  nonneg_upto(count, 31) &&
+  next[0] == 0
+}
+
+predicate assign_pre(
+  lengths : FixedArray[Int],
+  n : Int,
+  codes : FixedArray[Int],
+  count : FixedArray[Int],
+  next : FixedArray[Int],
+) {
+  reversal_facts() &&
+  @proof_codes.lengths_within(lengths, n, 15) &&
+  n <= codes.length() &&
+  next.length() == 32 &&
+  firsts_upto(next, count, 15) &&
+  nonneg_upto(next, 15)
+}

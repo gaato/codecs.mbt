@@ -1,0 +1,12 @@
+// A theorem about the canonical codes that parts/proof_codes defines: in
+// canonical order they increase and form a prefix code. Nothing imports it;
+// `moon prove` proves it here, apart from the packages that build the codes.
+
+import {
+  "gaato/codec_parts/proof_bits",
+  "gaato/codec_parts/proof_codes",
+}
+
+proof_enabled = true
+
+supported_targets = "js + native + wasm + wasm-gc"

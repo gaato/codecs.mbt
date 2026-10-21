@@ -1,0 +1,137 @@
+// Code lengths and Kraft's sum (RFC 1951 section 3.2.2, RFC 7932 section
+// 3.2): the code lengths of DEFLATE and Brotli are 0 (no code) to 15.
+
+// How many of `a[l..u)` are `v`: Why3's `occ` (map.Occ) on the array's
+// elements, whose axioms and lemmas are what the proofs count with. (Not
+// `numof` of array.NumOfEq: its definition goes through a lambda, whose
+// axiom sends Z3 instantiating without end.)
+#proof_import("array.Array")
+fn elements(a : FixedArray[Int]) -> (Int) -> Int = "elts"
+
+#proof_import("map.Occ")
+fn occ(v : Int, m : (Int) -> Int, l : Int, u : Int) -> Int = "occ"
+
+pub fn numof(a : FixedArray[Int], v : Int, l : Int, u : Int) -> Int {
+  occ(v, elements(a), l, u)
+}
+
+// `lengths[0..n)` are code lengths of 0 to `max`.
+pub predicate lengths_within(lengths : FixedArray[Int], n : Int, max : Int) {
+  0 <= n && n <= lengths.length() && lengths_below(lengths, n, max)
+}
+
+pub predicate lengths_below(lengths : FixedArray[Int], n : Int, max : Int) {
+  ∀ s : Int, 0 <= s && s < n → 0 <= lengths[s] && lengths[s] <= max
+}
+
+// `counts[0..16)` count the lengths of `lengths[0..n)`: `counts[l]` is how
+// many are `l`.
+pub predicate counted(counts : FixedArray[Int], lengths : FixedArray[Int], n : Int) {
+  counts.length() >= 16 && counted_below(counts, lengths, n, 16)
+}
+
+pub predicate counted_below(
+  counts : FixedArray[Int],
+  lengths : FixedArray[Int],
+  n : Int,
+  m : Int,
+) {
+  ∀ l : Int, 0 <= l && l < m → counts[l] == numof(lengths, l, 0, n)
+}
+
+// Kraft's sum of the counts `c[1..16)` of code lengths 1 to 15, the sum of
+// 2^-length over the symbols that have a code, times 2^15: 2^15 for a
+// complete code, more for an over-subscribed one, less for an incomplete one.
+pub fn kraft(c : FixedArray[Int]) -> Int {
+  16384 * c[1] +
+  8192 * c[2] +
+  4096 * c[3] +
+  2048 * c[4] +
+  1024 * c[5] +
+  512 * c[6] +
+  256 * c[7] +
+  128 * c[8] +
+  64 * c[9] +
+  32 * c[10] +
+  16 * c[11] +
+  8 * c[12] +
+  4 * c[13] +
+  2 * c[14] +
+  1 * c[15]
+}
+
+// No code is longer than `l` bits (and up to 15) in the counts `c`.
+pub predicate none_longer(c : FixedArray[Int], l : Int) {
+  ∀ j : Int, l < j && j <= 15 → c[j] == 0
+}
+
+// The code space that the counts `c[1..l]` leave, in codes of `l` bits:
+// 2^l minus the sum of `c[j] * 2^(l - j)`, for `l` from 0 to 15. Below 0,
+// the codes up to `l` bits over-subscribe the code space.
+pub fn space_left(c : FixedArray[Int], l : Int) -> Int {
+  if l == 0 { 1 } else { if l == 1 { 2 - c[1] } else { if l == 2 { 4 - 2 * c[1] - c[2] } else { if l == 3 { 8 - 4 * c[1] - 2 * c[2] - c[3] } else { if l == 4 { 16 - 8 * c[1] - 4 * c[2] - 2 * c[3] - c[4] } else { if l == 5 { 32 - 16 * c[1] - 8 * c[2] - 4 * c[3] - 2 * c[4] - c[5] } else { if l == 6 { 64 - 32 * c[1] - 16 * c[2] - 8 * c[3] - 4 * c[4] - 2 * c[5] - c[6] } else { if l == 7 { 128 - 64 * c[1] - 32 * c[2] - 16 * c[3] - 8 * c[4] - 4 * c[5] - 2 * c[6] - c[7] } else { if l == 8 { 256 - 128 * c[1] - 64 * c[2] - 32 * c[3] - 16 * c[4] - 8 * c[5] - 4 * c[6] - 2 * c[7] - c[8] } else { if l == 9 { 512 - 256 * c[1] - 128 * c[2] - 64 * c[3] - 32 * c[4] - 16 * c[5] - 8 * c[6] - 4 * c[7] - 2 * c[8] - c[9] } else { if l == 10 { 1024 - 512 * c[1] - 256 * c[2] - 128 * c[3] - 64 * c[4] - 32 * c[5] - 16 * c[6] - 8 * c[7] - 4 * c[8] - 2 * c[9] - c[10] } else { if l == 11 { 2048 - 1024 * c[1] - 512 * c[2] - 256 * c[3] - 128 * c[4] - 64 * c[5] - 32 * c[6] - 16 * c[7] - 8 * c[8] - 4 * c[9] - 2 * c[10] - c[11] } else { if l == 12 { 4096 - 2048 * c[1] - 1024 * c[2] - 512 * c[3] - 256 * c[4] - 128 * c[5] - 64 * c[6] - 32 * c[7] - 16 * c[8] - 8 * c[9] - 4 * c[10] - 2 * c[11] - c[12] } else { if l == 13 { 8192 - 4096 * c[1] - 2048 * c[2] - 1024 * c[3] - 512 * c[4] - 256 * c[5] - 128 * c[6] - 64 * c[7] - 32 * c[8] - 16 * c[9] - 8 * c[10] - 4 * c[11] - 2 * c[12] - c[13] } else { if l == 14 { 16384 - 8192 * c[1] - 4096 * c[2] - 2048 * c[3] - 1024 * c[4] - 512 * c[5] - 256 * c[6] - 128 * c[7] - 64 * c[8] - 32 * c[9] - 16 * c[10] - 8 * c[11] - 4 * c[12] - 2 * c[13] - c[14] } else { 32768 - 16384 * c[1] - 8192 * c[2] - 4096 * c[3] - 2048 * c[4] - 1024 * c[5] - 512 * c[6] - 256 * c[7] - 128 * c[8] - 64 * c[9] - 32 * c[10] - 16 * c[11] - 8 * c[12] - 4 * c[13] - 2 * c[14] - c[15] } } } } } } } } } } } } } } }
+}
+
+// The low `n` bits of `c` in reverse order, for `n` from 0 to 15: bit `j`
+// of `c` (`c / 2^j % 2`) becomes bit `n - 1 - j`. A code of `n` bits, most
+// significant bit first, reversed: DEFLATE and Brotli pack codes least
+// significant bit first.
+pub fn rev(c : Int, n : Int) -> Int {
+  if n == 0 { 0 } else { if n == 1 { c / 1 % 2 * 1 } else { if n == 2 { c / 1 % 2 * 2 + c / 2 % 2 * 1 } else { if n == 3 { c / 1 % 2 * 4 + c / 2 % 2 * 2 + c / 4 % 2 * 1 } else { if n == 4 { c / 1 % 2 * 8 + c / 2 % 2 * 4 + c / 4 % 2 * 2 + c / 8 % 2 * 1 } else { if n == 5 { c / 1 % 2 * 16 + c / 2 % 2 * 8 + c / 4 % 2 * 4 + c / 8 % 2 * 2 + c / 16 % 2 * 1 } else { if n == 6 { c / 1 % 2 * 32 + c / 2 % 2 * 16 + c / 4 % 2 * 8 + c / 8 % 2 * 4 + c / 16 % 2 * 2 + c / 32 % 2 * 1 } else { if n == 7 { c / 1 % 2 * 64 + c / 2 % 2 * 32 + c / 4 % 2 * 16 + c / 8 % 2 * 8 + c / 16 % 2 * 4 + c / 32 % 2 * 2 + c / 64 % 2 * 1 } else { if n == 8 { c / 1 % 2 * 128 + c / 2 % 2 * 64 + c / 4 % 2 * 32 + c / 8 % 2 * 16 + c / 16 % 2 * 8 + c / 32 % 2 * 4 + c / 64 % 2 * 2 + c / 128 % 2 * 1 } else { if n == 9 { c / 1 % 2 * 256 + c / 2 % 2 * 128 + c / 4 % 2 * 64 + c / 8 % 2 * 32 + c / 16 % 2 * 16 + c / 32 % 2 * 8 + c / 64 % 2 * 4 + c / 128 % 2 * 2 + c / 256 % 2 * 1 } else { if n == 10 { c / 1 % 2 * 512 + c / 2 % 2 * 256 + c / 4 % 2 * 128 + c / 8 % 2 * 64 + c / 16 % 2 * 32 + c / 32 % 2 * 16 + c / 64 % 2 * 8 + c / 128 % 2 * 4 + c / 256 % 2 * 2 + c / 512 % 2 * 1 } else { if n == 11 { c / 1 % 2 * 1024 + c / 2 % 2 * 512 + c / 4 % 2 * 256 + c / 8 % 2 * 128 + c / 16 % 2 * 64 + c / 32 % 2 * 32 + c / 64 % 2 * 16 + c / 128 % 2 * 8 + c / 256 % 2 * 4 + c / 512 % 2 * 2 + c / 1024 % 2 * 1 } else { if n == 12 { c / 1 % 2 * 2048 + c / 2 % 2 * 1024 + c / 4 % 2 * 512 + c / 8 % 2 * 256 + c / 16 % 2 * 128 + c / 32 % 2 * 64 + c / 64 % 2 * 32 + c / 128 % 2 * 16 + c / 256 % 2 * 8 + c / 512 % 2 * 4 + c / 1024 % 2 * 2 + c / 2048 % 2 * 1 } else { if n == 13 { c / 1 % 2 * 4096 + c / 2 % 2 * 2048 + c / 4 % 2 * 1024 + c / 8 % 2 * 512 + c / 16 % 2 * 256 + c / 32 % 2 * 128 + c / 64 % 2 * 64 + c / 128 % 2 * 32 + c / 256 % 2 * 16 + c / 512 % 2 * 8 + c / 1024 % 2 * 4 + c / 2048 % 2 * 2 + c / 4096 % 2 * 1 } else { if n == 14 { c / 1 % 2 * 8192 + c / 2 % 2 * 4096 + c / 4 % 2 * 2048 + c / 8 % 2 * 1024 + c / 16 % 2 * 512 + c / 32 % 2 * 256 + c / 64 % 2 * 128 + c / 128 % 2 * 64 + c / 256 % 2 * 32 + c / 512 % 2 * 16 + c / 1024 % 2 * 8 + c / 2048 % 2 * 4 + c / 4096 % 2 * 2 + c / 8192 % 2 * 1 } else { c / 1 % 2 * 16384 + c / 2 % 2 * 8192 + c / 4 % 2 * 4096 + c / 8 % 2 * 2048 + c / 16 % 2 * 1024 + c / 32 % 2 * 512 + c / 64 % 2 * 256 + c / 128 % 2 * 128 + c / 256 % 2 * 64 + c / 512 % 2 * 32 + c / 1024 % 2 * 16 + c / 2048 % 2 * 8 + c / 4096 % 2 * 4 + c / 8192 % 2 * 2 + c / 16384 % 2 * 1 } } } } } } } } } } } } } } }
+}
+
+// `counts[1..16)` count the lengths of `lengths[0..n)` (`counts[0]`, the
+// symbols without a code, need not be counted).
+pub predicate coded_counted(counts : FixedArray[Int], lengths : FixedArray[Int], n : Int) {
+  ∀ l : Int, 1 <= l && l <= 15 → counts[l] == numof(lengths, l, 0, n)
+}
+
+// The first canonical code of `l` bits (1 to 15) for the counts `c` (RFC
+// 1951 section 3.2.2, `next_code`): the sum of `c[j] * 2^(l - j)` for the
+// shorter lengths `j`, as each length's first code is twice past the end of
+// the codes of the length before (`first_code_step` checks the table).
+pub fn first_code(c : FixedArray[Int], l : Int) -> Int {
+  if l == 1 { 0 } else { if l == 2 { 2 * c[1] } else { if l == 3 { 4 * c[1] + 2 * c[2] } else { if l == 4 { 8 * c[1] + 4 * c[2] + 2 * c[3] } else { if l == 5 { 16 * c[1] + 8 * c[2] + 4 * c[3] + 2 * c[4] } else { if l == 6 { 32 * c[1] + 16 * c[2] + 8 * c[3] + 4 * c[4] + 2 * c[5] } else { if l == 7 { 64 * c[1] + 32 * c[2] + 16 * c[3] + 8 * c[4] + 4 * c[5] + 2 * c[6] } else { if l == 8 { 128 * c[1] + 64 * c[2] + 32 * c[3] + 16 * c[4] + 8 * c[5] + 4 * c[6] + 2 * c[7] } else { if l == 9 { 256 * c[1] + 128 * c[2] + 64 * c[3] + 32 * c[4] + 16 * c[5] + 8 * c[6] + 4 * c[7] + 2 * c[8] } else { if l == 10 { 512 * c[1] + 256 * c[2] + 128 * c[3] + 64 * c[4] + 32 * c[5] + 16 * c[6] + 8 * c[7] + 4 * c[8] + 2 * c[9] } else { if l == 11 { 1024 * c[1] + 512 * c[2] + 256 * c[3] + 128 * c[4] + 64 * c[5] + 32 * c[6] + 16 * c[7] + 8 * c[8] + 4 * c[9] + 2 * c[10] } else { if l == 12 { 2048 * c[1] + 1024 * c[2] + 512 * c[3] + 256 * c[4] + 128 * c[5] + 64 * c[6] + 32 * c[7] + 16 * c[8] + 8 * c[9] + 4 * c[10] + 2 * c[11] } else { if l == 13 { 4096 * c[1] + 2048 * c[2] + 1024 * c[3] + 512 * c[4] + 256 * c[5] + 128 * c[6] + 64 * c[7] + 32 * c[8] + 16 * c[9] + 8 * c[10] + 4 * c[11] + 2 * c[12] } else { if l == 14 { 8192 * c[1] + 4096 * c[2] + 2048 * c[3] + 1024 * c[4] + 512 * c[5] + 256 * c[6] + 128 * c[7] + 64 * c[8] + 32 * c[9] + 16 * c[10] + 8 * c[11] + 4 * c[12] + 2 * c[13] } else { 16384 * c[1] + 8192 * c[2] + 4096 * c[3] + 2048 * c[4] + 1024 * c[5] + 512 * c[6] + 256 * c[7] + 128 * c[8] + 64 * c[9] + 32 * c[10] + 16 * c[11] + 8 * c[12] + 4 * c[13] + 2 * c[14] } } } } } } } } } } } } } }
+}
+
+// The canonical code of symbol `s` of `lengths`, with the counts `c` of the
+// lengths: the first code of its length, plus the symbols of that length
+// before it.
+pub fn canonical(c : FixedArray[Int], lengths : FixedArray[Int], s : Int) -> Int {
+  first_code(c, lengths[s]) + numof(lengths, lengths[s], 0, s)
+}
+
+// Symbol `s` comes before symbol `t` in the canonical order: both have a
+// code, and `s`'s is shorter, or as long and `s` is the smaller symbol.
+pub predicate canonically_before(lengths : FixedArray[Int], s : Int, t : Int) {
+  lengths[s] > 0 && lengths[t] > 0 && shorter_or_first(lengths, s, t)
+}
+
+pub predicate shorter_or_first(lengths : FixedArray[Int], s : Int, t : Int) {
+  lengths[s] < lengths[t] || lengths[s] == lengths[t] && s < t
+}
+
+pub predicate counts_nonneg(c : FixedArray[Int]) {
+  ∀ l : Int, 1 <= l && l <= 15 → c[l] >= 0
+}
+
+pub predicate others_stay(a : FixedArray[Int], i : Int) {
+  ∀ v : Int, v != a[i] → numof(a, v, 0, i + 1) == numof(a, v, 0, i)
+}
+
+// One more bit of `rev`, for every code and every length below 15. (`x` is
+// there because a predicate takes an argument; it plays no part.)
+pub predicate rev_steps(x : Int) {
+  ∀ code : Int, ∀ i : Int, 0 <= code && 0 <= i && i < 15 && x == x →
+    rev(code, i + 1) == 2 * rev(code, i) + code / @proof_bits.pow2(i) % 2
+}
+
+pub predicate halves(x : Int) {
+  ∀ code : Int, ∀ i : Int, 0 <= code && 0 <= i && i < 15 && x == x →
+    code / @proof_bits.pow2(i) / 2 == code / @proof_bits.pow2(i + 1)
+}
+
+// The halving at a constant `i`.
+pub predicate halves_at(x : Int, i : Int) {
+  ∀ code : Int, 0 <= code && x == x → code / @proof_bits.pow2(i) / 2 == code / @proof_bits.pow2(i + 1)
+}

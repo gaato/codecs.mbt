@@ -12,10 +12,11 @@ priv struct Huffman {
   symbol : FixedArray[Byte]
   nbits : FixedArray[Byte]
   mut max_bits : Int32
-  // Scratch: the weights of a description, code-length counts and starts.
+  // Scratch: the weights of a description, how many of each weight there
+  // are, and where the entries of each weight go.
   weights : FixedArray[Int32]
-  rank_count : FixedArray[Int32]
-  rank_start : FixedArray[Int32]
+  weight_count : FixedArray[Int32]
+  entry_start : FixedArray[Int32]
   weight_table : Fse
 }
 
@@ -26,8 +27,8 @@ fn Huffman::new() -> Huffman {
     nbits: FixedArray::make(1 << MAX_HUF_BITS, b'\x00'),
     max_bits: 0,
     weights: FixedArray::make(256, 0),
-    rank_count: FixedArray::make(MAX_HUF_BITS + 1, 0),
-    rank_start: FixedArray::make(MAX_HUF_BITS + 2, 0),
+    weight_count: FixedArray::make(MAX_HUF_BITS + 1, 0),
+    entry_start: FixedArray::make(MAX_HUF_BITS + 2, 0),
     weight_table: Fse::new(6),
   }
 }
@@ -104,87 +105,35 @@ fn Huffman::read(
 
 ///|
 /// Builds the table from `weights[0:count]`; the last symbol's weight is
-/// implied (RFC 8878 section 4.2.1.1).
+/// implied (RFC 8878 section 4.2.1.1). `@huffman.build_table` builds it, or
+/// says why the weights are refused.
 fn Huffman::build(self : Huffman, count : Int32) -> Unit raise Stop {
-  let weights = self.weights
-  let mut sum = 0
-  for i in 0..<count {
-    let w = weights[i]
-    if w > MAX_HUF_BITS {
-      raise corrupt("a Huffman weight above \{MAX_HUF_BITS}")
-    }
-    if w > 0 {
-      sum += 1 << (w - 1)
-    }
+  let result = @huffman.build_table(
+    self.weights,
+    count,
+    self.symbol,
+    self.nbits,
+    self.weight_count,
+    self.entry_start,
+  )
+  // The implied last weight follows the others, once known (RFC 8878
+  // section 4.2.1.1).
+  if result > 0 || result == @huffman.NO_WEIGHT_ONE {
+    self.weights[count] = self.entry_start[0]
   }
-  if sum == 0 {
-    raise corrupt("a Huffman tree with one symbol")
+  if result < 0 {
+    raise corrupt(
+      match result {
+        @huffman.WEIGHT_TOO_LARGE => "a Huffman weight above \{MAX_HUF_BITS}"
+        @huffman.ONE_SYMBOL => "a Huffman tree with one symbol"
+        @huffman.TOO_DEEP => "a Huffman tree deeper than \{MAX_HUF_BITS} bits"
+        @huffman.INCOMPLETE => "Huffman weights that do not complete a tree"
+        @huffman.NO_WEIGHT_ONE => "a Huffman tree with no weight of 1"
+        _ => "Huffman weights that overfill the tree"
+      },
+    )
   }
-  let max_bits = 32 - sum.clz()
-  if max_bits > MAX_HUF_BITS {
-    raise corrupt("a Huffman tree deeper than \{MAX_HUF_BITS} bits")
-  }
-  let left = (1 << max_bits) - sum
-  if (left & (left - 1)) != 0 {
-    raise corrupt("Huffman weights that do not complete a tree")
-  }
-  weights[count] = 32 - left.clz()
-  let symbols = count + 1
-  // The least frequent symbols have weight 1 (RFC 8878 section 4.2.1.1);
-  // the reference decoder refuses a tree without them.
-  let mut ones = 0
-  for i in 0..<symbols {
-    if weights[i] == 1 {
-      ones += 1
-    }
-  }
-  if ones == 0 {
-    raise corrupt("a Huffman tree with no weight of 1")
-  }
-  // Code lengths, then each length's first table index: the longest codes
-  // come first.
-  let rank_count = self.rank_count
-  rank_count.fill(0)
-  for i in 0..<symbols {
-    let w = weights[i]
-    if w > 0 {
-      rank_count[max_bits + 1 - w] += 1
-    }
-  }
-  let rank_start = self.rank_start
-  rank_start[max_bits] = 0
-  for len = max_bits; len >= 1; len = len - 1 {
-    let next = rank_start[len] + (rank_count[len] << (max_bits - len))
-    if next > 1 << max_bits {
-      raise corrupt("Huffman weights that overfill the tree")
-    }
-    fill_range(self.nbits, len.to_byte(), rank_start[len], next)
-    rank_start[len - 1] = next
-  }
-  for i in 0..<symbols {
-    let w = weights[i]
-    if w > 0 {
-      let len = max_bits + 1 - w
-      let first = rank_start[len]
-      let span = 1 << (max_bits - len)
-      fill_range(self.symbol, i.to_byte(), first, first + span)
-      rank_start[len] = first + span
-    }
-  }
-  self.max_bits = max_bits
-}
-
-///|
-/// Sets `data[start:end]` to `value`; nothing when the range is empty.
-fn fill_range(
-  data : FixedArray[Byte],
-  value : Byte,
-  start : Int32,
-  end : Int32,
-) -> Unit {
-  for i in start..<end {
-    data[i] = value
-  }
+  self.max_bits = result
 }
 
 ///|

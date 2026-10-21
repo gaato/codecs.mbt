@@ -1,6 +1,14 @@
 // Generated from parts/huffman/moon.pkg by scripts/gen_parts.mbtx: edit it there, not here.
 // Prefix codes: for encoders, length-limited Huffman code lengths and the
 // canonical codes they define; for decoders, the tables that decode them.
-// DEFLATE and Brotli use both.
+// DEFLATE and Brotli use both. `moon prove` checks the functions with
+// contracts (the PROOFS.md of the modules that copy this package).
+
+import {
+  "gaato/deflate/internal/proof_bits",
+  "gaato/deflate/internal/proof_codes",
+}
+
+proof_enabled = true
 
 supported_targets = "js + native + wasm + wasm-gc"

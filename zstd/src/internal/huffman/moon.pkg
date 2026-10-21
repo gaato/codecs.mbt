@@ -1,0 +1,13 @@
+// The decoding table of a Huffman tree description's weights (RFC 8878
+// section 4.2.1), apart from the decoder's state so that `moon prove` checks
+// it (PROOFS.md): the code lengths the weights give and where they go in the
+// table, or why the weights are refused.
+
+import {
+  "gaato/zstd/internal/proof_bits",
+  "gaato/zstd/internal/proof_codes",
+}
+
+proof_enabled = true
+
+supported_targets = "js + native + wasm + wasm-gc"
