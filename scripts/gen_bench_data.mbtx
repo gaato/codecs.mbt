@@ -2,11 +2,12 @@
 //
 // A deterministic text of 512 KiB (words drawn by a seeded generator, with
 // punctuation and line breaks) and a deterministic binary-like stream of
-// 128 KiB, each compressed by the reference implementations: `zstd -3` and
-// `brotli -q 9 -w 22`. The benchmarks decode these, so the decoders meet what
-// common encoders produce.
+// 128 KiB, each compressed by the reference implementations: `zstd -3`,
+// `brotli -q 9 -w 22` and `gzip -6 -n` (zlib's level 6, in a gzip member with
+// a 10-byte header). The benchmarks decode these, so the decoders meet what
+// common encoders produce, and encode what the decoders give back.
 //
-// Usage, from the repository root (needs the zstd and brotli commands):
+// Usage, from the repository root (needs the zstd, brotli and gzip commands):
 //   moon run scripts/gen_bench_data.mbtx [--check]
 // --check regenerates the inputs and fails unless the file holds them: the
 // compressed data in the file must decompress, with the reference decoders, to
@@ -151,6 +152,7 @@ async fn render(
     let packed = [
       ("zstd", pack("zstd", name, raw)),
       ("brotli", pack("brotli", name, raw)),
+      ("gzip", pack("gzip", name, raw)),
     ]
     for p in packed {
       let (format, data) = p
@@ -192,6 +194,7 @@ async fn main {
     let text = render(async fn(format, _, raw) {
       match format {
         "zstd" => compress("zstd", ["-3", "-q", "-c", "--no-progress"], raw)
+        "gzip" => compress("gzip", ["-6", "-n", "-c"], raw)
         _ => compress("brotli", ["-c", "-q", "9", "-w", "22"], raw)
       }
     })

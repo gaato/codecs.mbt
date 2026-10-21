@@ -4,6 +4,7 @@ members = [
   "harness",
   "conformance",
   "bench",
+  "parts",
   "zstd",
   "brotli",
   "deflate",

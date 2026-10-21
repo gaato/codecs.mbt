@@ -1,0 +1,26 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/codec_parts/lz77"
+
+// Values
+pub const MIN_MATCH : Int = 4
+
+pub fn hash4(FixedArray[Byte], Int, Int) -> Int
+
+pub fn match_length(FixedArray[Byte], Int, Int, Int) -> Int
+
+// Errors
+
+// Types and methods
+pub struct Matcher {
+  // private fields
+}
+pub fn Matcher::Matcher(hash_bits? : Int) -> Self
+pub fn Matcher::capacity(Self) -> Int
+pub fn Matcher::distance(Self) -> Int
+pub fn Matcher::find(Self, FixedArray[Byte], Int, Int, Int, Int) -> Int
+pub fn Matcher::reset(Self) -> Unit
+pub fn Matcher::slide(Self, Int) -> Unit
+
+// Type aliases
+
+// Traits

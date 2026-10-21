@@ -192,7 +192,7 @@ fn Encoder::parse(self : Encoder, start : Int32, end : Int32) -> Unit {
 ///|
 /// The meta-block header fields MNIBBLES and MLEN - 1 (section 9.2): four
 /// nibbles hold every length up to `BLOCK_SIZE`.
-fn write_length(w : BitPacker, length : Int32) -> Unit {
+fn write_length(w : @bits.BitPacker, length : Int32) -> Unit {
   w.write(2, 0)
   w.write(16, length - 1)
 }
@@ -292,8 +292,7 @@ fn Encoder::encode_block(
   is_last : Bool,
 ) -> Unit {
   let w = self.writer
-  let mark = w.position()
-  let mark_acc = w.acc
+  let mark = w.mark()
   let saved_ring = self.dist_ring.copy()
   let saved_index = self.dist_ring_index
   self.parse(start, end)
@@ -301,7 +300,7 @@ fn Encoder::encode_block(
     // The decoder will not see these commands' distances.
     FixedArray::unsafe_blit(self.dist_ring, 0, saved_ring, 0, 4)
     self.dist_ring_index = saved_index
-    w.rewind(mark, mark_acc)
+    w.rewind(mark)
     self.write_uncompressed(start, end)
     if is_last {
       // ISLAST and ISLASTEMPTY.

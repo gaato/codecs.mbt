@@ -1,3 +1,4 @@
+// Generated from parts/huffman/huffman_spec_test.mbt by scripts/gen_parts.mbtx: edit it there, not here.
 // Specifications of the in-place builders, as properties and reference
 // implementations written for clarity rather than speed.
 

@@ -3,6 +3,7 @@
 import {
   "gaato/zstd",
   "gaato/brotli",
+  "gaato/deflate",
   "moonbitlang/core/bench",
   "moonbitlang/core/encoding/base64",
 } for "test"

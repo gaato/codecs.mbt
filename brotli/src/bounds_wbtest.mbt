@@ -131,8 +131,8 @@ fn check_encoder_bounds(e : Encoder, room : Int32) -> Unit raise {
   assert_true(e.block_start <= e.data_len)
   assert_true(e.data_len - e.block_start <= BLOCK_SIZE)
   // Output waiting for the caller, and a meta-block's commands.
-  assert_true(e.writer.len <= MAX_ENCODER_PENDING)
-  assert_true(e.writer.buf.length() <= 2 * MAX_ENCODER_PENDING)
+  assert_true(e.writer.buffered() <= MAX_ENCODER_PENDING)
+  assert_true(e.writer.capacity() <= 2 * MAX_ENCODER_PENDING)
   assert_true(e.meta_block.count <= MAX_COMMANDS)
   // The hash table.
   assert_eq(e.matcher.capacity(), 4 << e.window_bits.min(15))
@@ -267,7 +267,7 @@ test "the encoder's waiting output is at most a meta-block" {
     next_out=() => 1000,
     check=(e, room) => {
       check_encoder_bounds(e, room)
-      largest = largest.max(e.writer.len)
+      largest = largest.max(e.writer.buffered())
     },
   )
   assert_true(decompress(stream) == input)

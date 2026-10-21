@@ -118,7 +118,16 @@ fn Decoder::read_code(self : Decoder) -> Bool raise Stop {
           raise corrupt("invalid code length code")
         }
         code.cl_code.reset(1, 18)
-        self.builder.build(code.cl_code, 0, code.cl_lengths, 18)
+        if code.cl_count == 1 {
+          for s in 0..<18 {
+            if code.cl_lengths[s] != 0 {
+              code.cl_code.single(0, s)
+              break
+            }
+          }
+        } else {
+          code.cl_code.build(self.builder, 0, code.cl_lengths, 18)
+        }
         code.lengths.fill(0, end=code.alphabet)
         code.symbol = 0
         code.space = 32768
@@ -168,7 +177,7 @@ fn Decoder::read_code(self : Decoder) -> Bool raise Stop {
       if code.space != 0 {
         raise corrupt("incomplete or oversubscribed prefix code")
       }
-      self.builder.build(code.group, code.tree, code.lengths, code.alphabet)
+      code.group.build(self.builder, code.tree, code.lengths, code.alphabet)
       true
     }
   }
@@ -196,10 +205,13 @@ fn Decoder::read_simple_code(self : Decoder) -> Unit raise Stop {
       }
     }
   }
+  if count == 1 {
+    code.group.single(code.tree, s0)
+    return
+  }
   let lengths = code.lengths
   lengths.fill(0, end=code.alphabet)
   match (count, tree_select) {
-    (1, _) => lengths[s0] = 1
     (2, _) => {
       lengths[s0] = 1
       lengths[s1] = 1
@@ -222,5 +234,5 @@ fn Decoder::read_simple_code(self : Decoder) -> Unit raise Stop {
       lengths[s3] = 3
     }
   }
-  self.builder.build(code.group, code.tree, lengths, code.alphabet)
+  code.group.build(self.builder, code.tree, lengths, code.alphabet)
 }

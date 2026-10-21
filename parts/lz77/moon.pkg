@@ -1,0 +1,4 @@
+// LZ77 match finding: a greedy match finder whose hash table keeps recent
+// positions in buckets, and the hash and match length it is built on.
+
+supported_targets = "js + native + wasm + wasm-gc"

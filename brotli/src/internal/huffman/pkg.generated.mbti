@@ -11,6 +11,11 @@ pub fn reverse_bits(Int, Int) -> Int
 // Errors
 
 // Types and methods
+pub struct Builder {
+  // private fields
+}
+pub fn Builder::Builder(root_bits~ : Int, max_alphabet~ : Int) -> Self
+pub fn Builder::build(Self, FixedArray[UInt16], Int, FixedArray[Int], Int, invalid~ : UInt16) -> Int
 
 // Type aliases
 

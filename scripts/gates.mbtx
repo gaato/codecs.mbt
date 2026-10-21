@@ -78,6 +78,8 @@ async fn main {
   }
   // The registry index, for the workspace and the scripts' imports.
   run("moon", ["update"])
+  // The modules' copies of parts/ are what parts/ holds.
+  run("moon", ["run", "scripts/gen_parts.mbtx", "--", "--check"])
   // Generated inputs are current: zstd's vectors and the benchmarks' (the zstd
   // and brotli commands decompress them to what the generators produce),
   // DEFLATE's, zlib's and gzip's (Node's zlib and the gzip command decompress

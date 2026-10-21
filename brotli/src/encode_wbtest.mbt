@@ -420,3 +420,47 @@ test "window_bits is clamped and compress shrinks the window to the input" {
     assert_true(decompress(stream, max_window_bits=w) == b"abc")
   }
 }
+
+///|
+/// The SHA-256 of the encoder's stream for a fixed input at each window,
+/// and of one with a flush every 10,000 bytes: the same on every target (the
+/// gates run the tests on all four), and the same until a change means to
+/// alter the bytes the encoder writes.
+test "every target writes the same bytes" {
+  let rng = Rng::new(1951)
+  let input = sample_text(rng, 150000) +
+    sample_random(rng, 30000) +
+    Bytes::make(70000, b'\x00') +
+    far_repeats(rng)[:200000].to_owned() +
+    sample_text(rng, 50000)
+  let digests = [
+    for wbits in [10, 16, 18, 22, 24] => {
+      let stream = encode_drive(
+        Encoder(window_bits=wbits),
+        input,
+        next_in=() => 1 << 20,
+        next_out=() => 1 << 16,
+      )
+      @checksum.sha256(stream)
+    }
+  ]
+  let flushed = encode_drive(
+    Encoder(window_bits=18),
+    input,
+    next_in=() => 10000,
+    next_out=() => 1 << 16,
+    flush=_ => true,
+  )
+  digests.push(@checksum.sha256(flushed))
+  inspect(
+    digests.join("\n"),
+    content=(
+      #|77f7313de3a7f1baaed48e0e15bab16bdf38769f333d97790f024c11fcd650f1
+      #|89215713416e9076ca44d3c1ea7d559c1ec29388f5a40254c2b7827152248651
+      #|278a447f785e7a5811670fcdacd246c85324aee8dd7a67cd8704edef89fcf3d9
+      #|220752e1b16451154a42ec8e3b6d73d1b8733e7b751017a6d11c41eb428b2877
+      #|92489a9f0c79d38cffbeab5f24968fdff7206fd207aaae241377ee75c2060ae2
+      #|fb3d29eed7b379201951836911c3d65803fb2964ed64e3296d2be4f511dc8727
+    ),
+  )
+}

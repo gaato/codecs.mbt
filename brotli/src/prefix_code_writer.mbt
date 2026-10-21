@@ -35,7 +35,7 @@ fn CodeWriter::new() -> CodeWriter {
 /// The one symbol of a one-symbol code takes no bits.
 fn CodeWriter::write_code(
   self : CodeWriter,
-  w : BitPacker,
+  w : @bits.BitPacker,
   freqs : FixedArray[Int32],
   alphabet : Int32,
   lengths : FixedArray[Int32],
@@ -88,7 +88,7 @@ fn CodeWriter::write_code(
 /// A complex prefix code (section 3.5) with the given code lengths.
 fn CodeWriter::write_complex(
   self : CodeWriter,
-  w : BitPacker,
+  w : @bits.BitPacker,
   lengths : FixedArray[Int32],
   alphabet : Int32,
 ) -> Unit {

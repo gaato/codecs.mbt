@@ -1,3 +1,5 @@
+// Generated from parts/huffman/huffman_test.mbt by scripts/gen_parts.mbtx: edit it there, not here.
+
 ///|
 /// The Kraft sum of `lengths[0..n)` in units of `2^-max_bits`.
 fn kraft(lengths : FixedArray[Int32], n : Int32, max_bits : Int32) -> Int32 {

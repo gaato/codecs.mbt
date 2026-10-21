@@ -1,3 +1,4 @@
+// Generated from parts/huffman/huffman.mbt by scripts/gen_parts.mbtx: edit it there, not here.
 // Length-limited Huffman codes, as DEFLATE and Brotli encoders build them:
 // code lengths from symbol frequencies, then the canonical codes the lengths
 // define.

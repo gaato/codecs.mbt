@@ -1,0 +1,204 @@
+// Copies the shared building blocks of parts/ into the modules that use them.
+//
+// parts/ holds the single source of each block, one package per directory
+// (parts/huffman, ...). The "copies" of scripts/modules.json say which files
+// of which package each module takes; they go to <module>/src/internal/<pkg>,
+// which the module then imports as its own package. A published module of
+// parts would couple every format, since moon's resolver treats all 0.x
+// versions of a module as compatible; copies keep each module standalone.
+//
+// Each copied file starts with a line naming its source (and a blank line
+// when the source starts with a block), and is otherwise the source as it is. The copy's moon.pkg is the source's, with the imports of
+// other parts rewritten to the module's copies of them (a part must be copied
+// along with the parts it imports). pkg.generated.mbti is not copied: it names
+// the package, and the module's `moon info` writes its own. Other files in a
+// copy's directory are removed.
+//
+// Usage, from the repository root:
+//   moon run scripts/gen_parts.mbtx [-- --check]
+// --check writes nothing and fails unless every copy is what generating it
+// would write, and no copy holds other files.
+
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/async@0.22.5/stdio",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/x@0.5.6/sys",
+}
+
+///|
+/// Prints `message` on stderr and exits with `code`.
+async fn[T] die(code : Int, message : String) -> T {
+  @stdio.stderr.write("\{message}\n")
+  @sys.exit(code)
+  panic()
+}
+
+///|
+/// The file of a copy that the module's tooling writes, not this script.
+let generated_interface : String = "pkg.generated.mbti"
+
+///|
+/// The `name = "..."` of `dir`/moon.mod.
+async fn module_name(dir : String) -> String {
+  for line in @fs.read_file("\{dir}/moon.mod").text().split("\n") {
+    if line.strip_prefix("name = \"") is Some(rest) &&
+      rest.strip_suffix("\"") is Some(name) {
+      return name.to_owned()
+    }
+  }
+  die(2, "\{dir}/moon.mod has no name")
+}
+
+///|
+/// A copy of `text`, the contents of `parts/<pkg>/<file>`: a first line that
+/// names the source, then the source. The formatter separates a leading
+/// comment from a block (`///|`) with a blank line, and so does the copy.
+fn copy_of(pkg : String, file : String, text : String) -> String {
+  let header = "// Generated from parts/\{pkg}/\{file} by scripts/gen_parts.mbtx: edit it there, not here.\n"
+  if text.has_prefix("//") && !text.has_prefix("///") {
+    header + text
+  } else {
+    header + "\n" + text
+  }
+}
+
+///|
+/// The import paths of `moon_pkg` naming a package of `parts_name`.
+fn part_imports(moon_pkg : String, parts_name : String) -> Array[String] {
+  let found = []
+  let prefix = "\"\{parts_name}/"
+  for line in moon_pkg.split("\n") {
+    let line = line.trim(chars=" ")
+    guard line.strip_prefix(prefix) is Some(rest) else { continue }
+    guard rest.find("\"") is Some(end) else { continue }
+    found.push(rest.view(end_offset=end).to_owned())
+  }
+  found
+}
+
+///|
+/// What generating writes for one module: path to contents.
+async fn expected(
+  dir : String,
+  packages : Map[String, Json],
+  parts_name : String,
+) -> Map[String, String] {
+  let name = module_name(dir)
+  let out = Map([])
+  for pkg, files in packages {
+    guard files is Array(files) else {
+      die(2, "copies.\{dir}.\{pkg} must be a list of files")
+    }
+    let source = "parts/\{pkg}"
+    let target = "\{dir}/src/internal/\{pkg}"
+    guard @fs.exists("\{source}/moon.pkg") else {
+      die(2, "copies.\{dir} names \{pkg}, but \{source} is not a package")
+    }
+    // The package's own moon.pkg, its imports of parts rewritten.
+    let mut moon_pkg = @fs.read_file("\{source}/moon.pkg").text()
+    for import_ in part_imports(moon_pkg, parts_name) {
+      guard packages.contains(import_) else {
+        die(2, "\{source} imports parts/\{import_}, which \{dir} does not copy")
+      }
+      moon_pkg = moon_pkg.replace_all(
+        old="\"\{parts_name}/\{import_}\"",
+        new="\"\{name}/internal/\{import_}\"",
+      )
+    }
+    out["\{target}/moon.pkg"] = copy_of(pkg, "moon.pkg", moon_pkg)
+    for file in files {
+      guard file is String(file) else {
+        die(2, "copies.\{dir}.\{pkg} must be a list of files")
+      }
+      guard file != "moon.pkg" && file != generated_interface else {
+        die(2, "copies.\{dir}.\{pkg}: \{file} is not copied by name")
+      }
+      guard @fs.exists("\{source}/\{file}") else {
+        die(2, "copies.\{dir}.\{pkg} names \{file}, which \{source} lacks")
+      }
+      out["\{target}/\{file}"] = copy_of(
+        pkg,
+        file,
+        @fs.read_file("\{source}/\{file}").text(),
+      )
+    }
+  }
+  out
+}
+
+///|
+/// The files in the copies' directories that generating would not write.
+async fn strays(
+  dir : String,
+  packages : Map[String, Json],
+  wanted : Map[String, String],
+) -> Array[String] {
+  let found = []
+  for pkg, _ in packages {
+    let target = "\{dir}/src/internal/\{pkg}"
+    guard @fs.exists(target) else { continue }
+    for entry in @fs.readdir(target, include_hidden=true, sort=true) {
+      let path = "\{target}/\{entry}"
+      if entry != generated_interface && !wanted.contains(path) {
+        found.push(path)
+      }
+    }
+  }
+  found
+}
+
+///|
+async fn main {
+  let check = match @env.args()[1:] {
+    [] => false
+    ["--check"] => true
+    _ => die(2, "usage: moon run scripts/gen_parts.mbtx [-- --check]")
+  }
+  let path = "scripts/modules.json"
+  guard @fs.exists(path) else {
+    die(2, "no \{path}: run from the repository root")
+  }
+  let config = @json.parse(@fs.read_file(path).text())
+  guard config is { "copies": Object(copies), .. } else {
+    die(2, "\{path} has no \"copies\" object")
+  }
+  let parts_name = module_name("parts")
+  let stale = []
+  for dir, packages in copies {
+    guard packages is Object(packages) else {
+      die(2, "copies.\{dir} must map packages to files")
+    }
+    let wanted = expected(dir, packages, parts_name)
+    let extra = strays(dir, packages, wanted)
+    if check {
+      for file, text in wanted {
+        if !@fs.exists(file) || @fs.read_file(file).text() != text {
+          stale.push(file)
+        }
+      }
+      stale.append(extra)
+    } else {
+      for file in extra {
+        @fs.remove(file)
+        println("removed \{file}")
+      }
+      for file, text in wanted {
+        let slash = file.rev_find("/").unwrap()
+        @fs.mkdir(file.view(end_offset=slash), recursive=true, allow_exist=true)
+        if !@fs.exists(file) || @fs.read_file(file).text() != text {
+          @fs.write_file(file, text)
+          println("wrote \{file}")
+        }
+      }
+    }
+  }
+  if !stale.is_empty() {
+    for file in stale {
+      @stdio.stderr.write("stale: \{file}\n")
+    }
+    die(1, "copies of parts/ are stale: run moon run scripts/gen_parts.mbtx")
+  }
+}

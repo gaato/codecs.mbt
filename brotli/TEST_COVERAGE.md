@@ -25,10 +25,13 @@ streams built bit by bit, and seeded pseudo-random splits and corruptions.
 ### What is measured
 
 - Sources: every non-test `.mbt` directly under `src/`, the library package;
-  under `src/internal/huffman/` and `src/internal/lz77/`, the encoder's
-  building blocks; and under `src/internal/rules/`, the decoder's pure
-  functions of the values it has read. The test-only checksum package and
-  the crosscheck tool under `src/internal/` are not measured.
+  under `src/internal/bits/`, `src/internal/huffman/` and
+  `src/internal/lz77/`, the building blocks copied from `parts/` (the bit
+  writer, prefix codes and decoding tables, the match finder), measured
+  here through the tests copied with them; and under `src/internal/rules/`,
+  the decoder's pure functions of the values it has read. The test-only
+  checksum package and the crosscheck tool under `src/internal/` are not
+  measured.
 - Counts are Coveralls lines: lines with at least one instrumented point,
   covered when any point on them ran.
 
@@ -43,7 +46,7 @@ streams built bit by bit, and seeded pseudo-random splits and corruptions.
 - moon's bundled tcc cannot link on some hosts (openSUSE); the script sets
   `MOON_CC=cc` unless it is already set.
 
-Snapshot at the last full measurement (2026-10-21): **99.9 %** (909/910
+Snapshot at the last full measurement (2026-10-21): **98.7 %** (929/941
 lines).
 
 ## Policy
@@ -69,6 +72,8 @@ Must be covered by tests:
 Accepted as uncovered (needs a row):
 
 - defensive arms that are unreachable by construction;
+- aborts that `panic` tests reach, whose counts the abort loses;
+- code compiled only for another target, which the gates test there;
 - testable lines not yet tested, marked `not yet tested`.
 
 Budgets are exact uncovered counts at the last measurement.
@@ -78,3 +83,5 @@ Budgets are exact uncovered counts at the last measurement.
 | File | Budget | Reason |
 | --- | --- | --- |
 | src/decoder.mbt | 1 | In `next_aligned_byte`, loading a byte from `stash`: uncompressed and metadata bytes would come from it only if `stash` held bytes there, and it never does. A unit leaves bytes in `stash` only when they fall short of what it needs, so when it completes it has consumed them all; the byte-aligned loops start after that unit. |
+| src/internal/bits/bit_packer.mbt | 8 | `BitPacker::write` and `BitPacker::write_fitting` for JS (`#cfg(target="js")`), the 32-bit accumulator: the ledger measures native, which compiles the 64-bit `write` instead. The gates run the same tests on JS: `src/internal/bits/bit_packer_test.mbt` and the encoder's, including the SHA-256 of its output. |
+| src/internal/huffman/decode_table.mbt | 3 | The `abort`s of `Builder::Builder` (a root outside 1 to 15 bits, an alphabet past 4096 symbols) and of `Builder::build` (a table without room): the `panic` tests of `src/internal/huffman/decode_table_spec_test.mbt` run them, but the abort ends the test before its coverage counts are written. |

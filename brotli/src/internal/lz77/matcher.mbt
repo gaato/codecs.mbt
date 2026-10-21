@@ -1,3 +1,4 @@
+// Generated from parts/lz77/matcher.mbt by scripts/gen_parts.mbtx: edit it there, not here.
 // A greedy LZ77 match finder over a caller-owned byte buffer. Positions are
 // hashed by their first four bytes into buckets of the most recent few; a
 // search compares the bucket's candidates and returns the longest match.
@@ -57,11 +58,7 @@ pub fn Matcher::capacity(self : Matcher) -> Int32 {
 
 ///|
 fn Matcher::hash(self : Matcher, data : FixedArray[Byte], pos : Int32) -> Int32 {
-  let v = data[pos].to_uint() |
-    (data[pos + 1].to_uint() << 8) |
-    (data[pos + 2].to_uint() << 16) |
-    (data[pos + 3].to_uint() << 24)
-  ((v * 0x1e35a7bdU) >> (32 - self.hash_bits)).reinterpret_as_int()
+  hash4(data, pos, self.hash_bits)
 }
 
 ///|
@@ -138,20 +135,4 @@ pub fn Matcher::slide(self : Matcher, shift : Int32) -> Unit {
     table[i] = if table[i] > shift { table[i] - shift } else { 0 }
   }
   self.next = (self.next - shift).max(0)
-}
-
-///|
-/// How many bytes from `a` equal those from `b` (`a < b`), at most `limit`.
-pub fn match_length(
-  data : FixedArray[Byte],
-  a : Int32,
-  b : Int32,
-  limit : Int32,
-) -> Int32 {
-  for n = 0; n < limit; n = n + 1 {
-    if data[a + n] != data[b + n] {
-      return n
-    }
-  }
-  limit
 }

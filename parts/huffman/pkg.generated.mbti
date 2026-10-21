@@ -1,0 +1,24 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/codec_parts/huffman"
+
+// Values
+pub fn canonical_codes(FixedArray[Int], Int, FixedArray[Int]) -> Unit
+
+pub fn code_lengths(FixedArray[Int], Int, Int, FixedArray[Int]) -> Unit
+
+pub fn max_entries(alphabet~ : Int, root_bits~ : Int) -> Int?
+
+pub fn reverse_bits(Int, Int) -> Int
+
+// Errors
+
+// Types and methods
+pub struct Builder {
+  // private fields
+}
+pub fn Builder::Builder(root_bits~ : Int, max_alphabet~ : Int) -> Self
+pub fn Builder::build(Self, FixedArray[UInt16], Int, FixedArray[Int], Int, invalid~ : UInt16) -> Int
+
+// Type aliases
+
+// Traits

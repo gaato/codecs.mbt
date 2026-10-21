@@ -1,3 +1,5 @@
+// Generated from parts/lz77/matcher_test.mbt by scripts/gen_parts.mbtx: edit it there, not here.
+
 ///|
 fn bytes_of(s : String) -> FixedArray[Byte] {
   FixedArray::makei(s.length(), i => s[i].to_byte())

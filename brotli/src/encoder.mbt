@@ -37,9 +37,8 @@ pub struct Encoder {
   // The last four distances, as the decoder keeps them.
   priv dist_ring : FixedArray[Int32]
   priv mut dist_ring_index : Int32
-  // Output: complete bytes of `writer` from `drained` wait for the caller.
-  priv writer : BitPacker
-  priv mut drained : Int32
+  // Output: complete bytes of `writer` wait for the caller.
+  priv writer : @bits.BitPacker
   priv mut header_written : Bool
   priv mut flush_requested : Bool
   priv mut finish_requested : Bool
@@ -70,8 +69,7 @@ pub fn Encoder::Encoder(window_bits~ : Int32 = 22) -> Encoder {
     meta_block: MetaBlock::new(),
     dist_ring: [16, 15, 11, 4],
     dist_ring_index: 0,
-    writer: BitPacker::new(),
-    drained: 0,
+    writer: @bits.BitPacker(),
     header_written: false,
     flush_requested: false,
     finish_requested: false,
@@ -95,10 +93,7 @@ pub fn Encoder::reset(self : Encoder) -> Unit {
   self.dist_ring[2] = 11
   self.dist_ring[3] = 4
   self.dist_ring_index = 0
-  self.writer.clear()
-  self.writer.acc = 0
-  self.writer.nbits = 0
-  self.drained = 0
+  self.writer.reset()
   self.header_written = false
   self.flush_requested = false
   self.finish_requested = false
@@ -133,7 +128,7 @@ pub fn Encoder::last_produced(self : Encoder) -> Int32 {
 /// `max(1 << (window_bits - 2), 64 KiB)`, plus 64 KiB, plus 131,200 bytes
 /// (see RESOURCE_BOUNDS.md). `reset` releases the input buffer.
 pub fn Encoder::memory_usage(self : Encoder) -> Int32 {
-  self.data.length() + self.writer.buf.length()
+  self.data.length() + self.writer.capacity()
 }
 
 ///|
@@ -190,11 +185,9 @@ fn Encoder::step_with(
   let mut produced = 0
   for ;; {
     produced = self.drain(output, fixed_output, produced)
-    if self.drained < self.writer.len {
+    if self.writer.pending() > 0 {
       return self.finish_step(NeedMoreOutput, consumed, produced)
     }
-    self.writer.clear()
-    self.drained = 0
     if self.emitted_final {
       self.done = true
       return self.finish_step(Done, consumed, produced)
@@ -258,18 +251,10 @@ fn Encoder::drain(
   fixed_output : FixedArray[Byte]?,
   pos : Int32,
 ) -> Int32 {
-  let n = (self.writer.len - self.drained).min(output.length() - pos)
-  guard n > 0 else { return pos }
-  let buf = self.writer.buf
   match fixed_output {
-    Some(out) => FixedArray::unsafe_blit(out, pos, buf, self.drained, n)
-    None =>
-      for i in 0..<n {
-        output[pos + i] = buf[self.drained + i]
-      }
+    Some(out) => self.writer.drain_into(out, pos)
+    None => self.writer.drain(output, pos)
   }
-  self.drained += n
-  pos + n
 }
 
 ///|
@@ -334,7 +319,7 @@ fn Encoder::emit_flush(self : Encoder) -> Unit {
     self.encode_block(self.block_start, self.data_len, false)
     self.block_start = self.data_len
   }
-  if self.writer.nbits > 0 {
+  if !self.writer.is_aligned() {
     // ISLAST 0, MNIBBLES 0 (a metadata block), reserved 0, MSKIPBYTES 0.
     self.writer.write(6, 0b000110)
     self.writer.align()

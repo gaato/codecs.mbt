@@ -1,0 +1,4 @@
+// Writing bits least significant first, as DEFLATE and Brotli pack them,
+// into a byte buffer that the encoder hands out.
+
+supported_targets = "js + native + wasm + wasm-gc"

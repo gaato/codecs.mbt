@@ -4,6 +4,8 @@ package "gaato/brotli/internal/lz77"
 // Values
 pub const MIN_MATCH : Int = 4
 
+pub fn hash4(FixedArray[Byte], Int, Int) -> Int
+
 pub fn match_length(FixedArray[Byte], Int, Int, Int) -> Int
 
 // Errors

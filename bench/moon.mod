@@ -17,4 +17,5 @@ preferred_target = "native"
 import {
   "gaato/zstd@0.3.1",
   "gaato/brotli@0.4.1",
+  "gaato/deflate@0.1.0",
 }

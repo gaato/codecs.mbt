@@ -1,0 +1,33 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/codec_parts/bits"
+
+// Values
+
+// Errors
+
+// Types and methods
+pub struct BitPacker {
+  // private fields
+}
+pub fn BitPacker::BitPacker() -> Self
+pub fn BitPacker::align(Self) -> Unit
+pub fn BitPacker::buffered(Self) -> Int
+pub fn BitPacker::capacity(Self) -> Int
+pub fn BitPacker::drain(Self, MutArrayView[Byte], Int) -> Int
+pub fn BitPacker::drain_into(Self, FixedArray[Byte], Int) -> Int
+pub fn BitPacker::is_aligned(Self) -> Bool
+pub fn BitPacker::mark(Self) -> Mark
+pub fn BitPacker::pending(Self) -> Int
+pub fn BitPacker::position(Self) -> Int
+pub fn BitPacker::reset(Self) -> Unit
+pub fn BitPacker::rewind(Self, Mark) -> Unit
+pub fn BitPacker::write(Self, Int, Int) -> Unit
+pub fn BitPacker::write_bytes(Self, FixedArray[Byte], Int, Int) -> Unit
+
+pub struct Mark {
+  // private fields
+}
+
+// Type aliases
+
+// Traits

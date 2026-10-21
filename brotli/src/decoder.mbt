@@ -113,7 +113,7 @@ pub struct Decoder {
   priv cmd_trees : Group
   priv dist_trees : Group
   priv code : CodeReader
-  priv builder : Builder
+  priv builder : @huffman.Builder
   // Commands.
   priv mut lit_mode : Int32
   priv mut lit_map_offset : Int32
@@ -197,7 +197,7 @@ pub fn Decoder::Decoder(
     cmd_trees: Group::new(256),
     dist_trees: Group::new(256),
     code: CodeReader::new(),
-    builder: Builder::new(),
+    builder: table_builder(),
     lit_mode: 0,
     lit_map_offset: 0,
     dist_map_offset: 0,

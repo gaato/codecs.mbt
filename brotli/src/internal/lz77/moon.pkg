@@ -1,3 +1,5 @@
-// A greedy LZ77 match finder: a hash table of recent positions, in buckets.
+// Generated from parts/lz77/moon.pkg by scripts/gen_parts.mbtx: edit it there, not here.
+// LZ77 match finding: a greedy match finder whose hash table keeps recent
+// positions in buckets, and the hash and match length it is built on.
 
 supported_targets = "js + native + wasm + wasm-gc"
