@@ -1,0 +1,15 @@
+// Prints streams made by the encoders, for scripts/crosscheck.mbtx to decode
+// with the reference decoders. Not part of the library.
+
+import {
+  "gaato/codec_bytes",
+  "gaato/deflate",
+  "gaato/deflate/zlib",
+  "gaato/deflate/gzip",
+  "gaato/deflate/internal/fixtures",
+  "moonbitlang/core/encoding/base64",
+}
+
+pkgtype(kind: "executable")
+
+supported_targets = "js + native + wasm + wasm-gc"

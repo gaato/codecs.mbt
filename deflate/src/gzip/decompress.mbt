@@ -33,3 +33,26 @@ pub fn decompress(
     }
   }
 }
+
+///|
+/// Compresses `input` into a whole gzip stream of one member, at `level` (0
+/// to 9, clamped; 6 by default) and with `header` if given, as `Encoder`
+/// does: a header that is not writable (`Header::is_writable`) aborts.
+pub fn compress(
+  input : BytesView,
+  level~ : Int32 = 6,
+  header? : Header,
+) -> Bytes {
+  let encoder = Encoder(level~, header?)
+  let chunk = FixedArray::make(1 << 16, b'\x00')
+  let out = Buffer()
+  let mut rest = input
+  for ;; {
+    let status = encoder.step_into(rest, chunk, action=Finish)
+    rest = rest[encoder.last_consumed():]
+    out.write_bytesview(Bytes::from_array(chunk[:encoder.last_produced()])[:])
+    if status is Done {
+      return out.to_bytes()
+    }
+  }
+}

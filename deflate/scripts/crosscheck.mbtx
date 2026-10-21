@@ -1,0 +1,277 @@
+// Decodes the encoders' streams with the reference decoders: zlib, through
+// Node's zlib module, and the gzip command.
+//
+// Runs src/internal/crosscheck, which prints one line per stream: a name
+// that begins with its format (raw, zlib or gzip), the length and SHA-256 of
+// the input so far, the base64 of the stream so far, and the base64 of the
+// preset dictionary it needs (empty if none). Each stream must decode to
+// exactly that input:
+// - with Node's zlib: inflateRawSync, inflateSync (given the dictionary) or
+//   gunzipSync. A whole stream is decoded as complete, which fails on a
+//   stream that is cut short, corrupt or (for zlib) has the wrong Adler-32.
+//   A stream cut after a flush is decoded with finishFlush Z_SYNC_FLUSH:
+//   zlib then returns what it gave out instead of raising "unexpected end of
+//   file", so a stream that holds back some of its input decodes to fewer
+//   bytes, and the length and SHA-256 catch that;
+// - a whole gzip stream also with the `gzip -d` command, which checks the
+//   CRC-32 and the length.
+//
+// Usage, from the repository root (needs node and gzip):
+//   moon run deflate/scripts/crosscheck.mbtx [-- --target native|js|wasm|wasm-gc] [--compare]
+//   --compare  also print, for every gzip stream at levels 1, 6 and 9, the
+//              sizes from Node's zlib (gzipSync) at the same level and from
+//              the gzip command (gzip -1, -6, -9 -n), for the ratio record.
+// Exit status: 0 = every stream decodes, 1 = one does not, 2 = setup failure.
+
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/async@0.22.5/stdio",
+  "moonbitlang/core/encoding/base64",
+  "moonbitlang/core/encoding/hex",
+  "moonbitlang/core/env",
+  "moonbitlang/core/string",
+  "moonbitlang/x@0.5.6/crypto",
+  "moonbitlang/x@0.5.6/sys",
+}
+
+///|
+/// Decodes each line of stdin (format, whether it was cut after a flush,
+/// the base64 of the stream, the base64 of its dictionary) and prints the
+/// length and SHA-256 of what came out, or `error` and why.
+let node_decoder : String =
+  #|const zlib = require("node:zlib");
+  #|const crypto = require("node:crypto");
+  #|const lines = require("node:fs").readFileSync(0, "latin1").split("\n");
+  #|lines.pop();
+  #|for (const line of lines) {
+  #|  const [format, flushed, data, dictionary] = line.split("\t");
+  #|  const options = {};
+  #|  if (flushed === "1") options.finishFlush = zlib.constants.Z_SYNC_FLUSH;
+  #|  if (dictionary) options.dictionary = Buffer.from(dictionary, "base64");
+  #|  const input = Buffer.from(data, "base64");
+  #|  try {
+  #|    const out = format === "raw" ? zlib.inflateRawSync(input, options)
+  #|      : format === "zlib" ? zlib.inflateSync(input, options)
+  #|      : zlib.gunzipSync(input, options);
+  #|    const digest = crypto.createHash("sha256").update(out).digest("hex");
+  #|    console.log(`${out.length} ${digest}`);
+  #|  } catch (err) {
+  #|    console.log(`error ${err.message}`);
+  #|  }
+  #|}
+
+///|
+/// Compresses stdin with gzipSync at the level in argv, and prints the size.
+let node_encoder : String =
+  #|const zlib = require("node:zlib");
+  #|const data = require("node:fs").readFileSync(0);
+  #|console.log(zlib.gzipSync(data, { level: Number(process.argv[1]) }).length);
+
+///|
+/// 1 GiB: more than the crosscheck tool prints and any stream decodes to.
+let max_output : Int = 1 << 30
+
+///|
+async fn setup_failure(message : String) -> Unit {
+  @stdio.stderr.write("\{message}\n")
+  @sys.exit(2)
+}
+
+///|
+struct Stream {
+  name : String
+  format : String
+  flushed : Bool
+  size : Int
+  digest : String
+  data : Bytes
+  dictionary : String
+}
+
+///|
+fn sha256_hex(data : Bytes) -> String {
+  @hex.encode(Bytes::from_array(@crypto.sha256(data)))
+}
+
+///|
+/// `n / d` with three decimals.
+fn ratio(n : Int, d : Int) -> String {
+  let thousandths = (n.to_int64() * 1000 + (d / 2).to_int64()) / d.to_int64()
+  let frac = (thousandths % 1000).to_string()
+  "\{thousandths / 1000}.\{"0".repeat(3 - frac.length())}\{frac}"
+}
+
+///|
+async fn main {
+  let mut target = "native"
+  let mut compare = false
+  let args = @env.args()[1:]
+  let mut i = 0
+  while i < args.length() {
+    match args[i] {
+      "--compare" => compare = true
+      "--target" if i + 1 < args.length() => {
+        target = args[i + 1]
+        i += 1
+      }
+      arg if arg.strip_prefix("--target=") is Some(value) =>
+        target = value.to_owned()
+      arg => {
+        setup_failure(
+          "unknown argument \{arg}\nusage: moon run deflate/scripts/crosscheck.mbtx [-- --target native|js|wasm|wasm-gc] [--compare]",
+        )
+        return
+      }
+    }
+    i += 1
+  }
+  if !@fs.exists("deflate/moon.mod") {
+    setup_failure("run from the repository root")
+    return
+  }
+  for tool in ["gzip", "node"] {
+    @shell.Cmd(tool, ["--version"]).output().check() catch {
+      _ => {
+        setup_failure("crosscheck.mbtx needs the \{tool} command")
+        return
+      }
+    }
+  }
+  let env = if @env.get_env_var("MOON_CC") is None {
+    { "MOON_CC": "cc" }
+  } else {
+    {}
+  }
+  let run = @shell.Cmd(
+    "moon",
+    ["run", "--release", "--target", target, "src/internal/crosscheck"],
+    cwd="deflate",
+    env~,
+  ).output(max_output_bytes=max_output)
+  if run.exit_code() != 0 {
+    setup_failure(run.stderr())
+    return
+  }
+  let streams = []
+  for line in run.stdout().split("\n") {
+    if line.is_empty() {
+      continue
+    }
+    guard line.split("\t").collect() is [name, size, digest, data, dictionary] &&
+      name.split(" ").collect() is [format, ..] else {
+      setup_failure("unexpected line from the crosscheck tool: \{line}")
+      return
+    }
+    streams.push({
+      name: name.to_owned(),
+      format: format.to_owned(),
+      flushed: name.contains(" flush "),
+      size: @string.parse_int(size),
+      digest: digest.to_owned(),
+      data: @base64.decode(data),
+      dictionary: dictionary.to_owned(),
+    })
+  }
+  // Every stream through one Node process.
+  let input = StringBuilder()
+  for s in streams {
+    let flushed = if s.flushed { "1" } else { "0" }
+    input.write_string(
+      "\{s.format}\t\{flushed}\t\{@base64.encode(s.data)}\t\{s.dictionary}\n",
+    )
+  }
+  let node = @shell.Cmd(
+    "node",
+    ["-e", node_decoder],
+    stdin=Text(input.to_string()),
+  ).output(max_output_bytes=max_output)
+  if node.exit_code() != 0 {
+    setup_failure("node: \{node.stderr()}")
+    return
+  }
+  let node_results = node.stdout().split("\n").map(l => l.to_owned()).collect()
+  if node_results.length() != streams.length() + 1 {
+    setup_failure(
+      "node answered \{node_results.length() - 1} of \{streams.length()} streams",
+    )
+    return
+  }
+  let mut failures = 0
+  let mut checked = 0
+  for n, s in streams {
+    let result = node_results[n]
+    if result.strip_prefix("error ") is Some(err) {
+      println("FAIL \{s.name}: node: \{err}")
+      failures += 1
+      continue
+    }
+    if result != "\{s.size} \{s.digest}" {
+      let length = result.split(" ").collect()[0]
+      println("FAIL \{s.name}: node decodes it to \{length} different bytes")
+      failures += 1
+      continue
+    }
+    if s.flushed {
+      checked += 1
+      continue
+    }
+    if s.format == "gzip" {
+      let output = @shell.Cmd("gzip", ["-d", "-c"], stdin=Binary(s.data)).output(
+        max_output_bytes=max_output,
+      )
+      if output.exit_code() != 0 {
+        println("FAIL \{s.name}: gzip -d: \{output.stderr().trim()}")
+        failures += 1
+        continue
+      }
+      let decoded = output.stdout_bytes()
+      if decoded.length() != s.size || sha256_hex(decoded) != s.digest {
+        println(
+          "FAIL \{s.name}: gzip -d decodes it to \{decoded.length()} different bytes",
+        )
+        failures += 1
+        continue
+      }
+    }
+    checked += 1
+    println(
+      "ok   \{s.name}: \{s.size} -> \{s.data.length()} bytes (\{ratio(s.data.length(), s.size.max(1))})",
+    )
+    if compare &&
+      s.format == "gzip" &&
+      s.size > 1 &&
+      s.name.split(" ").collect() is [_, _, level] &&
+      level is ("l1" | "l6" | "l9") {
+      let level = level[1:].to_string()
+      let decoded = @shell.Cmd("gzip", ["-d", "-c"], stdin=Binary(s.data)).output(
+        max_output_bytes=max_output,
+      ).stdout_bytes()
+      let gzip = @shell.Cmd("gzip", ["-\{level}", "-c", "-n"], stdin=Binary(decoded)).output(
+        max_output_bytes=max_output,
+      )
+      gzip.check()
+      let zlib = @shell.Cmd(
+        "node",
+        ["-e", node_encoder, level],
+        stdin=Binary(decoded),
+      ).output()
+      zlib.check()
+      println(
+        "       zlib (Node) \{zlib.stdout().trim()}, gzip -\{level} \{gzip.stdout_bytes().length()}",
+      )
+    }
+  }
+  if checked == 0 {
+    setup_failure("no streams checked")
+    return
+  }
+  let failed = if failures > 0 { ", \{failures} FAILED" } else { "" }
+  println(
+    "crosscheck: \{checked} streams decode with the reference decoders\{failed}",
+  )
+  if failures > 0 {
+    @sys.exit(1)
+  }
+}

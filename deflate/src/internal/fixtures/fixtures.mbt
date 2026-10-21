@@ -232,3 +232,99 @@ pub fn disagreement(
   }
   Some("until=EndOfInput: \{whole}, zlib: \{zlib}")
 }
+
+///|
+/// Feeds `input` to `encoder` in chunks of `next_in()` bytes, into output
+/// buffers of `next_out()` bytes, with `Flush` after each chunk that crosses
+/// a multiple of `flush_every` bytes (0: never) and `Finish` with the last,
+/// calling `check` after every step with the room it had. Fails unless every
+/// step's counts stay within what it was given and the stream ends with
+/// `Done`. Returns the stream.
+pub fn[E : @codec_bytes.Encode] encode(
+  encoder : E,
+  input : BytesView,
+  next_in~ : () -> Int32,
+  next_out~ : () -> Int32,
+  flush_every~ : Int32 = 0,
+  check~ : (E, Int32) -> Unit raise = (_, _) => (),
+) -> Bytes raise {
+  let out = Buffer()
+  let mut pos = 0
+  for ;; {
+    let end = (pos + next_in()).min(input.length())
+    let action : @codec_bytes.EncodeAction = if end == input.length() {
+      Finish
+    } else if flush_every > 0 && end / flush_every > pos / flush_every {
+      Flush
+    } else {
+      Continue
+    }
+    let mut rest = input[pos:end]
+    for ;; {
+      let room = next_out()
+      let buffer = FixedArray::make(room, b'\x00')
+      let status = encoder.step(rest, buffer.mut_view(), action~) catch {
+        @codec.CodecError(kind, message) =>
+          fail("an encoder raised \{kind_name(kind)}: \{message}")
+      }
+      check(encoder, room)
+      let consumed = encoder.last_consumed()
+      let produced = encoder.last_produced()
+      if consumed < 0 ||
+        consumed > rest.length() ||
+        produced < 0 ||
+        produced > room {
+        fail(
+          "a step reported \{consumed} of \{rest.length()} in, \{produced} of \{room} out",
+        )
+      }
+      rest = rest[consumed:]
+      out.write_bytesview(Bytes::from_array(buffer[:produced])[:])
+      match status {
+        Done => {
+          if !(action is Finish) || rest.length() != 0 || end != input.length() {
+            fail("Done before the end")
+          }
+          return out.to_bytes()
+        }
+        NeedMoreInput => {
+          if rest.length() != 0 {
+            fail("input left on NeedMoreInput")
+          }
+          break
+        }
+        NeedMoreOutput => ()
+      }
+    }
+    pos = end
+  }
+}
+
+///|
+/// `n` bytes of words, random bytes and long repeats, the same from the same
+/// `seed`: inputs for the encoders.
+pub fn sample(seed : UInt32, n : Int32) -> Bytes {
+  let rng = Rng::new(seed)
+  let words : Array[String] = [
+    "the ", "deflate ", "stream ", "window ", "of ", "a ", "\n", "MoonBit ", "{\"key\": [1, 2]} ",
+  ]
+  let out = Buffer()
+  let block = Bytes::makei(4096, _ => (rng.below(1 << 16) >> 8).to_byte())
+  while out.length() < n {
+    match rng.below(3) {
+      0 =>
+        for _ in 0..<(1 + rng.below(200)) {
+          out.write_string_utf8(words[rng.below(words.length())])
+        }
+      1 =>
+        for _ in 0..<rng.below(600) {
+          out.write_byte((rng.below(1 << 16) >> 8).to_byte())
+        }
+      _ => {
+        let start = rng.below(3000)
+        out.write_bytesview(block[start:start + 1 + rng.below(1000)])
+      }
+    }
+  }
+  out.to_bytes()[:n].to_owned()
+}

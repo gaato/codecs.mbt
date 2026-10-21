@@ -28,16 +28,17 @@ streams built bit by bit, and seeded pseudo-random splits and corruptions.
   `src/zlib/` and `src/gzip/`, and of their internal packages
   `src/zlib/internal/adler32/`, `src/zlib/internal/header/`,
   `src/gzip/internal/crc32/` and `src/gzip/internal/header/`. The test-only
-  package `src/internal/fixtures/` is not measured, nor is
-  moonbit-community/flate, which the raw decoder holds.
+  package `src/internal/fixtures/` and the cross-check tool
+  `src/internal/crosscheck/` are not measured, nor is moonbit-community/flate,
+  which the raw decoder and the raw encoder hold.
 - Counts are Coveralls lines: lines with at least one instrumented point,
   covered when any point on them ran.
 
 The pitfalls the script pins (stale counters, `-f summary` skewing totals,
 tcc on openSUSE) are described in zstd's ledger, `zstd/TEST_COVERAGE.md`.
 
-Snapshot at the last full measurement (2026-10-21): **100.0 %** (357/357
-lines).
+Snapshot at the last full measurement (2026-10-21): **99.8 %** (522/523
+lines), the one uncovered line ledgered below.
 
 ## Policy
 
@@ -50,20 +51,29 @@ Must be covered by tests:
 - every decision on header and trailer bytes, a pure function in
   `src/zlib/internal/header/` and `src/gzip/internal/header/`: checked over
   every pair of zlib header bytes against RFC 1950 written out separately, and
-  over every value of each byte of a gzip header's start;
+  over every value of each byte of a gzip header's start; the headers and
+  trailers the encoders write, built by pure functions next to those that
+  read them, are read back by them for every level and every combination of
+  a gzip header's fields;
 - the checksums, against bitwise references written from RFC 1950 and 1952,
   whole and in pieces, past Adler-32's reduction interval;
 - what follows a stream or a member, under both `until` values;
 - suspension on input and on output in every state, through byte-sized and
-  random splits.
+  random splits; for the encoders, that every split gives the same stream,
+  that a flush makes the stream so far decode to the input so far, and that
+  steps after the end take nothing.
 
 The raw DEFLATE decoding is the inflater's; its checks of RFC 1951 are held
 to zlib's by the crafted streams and the seeded corruptions
-(`src/reference_wbtest.mbt`), not by this ledger.
+(`src/reference_wbtest.mbt`), not by this ledger. The raw DEFLATE encoding is
+the deflater's; its streams are held to zlib's decoder by
+`scripts/crosscheck.mbtx`.
 
 Accepted as uncovered (needs a row):
 
 - defensive arms that are unreachable by construction;
+- lines that only an `abort` reaches, run by `panic` tests, whose counts the
+  abort discards;
 - testable lines not yet tested, marked `not yet tested`.
 
 Budgets are exact uncovered counts at the last measurement.
@@ -72,3 +82,4 @@ Budgets are exact uncovered counts at the last measurement.
 
 | File | Budget | Reason |
 | --- | --- | --- |
+| src/gzip/encoder.mbt | 1 | In `Encoder::Encoder`, the `abort` for a header that cannot be written (`Header::is_writable`): the `panic` tests of `src/gzip/encode_wbtest.mbt` run it, for `Encoder` and `compress`, but the abort ends the test before its coverage counts are written. |

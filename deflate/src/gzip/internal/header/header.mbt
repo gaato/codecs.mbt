@@ -122,3 +122,77 @@ pub extend Fixed with Eq::{equal, not_equal}
 
 ///|
 pub extend Fixed with @debug.Debug::{to_repr}
+
+///|
+/// The longest extra field a header can hold: its length, XLEN, is 2 bytes.
+pub const MAX_EXTRA : Int32 = 65535
+
+///|
+/// Whether a header with these variable fields can be written: the extra
+/// field fits XLEN, and the name and the comment, which a zero byte ends,
+/// hold none. Whether the extra field is a well-formed sequence of
+/// subfields is not checked: RFC 1952 asks it, but no decoder relies on it.
+pub fn writable(extra : Bytes?, name : Bytes?, comment : Bytes?) -> Bool {
+  !(extra is Some(e) && e.length() > MAX_EXTRA) &&
+  !(name is Some(n) && n.find(b"\x00") is Some(_)) &&
+  !(comment is Some(c) && c.find(b"\x00") is Some(_))
+}
+
+///|
+/// The bytes of a member's header with these fields, as `parse_fixed` and a
+/// decoder read them back: the fixed part (FLG with FTEXT, FEXTRA, FNAME
+/// and FCOMMENT for the fields given, never FHCRC), then XLEN and the extra
+/// field, the name and its zero, the comment and its zero. The fields must
+/// be `writable`.
+pub fn build(
+  text~ : Bool,
+  mtime~ : UInt32,
+  xfl~ : Byte,
+  os~ : Byte,
+  extra~ : Bytes?,
+  name~ : Bytes?,
+  comment~ : Bytes?,
+) -> Bytes {
+  let flags = (if text { FTEXT } else { 0 }) |
+    (if extra is Some(_) { FEXTRA } else { 0 }) |
+    (if name is Some(_) { FNAME } else { 0 }) |
+    (if comment is Some(_) { FCOMMENT } else { 0 })
+  let out = Buffer()
+  out.write_bytes(b"\x1f\x8b\x08")
+  out.write_byte(flags.to_byte())
+  out.write_bytes(put_le32(mtime))
+  out.write_byte(xfl)
+  out.write_byte(os)
+  if extra is Some(e) {
+    out.write_byte(e.length().to_byte())
+    out.write_byte((e.length() >> 8).to_byte())
+    out.write_bytes(e)
+  }
+  if name is Some(n) {
+    out.write_bytes(n)
+    out.write_byte(b'\x00')
+  }
+  if comment is Some(c) {
+    out.write_bytes(c)
+    out.write_byte(b'\x00')
+  }
+  out.to_bytes()
+}
+
+///|
+/// The four little-endian bytes of `value`.
+pub fn put_le32(value : UInt32) -> Bytes {
+  [
+    value.to_byte(),
+    (value >> 8).to_byte(),
+    (value >> 16).to_byte(),
+    (value >> 24).to_byte(),
+  ]
+}
+
+///|
+/// A member's trailer: the CRC-32 of the data, then its length modulo 2^32,
+/// ISIZE, both little-endian, as `check_crc` and `check_size` read them.
+pub fn trailer(crc : UInt32, size : UInt32) -> Bytes {
+  put_le32(crc) + put_le32(size)
+}

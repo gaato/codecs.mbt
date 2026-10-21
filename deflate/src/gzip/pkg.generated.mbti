@@ -8,6 +8,8 @@ import {
 }
 
 // Values
+pub fn compress(BytesView, level? : Int, header? : Header) -> Bytes
+
 pub fn decompress(BytesView, max_output? : Int) -> Bytes raise @codec.CodecError
 
 // Errors
@@ -27,6 +29,19 @@ pub fn Decoder::step(Self, BytesView, MutArrayView[Byte], end~ : Bool) -> @codec
 pub fn Decoder::step_into(Self, BytesView, FixedArray[Byte], end~ : Bool) -> @codec_bytes.Status raise @codec.CodecError
 pub impl @codec_bytes.Decode for Decoder
 
+pub struct Encoder {
+  // private fields
+}
+pub fn Encoder::Encoder(level? : Int, header? : Header) -> Self
+pub fn Encoder::is_finished(Self) -> Bool
+pub fn Encoder::last_consumed(Self) -> Int
+pub fn Encoder::last_produced(Self) -> Int
+pub fn Encoder::memory_usage(Self) -> Int
+pub fn Encoder::reset(Self) -> Unit
+pub fn Encoder::step(Self, BytesView, MutArrayView[Byte], action~ : @codec_bytes.EncodeAction) -> @codec_bytes.Status
+pub fn Encoder::step_into(Self, BytesView, FixedArray[Byte], action~ : @codec_bytes.EncodeAction) -> @codec_bytes.Status
+pub impl @codec_bytes.Encode for Encoder
+
 pub(all) struct Header {
   text : Bool
   mtime : UInt
@@ -37,10 +52,13 @@ pub(all) struct Header {
   comment : Bytes?
 } derive(Eq, @debug.Debug)
 pub fn Header::equal(Self, Self) -> Bool
+pub fn Header::is_writable(Self) -> Bool
 pub fn Header::not_equal(Self, Self) -> Bool
 pub fn Header::to_repr(Self) -> @debug.Repr
 
 // Type aliases
+pub using @codec_bytes {type EncodeAction}
+
 pub using @codec_bytes {type Status}
 
 // Traits

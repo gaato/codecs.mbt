@@ -57,3 +57,51 @@ pub extend Header with Eq::{equal, not_equal}
 
 ///|
 pub extend Header with @debug.Debug::{to_repr}
+
+///|
+/// FLEVEL for a compression level, as zlib's `deflate.c` sets it: 0 for
+/// levels 0 and 1 (fastest), 1 for 2 to 5, 2 for 6 (the default), 3 for 7
+/// to 9. Levels outside 0 to 9 count as the nearest one.
+pub fn flevel(level : Int32) -> Int32 {
+  if level < 2 {
+    0
+  } else if level < 6 {
+    1
+  } else if level == 6 {
+    2
+  } else {
+    3
+  }
+}
+
+///|
+/// The header an encoder writes for `level`: CMF for DEFLATE with a 32 KiB
+/// window (CINFO 7), FLG with FLEVEL (`flevel`) and FDICT, and the header
+/// check computed as zlib computes it, then DICTID when the stream uses a
+/// preset dictionary. The bytes are zlib's: `78 01`, `78 5e`, `78 9c` and
+/// `78 da` for the four FLEVELs, `78 bb` and DICTID at the default level
+/// with a dictionary.
+pub fn build(level : Int32, dictionary_id : UInt32?) -> Bytes {
+  let mut header = (8 + (7 << 4)) << 8
+  header = header | (flevel(level) << 6)
+  if dictionary_id is Some(_) {
+    header = header | 0x20
+  }
+  header = header + (31 - header % 31)
+  let start = [(header >> 8).to_byte(), (header & 0xFF).to_byte()]
+  match dictionary_id {
+    Some(id) => Bytes::from_array([..start, ..put_be32(id)])
+    None => Bytes::from_array(start)
+  }
+}
+
+///|
+/// The four big-endian bytes of `value`: DICTID, or the trailer's Adler-32.
+pub fn put_be32(value : UInt32) -> Bytes {
+  [
+    (value >> 24).to_byte(),
+    (value >> 16).to_byte(),
+    (value >> 8).to_byte(),
+    value.to_byte(),
+  ]
+}

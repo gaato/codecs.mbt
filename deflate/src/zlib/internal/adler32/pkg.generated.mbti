@@ -8,6 +8,8 @@ pub fn of_bytes(BytesView) -> UInt
 
 pub fn update(UInt, ArrayView[Byte]) -> UInt
 
+pub fn update_bytes(UInt, BytesView) -> UInt
+
 // Errors
 
 // Types and methods

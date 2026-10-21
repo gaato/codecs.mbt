@@ -86,3 +86,83 @@ test "the header CRC and the trailer" {
   )
   inspect(@header.le16(b"\xff\x01"), content="511")
 }
+
+///|
+test "a built header reads back, for every combination of fields" {
+  let values : Array[Bytes?] = [None, Some(b""), Some(b"x"), Some(b"name.txt")]
+  for text in [false, true] {
+    for
+      extra in [
+        None,
+        Some(b""),
+        Some(b"AB\x02\x00hi"),
+        Some(Bytes::make(65535, b'e')),
+      ] {
+      for name in values {
+        for comment in values {
+          assert_true(@header.writable(extra, name, comment))
+          let bytes = @header.build(
+            text~,
+            mtime=0x12345678,
+            xfl=b'\x02',
+            os=b'\x03',
+            extra~,
+            name~,
+            comment~,
+          )
+          let fixed = @header.parse_fixed(bytes[:@header.FIXED_SIZE]).unwrap()
+          let flags = (if text { @header.FTEXT } else { 0 }) |
+            (if extra is Some(_) { @header.FEXTRA } else { 0 }) |
+            (if name is Some(_) { @header.FNAME } else { 0 }) |
+            (if comment is Some(_) { @header.FCOMMENT } else { 0 })
+          assert_eq(fixed, {
+            flags,
+            mtime: 0x12345678,
+            xfl: b'\x02',
+            os: b'\x03',
+          })
+          // The variable fields, read as RFC 1952 lays them out.
+          let mut at = @header.FIXED_SIZE
+          if extra is Some(e) {
+            let xlen = @header.le16(bytes[at:at + 2])
+            assert_eq(bytes[at + 2:at + 2 + xlen], e)
+            at += 2 + xlen
+          }
+          for field in [name, comment] {
+            if field is Some(f) {
+              assert_eq(bytes[at:at + f.length()], f)
+              assert_eq(bytes[at + f.length()], b'\x00')
+              at += f.length() + 1
+            }
+          }
+          assert_eq(at, bytes.length())
+        }
+      }
+    }
+  }
+}
+
+///|
+test "what cannot be written" {
+  assert_true(@header.writable(None, None, None))
+  assert_false(@header.writable(Some(Bytes::make(65536, b'e')), None, None))
+  assert_false(@header.writable(None, Some(b"a\x00b"), None))
+  assert_false(@header.writable(None, None, Some(b"\x00")))
+  // Zeros in the extra field are its bytes, written with their length.
+  assert_true(@header.writable(Some(b"\x00\x00"), Some(b"a"), Some(b"b")))
+}
+
+///|
+test "the trailer reads back" {
+  for value in [(0U, 0U), (0x12345678, 5), (0xFFFFFFFF, 0x80000000)] {
+    let (crc, size) = value
+    let trailer = @header.trailer(crc, size)
+    assert_eq(trailer.length(), 8)
+    assert_true(@header.check_crc(crc, trailer[0:4]) is Ok(_))
+    assert_true(@header.check_size(size, trailer[4:8]) is Ok(_))
+  }
+  assert_eq(
+    @header.trailer(0x04030201, 0x08070605),
+    b"\x01\x02\x03\x04\x05\x06\x07\x08",
+  )
+}

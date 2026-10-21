@@ -34,3 +34,26 @@ pub fn decompress(
     }
   }
 }
+
+///|
+/// Compresses `input` into a whole zlib stream, at `level` (0 to 9, clamped;
+/// 6 by default) and with the preset `dictionary` if given, as `Encoder`
+/// does.
+pub fn compress(
+  input : BytesView,
+  level~ : Int32 = 6,
+  dictionary? : BytesView,
+) -> Bytes {
+  let encoder = Encoder(level~, dictionary?)
+  let chunk = FixedArray::make(1 << 16, b'\x00')
+  let out = Buffer()
+  let mut rest = input
+  for ;; {
+    let status = encoder.step_into(rest, chunk, action=Finish)
+    rest = rest[encoder.last_consumed():]
+    out.write_bytesview(Bytes::from_array(chunk[:encoder.last_produced()])[:])
+    if status is Done {
+      return out.to_bytes()
+    }
+  }
+}

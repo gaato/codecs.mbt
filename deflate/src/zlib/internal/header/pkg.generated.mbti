@@ -8,9 +8,15 @@ import {
 // Values
 pub fn be32(BytesView) -> UInt
 
+pub fn build(Int, UInt?) -> Bytes
+
 pub fn check_trailer(UInt, BytesView) -> Result[Unit, String]
 
+pub fn flevel(Int) -> Int
+
 pub fn parse(Byte, Byte) -> Result[Header, String]
+
+pub fn put_be32(UInt) -> Bytes
 
 // Errors
 

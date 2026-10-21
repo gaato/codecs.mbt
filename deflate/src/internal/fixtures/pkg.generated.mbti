@@ -15,11 +15,15 @@ pub fn disagreement(String, Int, first~ : String, whole~ : String, members? : Bo
 
 pub fn[D : @codec_bytes.Decode] drive(D, BytesView, next_in~ : () -> Int, next_out~ : () -> Int, step_into? : (D, BytesView, FixedArray[Byte], Bool) -> @codec_bytes.Status raise @codec.CodecError, check? : (D, Int) -> Unit raise) -> (Bytes, Int) raise
 
+pub fn[E : @codec_bytes.Encode] encode(E, BytesView, next_in~ : () -> Int, next_out~ : () -> Int, flush_every? : Int, check? : (E, Int) -> Unit raise) -> Bytes raise
+
 pub fn find(Array[Vector], String) -> Vector
 
 pub fn kind_name(@codec.ErrorKind) -> String
 
 pub fn[D : @codec_bytes.Decode] outcome(D, BytesView) -> String
+
+pub fn sample(UInt, Int) -> Bytes
 
 pub fn sha256(BytesView) -> String
 

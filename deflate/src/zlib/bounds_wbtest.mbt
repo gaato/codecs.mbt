@@ -96,3 +96,26 @@ test "one inner decoder, made for the kind of stream the header names" {
   run(named)
   assert_true(decoder.inner_dictionary)
 }
+
+///|
+test "the encoder reports the raw encoder's bound after every step" {
+  let input = @fixtures.sample(10, 150000)
+  let dictionary = @fixtures.sample(11, 40000)
+  for level in [0, 1, 6, 9] {
+    for encoder in [Encoder(level~), Encoder(level~, dictionary~)] {
+      assert_eq(encoder.memory_usage(), 689394)
+      let rng = @fixtures.Rng::new(level.reinterpret_as_uint())
+      let _ = @fixtures.encode(
+        encoder,
+        input,
+        next_in=() => 1 + rng.below(40000),
+        next_out=() => rng.below(3000),
+        flush_every=50000,
+        check=(e, _) => {
+          assert_eq(e.memory_usage(), 689394)
+          assert_true(e.framing.length() <= HEADER_MAX)
+        },
+      )
+    }
+  }
+}

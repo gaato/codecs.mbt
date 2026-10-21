@@ -40,3 +40,18 @@ test "all 0xff bytes, the largest sums" {
   let data = Bytes::make(100000, b'\xff')
   assert_eq(@adler32.of_bytes(data), reference(data))
 }
+
+///|
+test "update_bytes equals update, in pieces" {
+  let data = Bytes::makei(20000, i => (i * 31 % 256).to_byte())
+  let array = data.to_array()
+  let mut by_bytes = @adler32.INITIAL
+  let mut by_array = @adler32.INITIAL
+  for start = 0; start < data.length(); start = start + 5553 {
+    let end = (start + 5553).min(data.length())
+    by_bytes = @adler32.update_bytes(by_bytes, data[start:end])
+    by_array = @adler32.update(by_array, array[start:end])
+  }
+  assert_eq(by_bytes, by_array)
+  assert_eq(by_bytes, reference(data))
+}

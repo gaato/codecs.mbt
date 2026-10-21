@@ -18,9 +18,13 @@ pub const FNAME : Int = 8
 
 pub const FTEXT : Int = 1
 
+pub const MAX_EXTRA : Int = 65535
+
 pub const START_SIZE : Int = 4
 
 pub fn begins_member(BytesView) -> Bool
+
+pub fn build(text~ : Bool, mtime~ : UInt, xfl~ : Byte, os~ : Byte, extra~ : Bytes?, name~ : Bytes?, comment~ : Bytes?) -> Bytes
 
 pub fn check_crc(UInt, BytesView) -> Result[Unit, String]
 
@@ -35,6 +39,12 @@ pub fn le16(BytesView) -> Int
 pub fn le32(BytesView) -> UInt
 
 pub fn parse_fixed(BytesView) -> Result[Fixed, String]
+
+pub fn put_le32(UInt) -> Bytes
+
+pub fn trailer(UInt, UInt) -> Bytes
+
+pub fn writable(Bytes?, Bytes?, Bytes?) -> Bool
 
 // Errors
 

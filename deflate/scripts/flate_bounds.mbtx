@@ -1,0 +1,91 @@
+// Checks the sizes of moonbit-community/flate's `Deflater` arrays that
+// gaato/deflate's `Encoder::memory_usage` adds up, against flate's own
+// source: the deflater's arrays are private, so the check is a white-box test
+// (deflate/scripts/flate_bounds/deflater_bounds_wbtest.mbt) run inside a copy
+// of the flate module that gaato/deflate depends on, in a temporary
+// directory. Run it again whenever that dependency changes version.
+//
+// Usage, from the repository root (needs `moon update` done, and cp):
+//   moon run deflate/scripts/flate_bounds.mbtx
+// Exit status: 0 = the arrays stay within their bounds, 1 = they do not,
+// 2 = setup failure.
+
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/async@0.22.5/stdio",
+  "moonbitlang/core/env",
+  "moonbitlang/x@0.5.6/sys",
+}
+
+///|
+async fn setup_failure(message : String) -> Unit {
+  @stdio.stderr.write("\{message}\n")
+  @sys.exit(2)
+}
+
+///|
+/// The version of moonbit-community/flate that deflate/moon.mod imports.
+fn flate_version(module_file : String) -> String? {
+  let marker = "\"moonbit-community/flate@"
+  for line in module_file.split("\n") {
+    let line = line.trim()
+    if line.strip_prefix(marker) is Some(rest) {
+      guard rest.split("\"").collect() is [version, ..] else { return None }
+      return Some(version.to_owned())
+    }
+  }
+  None
+}
+
+///|
+async fn main {
+  if !@fs.exists("deflate/moon.mod") {
+    setup_failure("run from the repository root")
+    return
+  }
+  guard flate_version(@fs.read_file("deflate/moon.mod").text()) is Some(version) else {
+    setup_failure("deflate/moon.mod imports no moonbit-community/flate")
+    return
+  }
+  // moon keeps the resolved source of the workspace's dependencies here.
+  let source = ".mooncakes/moonbit-community/flate"
+  guard @fs.exists("\{source}/moon.mod") else {
+    setup_failure("no \{source}: run `moon update` and `moon check` first")
+    return
+  }
+  let resolved = @fs.read_file("\{source}/moon.mod").text()
+  guard resolved.contains("version = \"\{version}\"") else {
+    setup_failure("\{source} is not version \{version}")
+    return
+  }
+  let tmp = match @env.get_env_var("TMPDIR") {
+    Some(dir) if dir != "" => dir
+    _ => "/tmp"
+  }
+  // Outside the repository, so that its moon.work does not take the copy in.
+  let dir = "\{tmp}/gaato-deflate-flate-bounds-\{version}"
+  @shell.Cmd("rm", ["-rf", dir]).output().check()
+  @shell.Cmd("cp", ["-r", source, dir]).output().check()
+  let test_file = "deflater_bounds_wbtest.mbt"
+  @shell.Cmd("cp", ["deflate/scripts/flate_bounds/\{test_file}", "\{dir}/\{test_file}"]).output().check()
+  println("moonbit-community/flate \{version}, copied to \{dir}")
+  let env = if @env.get_env_var("MOON_CC") is None {
+    { "MOON_CC": "cc" }
+  } else {
+    {}
+  }
+  let code = @shell.Cmd(
+    "moon",
+    ["test", "--release", "--target", "native", test_file],
+    cwd=dir,
+    env~,
+  ).status()
+  @shell.Cmd("rm", ["-rf", dir]).output().check()
+  if code != 0 {
+    println("flate_bounds: the deflater's arrays are not within the bounds counted")
+    @sys.exit(1)
+  }
+  println("flate_bounds: the deflater's arrays stay within the bounds counted")
+}

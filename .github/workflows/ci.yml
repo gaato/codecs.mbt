@@ -40,9 +40,9 @@ jobs:
 
       - name: Install the scripts' tools
         # The reference zstd, brotli and gzip, which the generators' checks and
-        # the brotli cross-check decode with (Node's zlib, the other reference
-        # of the DEFLATE formats and the other brotli decoder the cross-check
-        # uses, comes with Node).
+        # the cross-checks decode with (Node's zlib, the other reference of the
+        # DEFLATE formats and the other brotli decoder the cross-checks use,
+        # comes with Node).
         run: apt-get update && apt-get install -y --no-install-recommends zstd brotli gzip
 
       - name: Registry index
@@ -59,3 +59,9 @@ jobs:
       - name: Cross-check the brotli encoder with the reference decoder
         run: moon run brotli/scripts/crosscheck.mbtx
 
+      - name: Cross-check the DEFLATE, zlib and gzip encoders with the reference decoders
+        run: moon run deflate/scripts/crosscheck.mbtx
+
+      - name: Check the deflater's array bounds against moonbit-community/flate's source
+        # RESOURCE_BOUNDS.md of gaato/deflate counts these arrays.
+        run: moon run deflate/scripts/flate_bounds.mbtx
