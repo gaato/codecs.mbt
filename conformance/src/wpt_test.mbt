@@ -38,14 +38,27 @@ fn wpt_decoder(format : String) -> &@codec_bytes.Decode {
 }
 
 ///|
+/// The ways the input arrives: whole, in one step, and a byte at a time. The
+/// output the stream determines comes out before an error after it either
+/// way.
+let wpt_splits : Array[@codec_harness.Sizes] = [
+  @codec_harness.Sizes::fixed(1 << 20),
+  @codec_harness.Sizes::fixed(1),
+]
+
+///|
 /// What DecompressionStream gives for `input`, as the WPT names it, and the
-/// output that came before an error. The input arrives a byte at a time, so
-/// that output the stream determines comes out before an error after it.
-fn wpt_decompress(format : String, input : Bytes) -> (String, Bytes) raise {
+/// output that came before an error, with the input arriving in chunks of
+/// `input_sizes`, and the error, if any.
+fn wpt_run(
+  format : String,
+  input : Bytes,
+  input_sizes : @codec_harness.Sizes,
+) -> (String, Bytes, @codec.ErrorKind?) raise {
   let run = @codec_harness.drive(
     @codec_harness.ByteDecoder::new(wpt_decoder(format)),
     input,
-    input_sizes=@codec_harness.Sizes::fixed(1),
+    input_sizes~,
     first_member=true,
   )
   let result = if run.error is Some(_) || run.consumed != input.length() {
@@ -55,7 +68,17 @@ fn wpt_decompress(format : String, input : Bytes) -> (String, Bytes) raise {
   } else {
     "corrupt"
   }
-  (result, run.output)
+  (result, run.output, run.error)
+}
+
+///|
+/// What DecompressionStream gives for `input`, the same whether the input
+/// arrives whole or a byte at a time.
+fn wpt_decompress(format : String, input : Bytes) -> (String, Bytes) raise {
+  let (result, output, _) = wpt_run(format, input, wpt_splits[0])
+  let (again, _, _) = wpt_run(format, input, wpt_splits[1])
+  assert_eq(again, result, msg="\{format} a byte at a time")
+  (result, output)
 }
 
 ///|
@@ -124,12 +147,30 @@ test "decompression-corrupt-input: one field at a time" {
 
 ///|
 test "decompression-extra-input: the output, then an error" {
+  // Whole, in a single step, as well as a byte at a time: all the output,
+  // then TrailingData (gzip, which stops after its member, leaves the byte
+  // unread instead).
   for format in ["deflate", "gzip", "deflate-raw", "brotli"] {
     let input = Bytes::from_array([..wpt_inputs[format], 0])
-    let (result, output) = wpt_decompress(format, input)
-    assert_eq(result, "error", msg=format)
-    assert_eq(output, b"expected output", msg=format)
+    for input_sizes in wpt_splits {
+      let (result, output, error) = wpt_run(format, input, input_sizes)
+      let how = "\{format} in \{input_sizes.label}"
+      assert_eq(result, "error", msg=how)
+      assert_eq(output, b"expected output", msg=how)
+      if format != "gzip" {
+        debug_inspect(error, content="Some(TrailingData)")
+      }
+    }
   }
+  // gzip decoded to the end of the input gives TrailingData too.
+  let input = Bytes::from_array([..wpt_inputs["gzip"], 0])
+  let run = @codec_harness.drive(
+    @codec_harness.ByteDecoder::new(@gzip.Decoder()),
+    input,
+  )
+  assert_eq(run.output, b"expected output")
+  debug_inspect(run.error, content="Some(TrailingData)")
+  assert_eq(run.consumed, input.length() - 1)
 }
 
 ///|

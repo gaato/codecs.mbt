@@ -102,12 +102,24 @@ output slice; `last_consumed` and `last_produced` report how much.
    nothing past it is consumed, so `input[last_consumed():]` is exactly what
    follows. Formats that cannot tell where a member ends without reading past
    it reject `EndOfMember` with `Unsupported`.
-4. **Errors stick.** A call that raises reports zero consumed and zero
-   produced, and every later call raises the same kind until `reset`. A codec
-   may document a resumable error on its own type (for example raising a
-   memory limit and continuing); through the trait, every error is final.
+4. **Errors stick, and say how far the call got.** A call that raises
+   reports in `last_consumed` and `last_produced` what it consumed and wrote
+   before the error. A codec writes all the output that the input determines
+   before the point of the error, and raises only once it is written: when
+   the output slice fills first, the call returns `NeedMoreOutput`, and a
+   later call writes the rest and raises. For `TrailingData`, `last_consumed`
+   stops exactly at the end of the stream, so that `input[last_consumed():]`
+   begins with the bytes after it; it is zero when an earlier call already
+   took those bytes (a call takes all its input before it asks for more).
+   Every later call raises the same kind and reports zero consumed and zero
+   produced, until `reset`. A codec may document a resumable error on its own
+   type (for example raising a memory limit and continuing); through the
+   trait, every error is final.
 5. **Splitting does not matter.** The output bytes and the error kind do not
-   depend on how the input and the output are cut into slices.
+   depend on how the input and the output are cut into slices. For a stream
+   that raises, the output includes everything written before the error, so
+   a corrupt stream gives the same bytes, then the same kind of error, under
+   every split.
 6. **Output before a checksum is provisional.** Bytes are written as soon as
    they are known. A checksum that covers them is checked afterwards, so
    `ChecksumMismatch` can follow output that the caller already has. The
@@ -162,7 +174,7 @@ here, so that adding one later does not require changing it.
 | Brotli | implemented | No framing: one stream per input, so `EndOfMember` and `EndOfInput` end at the same place. |
 | gzip | implemented | Several members under `EndOfInput`; the header of each member is metadata on the concrete type. Bytes after a member that do not begin another, zero padding included, raise `TrailingData`. |
 | zlib | implemented | A preset dictionary in the header raises `DictionaryRequired` with its Adler-32. No concatenation. |
-| raw DEFLATE | implemented | No header and no checksum. Trailing bytes after the final block raise `TrailingData`. |
+| raw DEFLATE | implemented | No header and no checksum. Trailing bytes after the final block raise `TrailingData`. A `Corrupt` found inside the DEFLATE data does not yet report what its call wrote (rule 4); see gaato/deflate's README. |
 | LZ4 frame | fits | Concatenated frames and skippable frames. The legacy frame has no end marker and rejects `EndOfMember`. |
 | xz | fits | Several streams with padding. The memory limit is resumable on the concrete type. Filter chains that cannot flush raise `Unsupported`. |
 | .lzma | fits | No magic and no checksum; trailing bytes are `TrailingData`. Cannot flush. |

@@ -16,9 +16,9 @@ preferred_target = "native"
 
 import {
   "gaato/codec@0.1.0",
-  "gaato/codec_bytes@0.1.0",
+  "gaato/codec_bytes@0.1.1",
   "gaato/codec_harness@0.0.0",
-  "gaato/zstd@0.3.0",
-  "gaato/brotli@0.4.0",
+  "gaato/zstd@0.3.1",
+  "gaato/brotli@0.4.1",
   "gaato/deflate@0.1.0",
 }

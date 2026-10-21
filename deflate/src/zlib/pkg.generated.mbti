@@ -9,6 +9,8 @@ import {
 // Values
 pub fn decompress(BytesView, dictionary? : BytesView, max_output? : Int) -> Bytes raise @codec.CodecError
 
+pub fn dictionary_id(BytesView) -> UInt
+
 pub fn is_header(Byte, Byte) -> Bool
 
 // Errors

@@ -7,6 +7,12 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-21
+
+### Changed
+
+- **A step that raises hands out the output before the error and reports it**, as gaato/codec_bytes 0.1.1 asks, which the module now requires. Before, such a step reported zero consumed and zero produced, and output decoded but not yet handed out was lost, so how much came out before an error depended on how the input was split: none when a corrupt stream came in one step. Now `step` first writes everything decoded before the error, answering `NeedMoreOutput` while it does not fit, then raises with `last_consumed()` and `last_produced()` counting that step; on `TrailingData`, `last_consumed()` stops exactly at the end of the stream. The steps after an error raise it again and report zero, as before. Migration: a loop that stops at the first error needs no change; to keep the output before an error, also read `out[:last_produced()]` when a step raises, and expect `NeedMoreOutput` before the error when the slice is small.
+
 ## [0.3.0] - 2026-10-20
 
 ### Fixed

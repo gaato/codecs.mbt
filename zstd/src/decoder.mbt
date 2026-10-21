@@ -12,6 +12,8 @@
 // and are copied out to the caller's buffer, so output can be handed out in
 // slices of any size. A compressed block is decoded only once all earlier
 // output is handed out, so its output never overwrites bytes still pending.
+// An error is kept in `failure` and raised once the output decoded before it
+// is handed out, so that it comes after the same output whatever the split.
 
 ///|
 priv enum State {
@@ -214,13 +216,16 @@ pub fn Decoder::is_finished(self : Decoder) -> Bool {
 
 ///|
 /// Input bytes the latest `step` accepted: all of them on `NeedMoreInput`.
-/// Zero after a step that raised.
+/// A step that raised accepted the bytes up to the error; for
+/// `TrailingData`, exactly up to the end of the stream, or none if the
+/// stream ended before this step's input.
 pub fn Decoder::last_consumed(self : Decoder) -> Int32 {
   self.step_consumed
 }
 
 ///|
-/// Output bytes the latest `step` wrote. Zero after a step that raised.
+/// Output bytes the latest `step` wrote, a step that raised included: the
+/// output before the error.
 pub fn Decoder::last_produced(self : Decoder) -> Int32 {
   self.step_produced
 }
@@ -235,8 +240,12 @@ pub fn Decoder::last_produced(self : Decoder) -> Int32 {
 /// raises `Truncated`. Without `end`, the decoder answers `NeedMoreInput`
 /// between frames. Bytes after the last frame that start no frame raise
 /// `TrailingData`. Under `until=EndOfMember` the stream ends after its first
-/// frame, whatever `end` says. After an error the decoder raises it again
-/// until `reset`.
+/// frame, whatever `end` says.
+///
+/// An error comes after all the output before it: when `output` fills
+/// first, the step answers `NeedMoreOutput` and a later one hands out the
+/// rest and raises. After an error the decoder raises it again, consuming
+/// and writing nothing, until `reset`.
 pub fn Decoder::step(
   self : Decoder,
   input : BytesView,
@@ -267,21 +276,25 @@ fn Decoder::step_with(
 ) -> Status raise @codec.CodecError {
   self.step_consumed = 0
   self.step_produced = 0
-  if self.failure is Some(err) {
-    raise err
-  }
   self.view = input
   self.in_pos = 0
   self.out = output
   self.fixed_out = fixed_output
   self.out_pos = 0
-  let status = self.run() catch { err => self.fail(err) }
+  if self.failure is Some(err) {
+    // Output from before the error that did not fit yet.
+    self.drain()
+    return self.finish_failed(err)
+  }
+  let status = self.run() catch { err => return self.fail(err) }
   let status = match status {
     NeedMoreInput if end =>
       if !(self.state is Magic && self.hdr_len == 0) {
-        self.fail(CodecError(Truncated, "the stream ends inside a frame"))
+        return self.fail(
+          CodecError(Truncated, "the stream ends inside a frame"),
+        )
       } else if self.frames == 0 {
-        self.fail(CodecError(Truncated, "the stream holds no frame"))
+        return self.fail(CodecError(Truncated, "the stream holds no frame"))
       } else {
         self.state = Done
         Status::Done
@@ -301,13 +314,28 @@ fn Decoder::finish_step(self : Decoder, status : Status) -> Status {
 }
 
 ///|
-/// Records a terminal error and raises it.
-fn[T] Decoder::fail(
+/// Records a terminal error, hands out the output before it, and raises it
+/// once that is all out.
+fn Decoder::fail(
   self : Decoder,
   err : @codec.CodecError,
-) -> T raise @codec.CodecError {
+) -> Status raise @codec.CodecError {
   self.failure = Some(err)
-  self.release_step()
+  self.drain()
+  self.finish_failed(err)
+}
+
+///|
+/// Ends a step after the error `err`: `NeedMoreOutput` while output from
+/// before it is pending, then `err`, with the step's counts.
+fn Decoder::finish_failed(
+  self : Decoder,
+  err : @codec.CodecError,
+) -> Status raise @codec.CodecError {
+  let status = self.finish_step(NeedMoreOutput)
+  if self.pending > 0 {
+    return status
+  }
   raise err
 }
 

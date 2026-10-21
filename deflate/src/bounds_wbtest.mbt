@@ -1,5 +1,5 @@
 ///|
-/// What `memory_usage` reports without a dictionary.
+/// What `memory_usage` reports, with a dictionary or without.
 const BOUND : Int32 = WINDOW_SIZE + LINK_TABLE_BYTES + STAGED_BYTES
 
 ///|
@@ -12,7 +12,7 @@ fn check_bounds(d : Decoder, room : Int32) -> Unit raise {
     None => 0
   }
   assert_true(dictionary <= WINDOW_SIZE)
-  assert_eq(d.memory_usage(), BOUND + dictionary)
+  assert_eq(d.memory_usage(), BOUND)
 }
 
 ///|
@@ -32,11 +32,16 @@ test "output slices and reported memory stay within their bounds" {
 }
 
 ///|
-test "only the last 32 KiB of a dictionary are kept" {
+test "only the last 32 KiB of a dictionary are kept, by reference" {
   for entry in dictionary_vectors {
     let (v, dictionary) = entry
     let dictionary = @fixtures.decode64(dictionary)
     let decoder = Decoder(dictionary~)
+    // A view of the caller's bytes: their last 32 KiB, not a copy.
+    let kept = decoder.dictionary.unwrap()
+    assert_true(physical_equal(kept.data(), dictionary), msg=v.name)
+    assert_eq(kept.start_offset() + kept.length(), dictionary.length())
+    assert_eq(kept.length(), dictionary.length().min(WINDOW_SIZE))
     let (got, _) = @fixtures.drive(
       decoder,
       v.input(),
@@ -45,14 +50,10 @@ test "only the last 32 KiB of a dictionary are kept" {
       check=check_bounds,
     )
     assert_eq(@fixtures.sha256(got), v.sha256, msg=v.name)
-    assert_eq(
-      decoder.memory_usage(),
-      BOUND + dictionary.length().min(WINDOW_SIZE),
-      msg=v.name,
-    )
+    assert_eq(decoder.memory_usage(), BOUND, msg=v.name)
   }
   inspect(
     Decoder(dictionary=Bytes::make(40000, b'd')).memory_usage(),
-    content="107008",
+    content="74240",
   )
 }

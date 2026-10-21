@@ -9,27 +9,43 @@ contracts would. Published modules never depend on it.
 The checks are written once, against `Stepper`: given input, room for output
 and whether the input ends there, take a step and say what was consumed,
 what was produced and why the step stopped (`NeedMoreInput`,
-`NeedMoreOutput`, an `Event`, or `Done`). Each kind of codec has an adapter
+`NeedMoreOutput`, an `Event`, `Done`, or `Raised` with the kind and message
+of a codec error). Each kind of codec has an adapter
 that turns its contract into this view and checks its own rules on the way;
 `ByteDecoder` does it for `gaato/codec_bytes` decoders, and `ByteEncoder` for
 its encoders. An encoder's step with `end` is a step with `Finish`, any other
 a step with `Continue`, so every check below runs an encoder as it runs a
-decoder, its output being the encoded stream. Both adapters check that a
-step that raises reports nothing consumed or produced and that the counts fit
-what the step was given; `ByteEncoder` also checks that `Done` comes only
-after `Finish`, with all input consumed.
+decoder, its output being the encoded stream. Both adapters check that the
+counts of every step, one that raises included, fit what the step was given,
+and keep what a step that raises produced; `ByteEncoder` also checks that
+`Done` comes only after `Finish`, with all input consumed.
 
 `drive` runs a codec over an input split by two `Sizes` sequences and checks
 the rules every kind shares after every step: nothing is asked for after the
 end, a full slice is really full, a step with room makes progress, memory
-never passes its limit, and errors stick. Its
-`Transcript` (output, events, error kind) is what two runs must agree on.
+never passes its limit, and errors stick: the step after one raises the same
+kind and reports nothing consumed or produced. Its `Transcript` (output,
+the output before an error included, events, error kind) is what two runs
+must agree on; the message and, after an error, the input consumed are kept
+but not compared.
 
-On top of `drive`: `check_splits` (every split agrees with the whole run),
+On top of `drive`: `check_splits` (every split of a valid stream agrees with
+the whole run), `check_error_splits` (the same for an input that may be
+corrupt: whole, two random splits, and a byte at a time each way for small
+inputs, all with the same output before the same kind of error),
 `check_truncation` (prefixes end in `Truncated` or cleanly at a member
-boundary), `check_trailing` (bytes after the end), `check_reset`, and `fuzz`
-(corrupted inputs never break the contract; returns how often each outcome
-happened).
+boundary), `check_trailing` (bytes after the end: `TrailingData` given at
+once has consumed exactly the stream and written all its output),
+`check_reset`, and `fuzz` (corrupted inputs never break the contract, each
+under `check_error_splits`; returns how often each outcome happened).
+
+A codec with a documented gap in reporting the output of a step that raises
+passes `short_output`, a predicate on the transcript that names exactly the
+errors of the gap, to `check_error_splits` and `fuzz`: when both runs end in
+such an error, they need only raise the same kind, with the output of one
+beginning the other's. gaato/deflate's is the only one, for the `Corrupt`
+that moonbit-community/flate finds inside DEFLATE data
+(`conformance/src/deflate_test.mbt`).
 
 For an encoder and a decoder of the same format: `check_roundtrip` encodes
 an input whole and under every split, requires every encoding to equal the

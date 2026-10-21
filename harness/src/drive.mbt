@@ -1,20 +1,25 @@
 ///|
-/// Everything a run of a codec over one input shows: what it wrote, the
-/// events it stopped at, the kind of error that ended it, if any, and how
-/// much input it consumed. Two runs agree when these agree; how many steps
-/// they took and how much memory they peaked at are kept for the bounds
-/// checks.
+/// Everything a run of a codec over one input shows: what it wrote (before
+/// an error too), the events it stopped at, the kind of error that ended it,
+/// if any, with its message, and how much input it consumed. Two runs agree
+/// when these agree, but for the message; how many steps they took and how
+/// much memory they peaked at are kept for the bounds checks.
 pub(all) struct Transcript {
   output : Bytes
   events : Array[String]
   error : @codec.ErrorKind?
+  /// The error's message, empty without an error.
+  message : String
   consumed : Int32
   steps : Int32
   peak_memory : Int32
 }
 
 ///|
-/// Whether two runs agree on output, events and error.
+/// Whether two runs agree on output, events and the kind of error, and,
+/// without an error, on the input consumed. With an error the input consumed
+/// may differ: a step takes all its input before it asks for more, so how far
+/// past the error a run read depends on the split.
 pub fn Transcript::agrees(self : Transcript, other : Transcript) -> Bool {
   self.output == other.output &&
   self.events == other.events &&
@@ -60,7 +65,10 @@ let max_steps : Int32 = 50_000_000
 ///   `first_member=true` (a codec that stops after the first member), `Done` may
 ///   leave input unread, and the transcript says how much was consumed;
 /// - memory never exceeds `memory_limit`;
-/// - an error sticks: another step raises the same kind.
+/// - a step that raises reports counts within what it was given, and its
+///   output is part of the transcript;
+/// - an error sticks: another step raises the same kind, consuming and
+///   producing nothing.
 pub fn[S : Stepper] drive(
   codec : S,
   input : BytesView,
@@ -83,31 +91,7 @@ pub fn[S : Stepper] drive(
     }
     let end = pos == input.length()
     let room = (output_sizes.next)().max(1)
-    let step = codec.step(pending, room, end~) catch {
-      @codec.CodecError(kind, _) as err => {
-        // The error sticks, whatever the next step is handed.
-        let again = try codec.step(pending, room, end~) catch {
-          @codec.CodecError(next, _) => next
-          other => raise other
-        } noraise {
-          _ => fail("after \{@debug.to_string(err)}, the next step succeeded")
-        }
-        if again != kind {
-          fail(
-            "after \{@debug.to_string(kind)}, the next step raised \{@debug.to_string(again)}",
-          )
-        }
-        return {
-          output: output.to_bytes(),
-          events,
-          error: Some(kind),
-          consumed: pos - pending.length(),
-          steps,
-          peak_memory: peak,
-        }
-      }
-      other => raise other
-    }
+    let step = codec.step(pending, room, end~)
     steps += 1
     if steps > max_steps {
       fail("no end after \{max_steps} steps")
@@ -120,6 +104,35 @@ pub fn[S : Stepper] drive(
     output.write_bytes(step.produced)
     pending = pending[step.consumed:]
     match step.stop {
+      Raised(kind, message) => {
+        // The error sticks, whatever the next step is handed, and the next
+        // step takes and gives nothing.
+        let again = codec.step(pending, room, end~)
+        guard again.stop is Raised(next, _) else {
+          fail(
+            "after \{@debug.to_string(kind)}, the next step answered \{@debug.to_string(again.stop)}",
+          )
+        }
+        if next != kind {
+          fail(
+            "after \{@debug.to_string(kind)}, the next step raised \{@debug.to_string(next)}",
+          )
+        }
+        if again.consumed != 0 || again.produced.length() != 0 {
+          fail(
+            "after \{@debug.to_string(kind)}, the next step reported \{again.consumed} consumed and \{again.produced.length()} produced",
+          )
+        }
+        return {
+          output: output.to_bytes(),
+          events,
+          error: Some(kind),
+          message,
+          consumed: pos - pending.length(),
+          steps,
+          peak_memory: peak,
+        }
+      }
       Done => {
         if !first_member && (!end || pending.length() != 0) {
           fail(
@@ -130,6 +143,7 @@ pub fn[S : Stepper] drive(
           output: output.to_bytes(),
           events,
           error: None,
+          message: "",
           consumed: pos - pending.length(),
           steps,
           peak_memory: peak,

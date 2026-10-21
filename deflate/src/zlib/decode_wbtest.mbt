@@ -211,16 +211,18 @@ test "errors stick until reset, with a kind and a message" {
     message(b"\x78\x9c\x03\x00\x00\x00\x00\x02"),
     content="ChecksumMismatch: the Adler-32 of the data does not match the stream's",
   )
+  // The step that raises took the header; the steps after it take nothing.
   let decoder = Decoder()
   let out = FixedArray::make(8, b'\x00')
-  for _ in 0..<2 {
+  for consumed in [2, 0] {
     let kind = try decoder.step_into(b"\x78\x9d", out, end=false) catch {
       CodecError(kind, _) => kind
     } noraise {
       _ => fail("decoded")
     }
     assert_eq(kind, Corrupt)
-    assert_eq(decoder.last_consumed(), 0)
+    assert_eq(decoder.last_consumed(), consumed)
+    assert_eq(decoder.last_produced(), 0)
   }
   decoder.reset()
   assert_true(
@@ -283,4 +285,19 @@ test "the decoder is a gaato/codec_bytes Decode" {
     )
     @codec_bytes.Decode::reset(decoder)
   }
+}
+
+///|
+test "dictionary_id is the id a stream names its dictionary by" {
+  inspect(dictionary_id(b""), content="1")
+  inspect(dictionary_id(b"abc"), content="38600999")
+  let (named, dictionary) = dictionary_vectors[1]
+  let dictionary = @fixtures.decode64(dictionary)
+  let id = try decompress(named.input()) catch {
+    CodecError(DictionaryRequired(Some(id)), _) => id
+    _ => fail("another error")
+  } noraise {
+    _ => fail("decoded without its dictionary")
+  }
+  assert_eq(dictionary_id(dictionary), id)
 }

@@ -1,10 +1,13 @@
 ///|
 /// The checks of the contract, over every vector of a format: every split
 /// agrees and stays within `memory_limit`, prefixes are `Truncated`, each of
-/// `garbage` after a stream is `TrailingData`, a decoder that stops after
-/// the first member leaves the next vector unread (for vectors that
-/// `one_member` says hold a single member), and `reset` forgets. `make`
-/// builds a decoder for a window of the given bits.
+/// `garbage` after a stream is `TrailingData` with the stream consumed and
+/// its output written, the stream cut in half and the stream followed by
+/// garbage give the same output and error under every split, a decoder that
+/// stops after the first member leaves the next vector unread (for vectors
+/// that `one_member` says hold a single member), and `reset` forgets. `make`
+/// builds a decoder for a window of the given bits. `short_output` is the
+/// format's documented gap, if any (see `@codec_harness.check_error_splits`).
 fn[D : @codec_bytes.Decode] conform(
   label : String,
   vectors : Array[Vector],
@@ -12,6 +15,7 @@ fn[D : @codec_bytes.Decode] conform(
   memory_limit~ : (Int32) -> Int32,
   garbage~ : Array[Bytes],
   one_member~ : (Vector) -> Bool,
+  short_output~ : (@codec_harness.Transcript) -> Bool = _ => false,
 ) -> Unit raise {
   for i, v in vectors {
     let input = v.input()
@@ -33,8 +37,22 @@ fn[D : @codec_bytes.Decode] conform(
     @codec_harness.check_truncation(codec, input, whole, max_prefixes=64) catch {
       e => fail("\{label} \{v.name}: \{e}")
     }
-    @codec_harness.check_trailing(codec, input, garbage~) catch {
+    @codec_harness.check_trailing(codec, input, whole, garbage~) catch {
       e => fail("\{label} \{v.name}: \{e}")
+    }
+    let cut = input[:input.length() / 2]
+    let followed = Bytes::from_array([..input, ..garbage[0]])
+    for broken in [cut, followed[:]] {
+      let _ = @codec_harness.check_error_splits(
+        codec,
+        broken,
+        seed=i.reinterpret_as_uint(),
+        memory_limit=Some(memory_limit(v.window_bits)),
+        small=1 << 16,
+        short_output~,
+      ) catch {
+        e => fail("\{label} \{v.name}, \{broken.length()} bytes: \{e}")
+      }
     }
     guard one_member(v) else { continue }
     let next = vectors[(i + 1) % vectors.length()].input()

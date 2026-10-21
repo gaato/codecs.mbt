@@ -15,6 +15,6 @@ source = "src"
 preferred_target = "native"
 
 import {
-  "gaato/zstd@0.3.0",
-  "gaato/brotli@0.4.0",
+  "gaato/zstd@0.3.1",
+  "gaato/brotli@0.4.1",
 }

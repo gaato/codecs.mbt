@@ -8,6 +8,8 @@ import {
 }
 
 // Values
+pub fn[S : Stepper] check_error_splits(() -> S, BytesView, seed~ : UInt, memory_limit? : Int?, small? : Int, short_output? : (Transcript) -> Bool) -> Transcript raise
+
 pub fn[E : @codec_bytes.Encode, D : @codec_bytes.Decode] check_flush(() -> E, () -> D, BytesView, flush_at~ : Array[Int]) -> Unit raise
 
 pub fn[S : Stepper] check_member(() -> S, BytesView, BytesView, Transcript) -> Unit raise
@@ -18,13 +20,13 @@ pub fn[E : @codec_bytes.Encode, D : @codec_bytes.Decode] check_roundtrip(() -> E
 
 pub fn[S : Stepper] check_splits(() -> S, BytesView, memory_limit? : Int?, small? : Int) -> Transcript raise
 
-pub fn[S : Stepper] check_trailing(() -> S, BytesView, garbage~ : Array[Bytes]) -> Unit raise
+pub fn[S : Stepper] check_trailing(() -> S, BytesView, Transcript, garbage~ : Array[Bytes]) -> Unit raise
 
 pub fn[S : Stepper] check_truncation(() -> S, BytesView, Transcript, max_prefixes? : Int) -> Unit raise
 
 pub fn[S : Stepper] drive(S, BytesView, input_sizes? : Sizes, output_sizes? : Sizes, memory_limit? : Int?, first_member? : Bool) -> Transcript raise
 
-pub fn[S : Stepper] fuzz(() -> S, BytesView, seed~ : UInt, rounds~ : Int, memory_limit? : Int?) -> Map[String, Int] raise
+pub fn[S : Stepper] fuzz(() -> S, BytesView, seed~ : UInt, rounds~ : Int, memory_limit? : Int?, short_output? : (Transcript) -> Bool) -> Map[String, Int] raise
 
 pub fn sha256(BytesView) -> String
 
@@ -75,6 +77,7 @@ pub(all) enum Stop {
   NeedMoreOutput
   Event(String)
   Done
+  Raised(@codec.ErrorKind, String)
 } derive(Eq, @debug.Debug)
 pub fn Stop::equal(Self, Self) -> Bool
 pub fn Stop::not_equal(Self, Self) -> Bool
@@ -84,6 +87,7 @@ pub(all) struct Transcript {
   output : Bytes
   events : Array[String]
   error : @codec.ErrorKind?
+  message : String
   consumed : Int
   steps : Int
   peak_memory : Int

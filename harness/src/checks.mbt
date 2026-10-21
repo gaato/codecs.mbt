@@ -46,7 +46,7 @@ pub fn[S : Stepper] check_splits(
 ///|
 fn describe(run : Transcript) -> String {
   let error = match run.error {
-    Some(kind) => @debug.to_string(kind)
+    Some(kind) => "\{@debug.to_string(kind)} (\{run.message})"
     None => "no error"
   }
   "\{run.output.length()} bytes, \{run.events.length()} events, \{error}"
@@ -129,22 +129,40 @@ fn starts_with(whole : Bytes, prefix : Bytes) -> Bool {
 /// format cannot read as the start of another member) raises
 /// `TrailingData`. A single extra byte, whatever it is, raises
 /// `TrailingData`, or `Truncated` when the format could read it as the start
-/// of another member.
+/// of another member. Given all at once, a run that raises `TrailingData`
+/// has consumed exactly `input`, and written all of `full`'s output (a run
+/// over `input` alone).
 pub fn[S : Stepper] check_trailing(
   make : () -> S,
   input : BytesView,
+  full : Transcript,
   garbage~ : Array[Bytes],
 ) -> Unit raise {
+  let at_end = (run : Transcript, what : String) => {
+    if run.consumed != input.length() {
+      fail(
+        "\{what}: TrailingData after consuming \{run.consumed} of the stream's \{input.length()} bytes",
+      )
+    }
+    if run.output != full.output {
+      fail(
+        "\{what}: TrailingData after \{run.output.length()} of the stream's \{full.output.length()} bytes of output",
+      )
+    }
+  }
   for extra in garbage {
     let run = drive(make(), [..input, ..extra])
     if run.error != Some(TrailingData) {
       fail("trailing \{extra} gives \{describe(run)}, not TrailingData")
     }
+    at_end(run, "trailing \{extra}")
   }
   for byte in [b'\x00', b'\x01', b'\x28', b'\xff'] {
     let run = drive(make(), [..input, byte])
-    if !(run.error is Some(TrailingData | Truncated)) {
-      fail("a trailing \{byte} gives \{describe(run)}")
+    match run.error {
+      Some(TrailingData) => at_end(run, "a trailing \{byte}")
+      Some(Truncated) => ()
+      _ => fail("a trailing \{byte} gives \{describe(run)}")
     }
   }
 }
@@ -169,29 +187,88 @@ pub fn[S : Stepper] check_reset(
 }
 
 ///|
+/// Checks rule 5 on an input that may be corrupt: a fresh codec runs over
+/// `input` whole, then under two splits drawn from `seed` (small input chunks
+/// with large room, large chunks with little room) and, for inputs and
+/// outputs of at most `small` bytes, with the input a byte at a time and
+/// with a byte of room. Every run must agree with the whole one: the same
+/// output, everything written before an error included, and the same kind of
+/// error. Returns the whole run.
+///
+/// `short_output` names a gap of a codec's own, documented with it: errors
+/// whose step does not report what it wrote. When it holds for both runs,
+/// they need only raise the same kind, and the output of one must begin the
+/// other's.
+pub fn[S : Stepper] check_error_splits(
+  make : () -> S,
+  input : BytesView,
+  seed~ : UInt32,
+  memory_limit~ : Int32? = None,
+  small~ : Int32 = 4096,
+  short_output~ : (Transcript) -> Bool = _ => false,
+) -> Transcript raise {
+  let whole = drive(make(), input, memory_limit~)
+  let rng = Rng::new(seed)
+  let seed = () => rng.below(1 << 20).reinterpret_as_uint()
+  let runs = [
+    (Sizes::random(seed(), 64), Sizes::random(seed(), 4096)),
+    (Sizes::random(seed(), 2000), Sizes::random(seed(), 7)),
+  ]
+  if input.length() <= small && whole.output.length() <= small {
+    runs.push((Sizes::fixed(1), Sizes::fixed(1024)))
+    runs.push((Sizes::fixed(1 << 20), Sizes::fixed(1)))
+  }
+  for split in runs {
+    let (input_sizes, output_sizes) = split
+    let run = drive(make(), input, input_sizes~, output_sizes~, memory_limit~)
+    if run.agrees(whole) {
+      continue
+    }
+    if short_output(whole) &&
+      short_output(run) &&
+      run.error == whole.error &&
+      (
+        starts_with(whole.output, run.output) ||
+        starts_with(run.output, whole.output)
+      ) {
+      continue
+    }
+    fail(
+      "input in \{input_sizes.label}, output in \{output_sizes.label}: " +
+      "\{describe(run)}, whole: \{describe(whole)}",
+    )
+  }
+  whole
+}
+
+///|
 /// Runs `rounds` corrupted copies of `input` (bits flipped, bytes replaced,
 /// inserted, deleted, or the tail cut) through the codec under the
-/// contract's checks, and returns how often each outcome happened, by name.
-/// A corrupted input may decode or raise any `CodecError`; breaking the
-/// contract fails.
+/// contract's checks, each under several splits that must agree
+/// (`check_error_splits`, with `short_output`), and returns how often each
+/// outcome happened, by name. A corrupted input may decode or raise any
+/// `CodecError`; breaking the contract fails.
 pub fn[S : Stepper] fuzz(
   make : () -> S,
   input : BytesView,
   seed~ : UInt32,
   rounds~ : Int32,
   memory_limit~ : Int32? = None,
+  short_output~ : (Transcript) -> Bool = _ => false,
 ) -> Map[String, Int32] raise {
   let rng = Rng::new(seed)
   let outcomes : Map[String, Int32] = Map([])
-  for _ in 0..<rounds {
+  for round in 0..<rounds {
     let mutated = mutate(rng, input)
-    let run = drive(
-      make(),
+    let run = check_error_splits(
+      make,
       mutated,
-      input_sizes=Sizes::random(rng.below(1 << 20).reinterpret_as_uint(), 300),
-      output_sizes=Sizes::random(rng.below(1 << 20).reinterpret_as_uint(), 3000),
+      seed=rng.below(1 << 20).reinterpret_as_uint(),
       memory_limit~,
-    )
+      short_output~,
+    ) catch {
+      e => fail("round \{round} from seed \{seed}: \{e}")
+    }
     let name = match run.error {
       None => "decoded"
       Some(LimitExceeded(limit)) =>
@@ -333,6 +410,7 @@ fn[E : @codec_bytes.Encode] encode_all(
     rest = rest[step.consumed:]
     match step.stop {
       NeedMoreOutput => continue
+      Raised(kind, message) => raise @codec.CodecError(kind, message)
       NeedMoreInput =>
         if rest.length() != 0 {
           fail("NeedMoreInput with input left")

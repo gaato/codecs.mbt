@@ -332,9 +332,11 @@ test "errors stick until reset, with a kind and a message" {
     message(Bytes::from_array(bad_size)),
     content="ChecksumMismatch: the length of the data does not match the member's (ISIZE)",
   )
+  // The step that raises took the start of the header; the steps after it
+  // take nothing.
   let decoder = Decoder()
   let out = FixedArray::make(8, b'\x00')
-  for _ in 0..<2 {
+  for consumed in [4, 0] {
     let kind = try
       decoder.step_into(b"\x1f\x8b\x09\x00", out, end=false)
     catch {
@@ -343,7 +345,8 @@ test "errors stick until reset, with a kind and a message" {
       _ => fail("decoded")
     }
     assert_eq(kind, Corrupt)
-    assert_eq(decoder.last_consumed(), 0)
+    assert_eq(decoder.last_consumed(), consumed)
+    assert_eq(decoder.last_produced(), 0)
   }
   decoder.reset()
   let (got, _) = @fixtures.drive(decoder, stream, next_in=() => 50, next_out=() => {

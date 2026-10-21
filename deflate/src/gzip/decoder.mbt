@@ -196,13 +196,20 @@ pub fn Decoder::is_finished(self : Decoder) -> Bool {
 
 ///|
 /// Input bytes the latest `step` accepted: all of them on `NeedMoreInput`.
-/// Zero after a step that raised.
+/// A step that raised accepted the bytes up to the error; for
+/// `TrailingData`, exactly up to the end of the stream, or none if the
+/// stream ended before this step's input. A `Corrupt` found inside the
+/// DEFLATE data does not count the step's DEFLATE bytes (README, known
+/// limits).
 pub fn Decoder::last_consumed(self : Decoder) -> Int32 {
   self.step_consumed
 }
 
 ///|
-/// Output bytes the latest `step` wrote. Zero after a step that raised.
+/// Output bytes the latest `step` wrote, a step that raised included: the
+/// output before the error. A `Corrupt` found inside the DEFLATE data does
+/// not count the output its step wrote into the slice (README, known
+/// limits).
 pub fn Decoder::last_produced(self : Decoder) -> Int32 {
   self.step_produced
 }
@@ -218,7 +225,8 @@ pub fn Decoder::last_produced(self : Decoder) -> Int32 {
 /// between members. Under `until=EndOfMember` the stream ends after its first
 /// member, whatever `end` says. Output comes before the CRC-32 that covers it
 /// is checked, so `ChecksumMismatch` can follow output already handed out.
-/// After an error the decoder raises it again until `reset`.
+/// After an error the decoder raises it again, consuming and writing nothing,
+/// until `reset`.
 pub fn Decoder::step(
   self : Decoder,
   input : BytesView,
@@ -351,8 +359,13 @@ fn Decoder::run(self : Decoder, end~ : Bool) -> Status raise Stop {
             _ => self.inner.step(rest, room, end~)
           }
         } catch {
-          // The DEFLATE data's error, whatever its kind.
-          CodecError(kind, message) => raise Fail(kind, message)
+          // The DEFLATE data's error, whatever its kind, after what the inner
+          // decoder took and wrote before it.
+          CodecError(kind, message) => {
+            self.in_pos += self.inner.last_consumed()
+            self.out_pos += self.inner.last_produced()
+            raise Fail(kind, message)
+          }
         }
         let produced = self.inner.last_produced()
         let written = room.exact_view(end=produced)
@@ -551,12 +564,14 @@ fn Decoder::fill(self : Decoder, n : Int32) -> Unit raise Stop {
 }
 
 ///|
-/// Records a terminal error and raises it.
+/// Records a terminal error and raises it, with the step's counts.
 fn[T] Decoder::fail(
   self : Decoder,
   err : @codec.CodecError,
 ) -> T raise @codec.CodecError {
   self.failure = Some(err)
+  self.step_consumed = self.in_pos
+  self.step_produced = self.out_pos
   self.release_step()
   raise err
 }

@@ -168,3 +168,80 @@ test "max_window_bits refuses larger windows and is clamped" {
     content="LimitExceeded({ resource: Memory, needed: Some(65520), limit: 1008 })",
   )
 }
+
+///|
+/// Steps a fresh decoder over `input`, given whole with `end`, into `room`
+/// bytes at a time, until it finishes or raises: the output, the input
+/// consumed, and the error, if any.
+fn run_to_error(
+  input : BytesView,
+  room : Int32,
+) -> (Bytes, Int32, @codec.ErrorKind?) raise {
+  let decoder = Decoder()
+  let out = FixedArray::make(room, b'\x00')
+  let got = Buffer()
+  let mut taken = 0
+  for ;; {
+    let (status, error) = try
+      decoder.step_into(input[taken:], out, end=true)
+    catch {
+      @codec.CodecError(kind, _) => (None, Some(kind))
+    } noraise {
+      status => (Some(status), None)
+    }
+    taken += decoder.last_consumed()
+    got.write_bytes(Bytes::from_array(out[:decoder.last_produced()]))
+    if error is Some(kind) {
+      // The error sticks, and the steps after it take and give nothing.
+      let again = try decoder.step_into(b"junk", out, end=true) catch {
+        @codec.CodecError(next, _) => next
+      } noraise {
+        _ => fail("error forgotten")
+      }
+      assert_eq(again, kind)
+      assert_eq(decoder.last_consumed(), 0)
+      assert_eq(decoder.last_produced(), 0)
+      return (got.to_bytes(), taken, error)
+    }
+    match status {
+      Some(NeedMoreOutput) => continue
+      Some(Done) => return (got.to_bytes(), taken, None)
+      _ => fail("NeedMoreInput after the end")
+    }
+  }
+}
+
+///|
+test "a step that raises hands out the output before the error and reports it" {
+  let alice = vectors
+    .search_by(v => v.name == "alice29.txt.compressed")
+    .unwrap()
+  let input = vectors[alice].input()
+  let expected = decompress(input)
+  // Bytes after the stream: everything decoded, the stream consumed to its
+  // end exactly (the bytes read ahead given back), then TrailingData.
+  let junk = Bytes::from_array([..input[:], ..b"junk"])
+  for room in [1 << 18, 1000, 1] {
+    let (got, taken, error) = run_to_error(junk, room)
+    debug_inspect(error, content="Some(TrailingData)")
+    assert_eq(taken, input.length(), msg="room \{room}")
+    assert_eq(got, expected, msg="room \{room}")
+  }
+  // Cut short, or bytes changed: the same output and error whatever the
+  // room.
+  let cut = input[:input.length() / 2]
+  let (whole, _, error) = run_to_error(cut, 1 << 18)
+  debug_inspect(error, content="Some(Truncated)")
+  assert_true(whole.length() > 0)
+  let (small, _, again) = run_to_error(cut, 7)
+  assert_eq(again, error)
+  assert_eq(small, whole)
+  for at in [100, input.length() / 2, input.length() - 10] {
+    let bad = input.to_array()
+    bad[at] = bad[at] ^ 0x5a
+    let (whole, _, error) = run_to_error(Bytes::from_array(bad), 1 << 18)
+    let (small, _, again) = run_to_error(Bytes::from_array(bad), 7)
+    assert_eq(again, error, msg="byte \{at}")
+    assert_eq(small, whole, msg="byte \{at}")
+  }
+}

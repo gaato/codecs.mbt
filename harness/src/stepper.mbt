@@ -1,13 +1,16 @@
 ///|
 /// Why a step stopped, as the checks see it. Byte streams stop for input,
-/// for output room or at the end; kinds whose output has structure (an
-/// image's header, its rows) also stop at events, which the checks compare
-/// as text.
+/// for output room, at the end or at an error; kinds whose output has
+/// structure (an image's header, its rows) also stop at events, which the
+/// checks compare as text.
 pub(all) enum Stop {
   NeedMoreInput
   NeedMoreOutput
   Event(String)
   Done
+  /// The step raised this kind of `CodecError`, with this message, after
+  /// consuming and producing what the step says.
+  Raised(@codec.ErrorKind, String)
 } derive(Eq, @debug.Debug)
 
 ///|
@@ -29,8 +32,9 @@ pub(all) struct Step {
 /// A codec of any kind, seen through the checks' common lens: given input
 /// and room for output, take a step. A kind's adapter (`ByteDecoder` for
 /// byte streams) turns its contract into this, and checks its own rules on
-/// the way; a contract violation raises `Failure`, a codec error raises
-/// `CodecError`.
+/// the way; a contract violation raises `Failure`, and a codec error ends
+/// the step with `Raised`, which keeps what the step consumed and produced
+/// before it.
 pub(open) trait Stepper {
   fn step(Self, BytesView, Int32, end~ : Bool) -> Step raise
   fn reset(Self) -> Unit
@@ -59,17 +63,15 @@ pub impl[D : @codec_bytes.Decode] Stepper for ByteDecoder[D] with fn step(
   end~,
 ) {
   let out = FixedArray::make(room, b'\x00')
-  let status = self.decoder.step(input, out.mut_view(), end~) catch {
-    @codec.CodecError(kind, message) => {
-      check_nothing_reported(
-        self.decoder.last_consumed(),
-        self.decoder.last_produced(),
-      )
-      raise @codec.CodecError(kind, message)
-    }
+  let stop : Stop = try self.decoder.step(input, out.mut_view(), end~) catch {
+    @codec.CodecError(kind, message) => Raised(kind, message)
+  } noraise {
+    Done => Done
+    NeedMoreInput => NeedMoreInput
+    NeedMoreOutput => NeedMoreOutput
   }
   to_step(
-    status,
+    stop,
     input,
     out,
     self.decoder.last_consumed(),
@@ -78,20 +80,11 @@ pub impl[D : @codec_bytes.Decode] Stepper for ByteDecoder[D] with fn step(
 }
 
 ///|
-/// A step that raises reports nothing consumed and nothing produced.
-fn check_nothing_reported(consumed : Int32, produced : Int32) -> Unit raise {
-  if consumed != 0 || produced != 0 {
-    fail(
-      "a raising step reported \{consumed} consumed and \{produced} produced",
-    )
-  }
-}
-
-///|
 /// A byte-stream step as the checks see it, once its counts are checked
-/// against what it was given.
+/// against what it was given: a step that raised too reports what it
+/// consumed and produced before the error, within what it was given.
 fn to_step(
-  status : @codec_bytes.Status,
+  stop : Stop,
   input : BytesView,
   out : FixedArray[Byte],
   consumed : Int32,
@@ -102,11 +95,6 @@ fn to_step(
   }
   if produced < 0 || produced > out.length() {
     fail("produced \{produced} bytes into \{out.length()}")
-  }
-  let stop : Stop = match status {
-    Done => Done
-    NeedMoreInput => NeedMoreInput
-    NeedMoreOutput => NeedMoreOutput
   }
   { consumed, produced: Bytes::from_array(out[:produced]), stop, }
 }
@@ -172,14 +160,15 @@ fn[E : @codec_bytes.Encode] encode_step(
   action : @codec_bytes.EncodeAction,
 ) -> Step raise {
   let out = FixedArray::make(room, b'\x00')
-  let status = encoder.step(input, out.mut_view(), action~) catch {
-    @codec.CodecError(kind, message) => {
-      check_nothing_reported(encoder.last_consumed(), encoder.last_produced())
-      raise @codec.CodecError(kind, message)
-    }
+  let stop : Stop = try encoder.step(input, out.mut_view(), action~) catch {
+    @codec.CodecError(kind, message) => Raised(kind, message)
+  } noraise {
+    Done => Done
+    NeedMoreInput => NeedMoreInput
+    NeedMoreOutput => NeedMoreOutput
   }
   let step = to_step(
-    status,
+    stop,
     input,
     out,
     encoder.last_consumed(),

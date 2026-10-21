@@ -88,7 +88,7 @@ Every codec is held to its kind's rules by one test harness, kept in a private
 module of the workspace and never published:
 
 - results are the same however input and output are split, down to one byte
-  at a time;
+  at a time, for corrupt input too: the same output before the same error;
 - errors stick, truncated input is reported, nothing past the end is read;
 - memory stays within the limits, checked after every step;
 - corrupted input never crashes, and the kinds of error it causes are

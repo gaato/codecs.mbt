@@ -91,7 +91,7 @@ A header's extra field, name and comment may hold at most `max_header_bytes` bet
 
 ## zlib
 
-A zlib stream that was compressed with a preset dictionary names it by its Adler-32. Without it the decoder raises `DictionaryRequired(Some(id))`, and with another one `DictionaryMismatch`; make a new decoder with the right dictionary and start over. A stream that names no dictionary ignores the one you give.
+A zlib stream that was compressed with a preset dictionary names it by its Adler-32, which `@zlib.dictionary_id` computes. Without it the decoder raises `DictionaryRequired(Some(id))`, and with another one `DictionaryMismatch`; make a new decoder with the right dictionary and start over. A stream that names no dictionary ignores the one you give. A decoder keeps a view of the dictionary's last 32 KiB, not a copy, so the `Bytes` it is a view of stay alive as long as the decoder; the same goes for `@deflate.Decoder(dictionary=...)`.
 
 ```mbt check
 ///|
@@ -105,7 +105,7 @@ test "a stream that needs a dictionary" {
   } noraise {
     _ => None
   }
-  assert_eq(needed, Some(961414807)) // the Adler-32 of the dictionary
+  assert_eq(needed, Some(@zlib.dictionary_id(dictionary)))
   assert_eq(@zlib.decompress(stream, dictionary~), b"hello")
 }
 ```
@@ -119,7 +119,8 @@ Discord's `zlib-stream` gateway compression is one zlib stream per connection th
 - Decodes every DEFLATE block (stored, fixed and dynamic Huffman codes) with a 32 KiB window, and preset dictionaries for raw DEFLATE and zlib. It refuses what zlib refuses: reserved block types and codes, over-subscribed and incomplete codes, distances before the start of the output, and the reserved header fields and values of zlib and gzip.
 - Checks every checksum: zlib's Adler-32, gzip's CRC-32 and length, and the header CRC when a gzip header has one. Output comes out as soon as it is decoded, before the checksum that covers it, so `ChecksumMismatch` can follow output you already have; `decompress` returns only checked output.
 - Never reads past the end of a stream: after `Done` under `until=EndOfMember`, what follows is `input[last_consumed():]`, whatever the input splits. Raw DEFLATE and zlib streams cannot be concatenated, so under the default `until=EndOfInput` anything after one raises `TrailingData`.
-- Takes input in chunks of any size, down to one byte, and writes output into buffers of any size, under the rules of `gaato/codec_bytes`. Memory is the window and the decoding tables, about 72 KiB, plus a dictionary's last 32 KiB (twice for zlib, which keeps a copy for the streams that name it) and a gzip header's fields; `memory_usage()` reports it.
+- Takes input in chunks of any size, down to one byte, and writes output into buffers of any size, under the rules of `gaato/codec_bytes`. Memory is the window and the decoding tables, 74,240 bytes with a dictionary or without (a dictionary is your bytes, held by reference), plus a gzip header's fields; `memory_usage()` reports it.
+- A step that raises first writes the output that comes before the error, and `last_consumed()` and `last_produced()` say what it took and wrote, so a stream with bytes after it gives all its output, then `TrailingData`, with `last_consumed()` at its end: whether it came in one step or many. The one exception is below.
 - Every malformed stream raises [`gaato/codec`](https://mooncakes.io/docs/gaato/codec)'s `CodecError(kind, message)`, with the kind `Truncated`, `Corrupt`, `ChecksumMismatch`, `TrailingData`, `DictionaryRequired`, `DictionaryMismatch` or `LimitExceeded` (a gzip header over `max_header_bytes`, with `resource: Memory`; more than `max_output` from `decompress`, with `resource: Output`). An error inside the DEFLATE data of a zlib or gzip stream keeps its kind. It does not abort. To match on the error, add `gaato/codec` to your package's imports.
 
 Not included: an encoder.
@@ -127,6 +128,7 @@ Not included: an encoder.
 ## Known limits
 
 - The DEFLATE data is decoded by [moonbit-community/flate](https://mooncakes.io/docs/moonbit-community/flate)'s inflater, which none of the packages' signatures name.
+- A `Corrupt` that the inflater finds inside the DEFLATE data (a bad code, a distance too far back, a reserved block type) comes from a step that reports nothing consumed and nothing produced, because the inflater does not say what such a step did: the bytes it wrote into your slice before the error are not counted, and the output before the error depends on how the input was split. The kind of error does not. Every other error, those of the zlib and gzip framing, a checksum, bytes after the stream, and a stream cut short, reports its step as the contract says.
 - Two kinds of malformed DEFLATE are refused with another kind of error than zlib's. A dynamic block whose code has no end-of-block code is refused as `Truncated` when the input runs out, after the block's literals have come out, where zlib refuses its header as `Corrupt`. A dynamic block whose code-length code is empty is refused as `Corrupt` at once, where zlib asks for more input first. Both refuse; no valid stream decodes differently.
 
 ## License

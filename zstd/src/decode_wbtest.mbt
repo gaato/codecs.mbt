@@ -253,16 +253,21 @@ test "max_window_bits refuses larger windows and is clamped" {
 }
 
 ///|
-/// The kind `step_into` raises on `input`, with `end`.
+/// The kind `step_into` raises on `input`, with `end`, once the output
+/// before the error is handed out (64 bytes at a time).
 fn step_refusal(
   decoder : Decoder,
   input : BytesView,
   end~ : Bool,
 ) -> @codec.ErrorKind raise {
-  try decoder.step_into(input, FixedArray::make(64, b'\x00'), end~) catch {
-    CodecError(kind, _) => kind
-  } noraise {
-    _ => fail("decoded")
+  let out = FixedArray::make(64, b'\x00')
+  let mut rest = input
+  for ;; {
+    let status = decoder.step_into(rest, out, end~) catch {
+      CodecError(kind, _) => return kind
+    }
+    guard status is NeedMoreOutput else { fail("decoded") }
+    rest = rest[decoder.last_consumed():]
   }
 }
 
@@ -398,4 +403,95 @@ test "a frame that names a dictionary carries its id" {
     fail("no dictionary id")
   }
   inspect(id, content="4660")
+}
+
+///|
+/// Steps a fresh decoder over `input`, given whole with `end`, into `room`
+/// bytes at a time, until it finishes or raises: the output, the input
+/// consumed, and the error, if any.
+fn run_to_error(
+  input : BytesView,
+  room : Int32,
+) -> (Bytes, Int32, @codec.ErrorKind?) raise {
+  let decoder = Decoder()
+  let out = FixedArray::make(room, b'\x00')
+  let got = Buffer()
+  let mut taken = 0
+  for ;; {
+    let (status, error) = try
+      decoder.step_into(input[taken:], out, end=true)
+    catch {
+      CodecError(kind, _) => (None, Some(kind))
+    } noraise {
+      status => (Some(status), None)
+    }
+    taken += decoder.last_consumed()
+    got.write_bytes(Bytes::from_array(out[:decoder.last_produced()]))
+    if error is Some(kind) {
+      // The error sticks, and the steps after it take and give nothing.
+      let again = try decoder.step_into(b"junk", out, end=true) catch {
+        CodecError(next, _) => next
+      } noraise {
+        _ => fail("error forgotten")
+      }
+      assert_eq(again, kind)
+      assert_eq(decoder.last_consumed(), 0)
+      assert_eq(decoder.last_produced(), 0)
+      return (got.to_bytes(), taken, error)
+    }
+    match status {
+      Some(NeedMoreOutput) => continue
+      Some(Done) => return (got.to_bytes(), taken, None)
+      _ => fail("NeedMoreInput after the end")
+    }
+  }
+}
+
+///|
+test "a step that raises hands out the output before the error and reports it" {
+  let input = vector("gen/text_level3").input()
+  let expected = decompress(input)
+  // Bytes that start no frame: everything decoded, the stream consumed to
+  // its end exactly, then TrailingData; in one step, or with little room.
+  let junk = Bytes::from_array([..input[:], ..b"junk"])
+  for room in [1 << 17, 1000, 1] {
+    let (got, taken, error) = run_to_error(junk, room)
+    debug_inspect(error, content="Some(TrailingData)")
+    assert_eq(taken, input.length(), msg="room \{room}")
+    assert_eq(got, expected, msg="room \{room}")
+  }
+  // A wrong content checksum: all the frame's output comes first.
+  let bad = input.to_array()
+  bad[bad.length() - 1] = bad[bad.length() - 1] ^ 1
+  for room in [1 << 17, 1000] {
+    let (got, taken, error) = run_to_error(Bytes::from_array(bad), room)
+    debug_inspect(error, content="Some(ChecksumMismatch)")
+    assert_eq(taken, input.length())
+    assert_eq(got, expected)
+  }
+  // Cut short after some blocks: the same output whatever the room.
+  let flushed = vector("gen/mixed_flushed").input()
+  let cut = flushed[:flushed.length() - 100]
+  let (whole, _, error) = run_to_error(cut, 1 << 17)
+  debug_inspect(error, content="Some(Truncated)")
+  let (small, _, _) = run_to_error(cut, 7)
+  assert_eq(small, whole)
+  assert_true(whole.length() > 0)
+  // The four bytes after a frame split across steps: the step that sees
+  // they start no frame has nothing of the stream left, and consumed none.
+  let one = vector("gen/one_byte").input()
+  let decoder = Decoder()
+  let out = FixedArray::make(8, b'\x00')
+  let both = Bytes::from_array([..one[:], ..b"ju"])
+  debug_inspect(
+    decoder.step_into(both, out, end=false),
+    content="NeedMoreInput",
+  )
+  let late = try decoder.step_into(b"nk", out, end=true) catch {
+    CodecError(kind, _) => kind
+  } noraise {
+    _ => fail("decoded")
+  }
+  debug_inspect(late, content="TrailingData")
+  inspect(decoder.last_consumed(), content="0")
 }

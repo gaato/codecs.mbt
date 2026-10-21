@@ -56,14 +56,20 @@ pub extend EncodeAction with @debug.Debug::{to_repr}
 /// A step consumes a prefix of `input` and writes a prefix of `output`
 /// (`last_consumed` and `last_produced` say how much), and returns why it
 /// stopped. `end` says whether `input` reaches the end of the data. The rules
-/// every decoder keeps are in the repository's CONTRACT.md: among them,
-/// errors stick until `reset`, and the result does not depend on how input
-/// and output are split.
+/// every decoder keeps are in the repository's CONTRACT.md: among them, a
+/// step that raises first writes all the output the input determines before
+/// the error (answering `NeedMoreOutput` if the slice fills first) and
+/// reports what it consumed and wrote, errors stick until `reset`, and the
+/// output and the error do not depend on how input and output are split.
 pub(open) trait Decode {
   fn step(Self, BytesView, MutArrayView[Byte], end~ : Bool) -> Status raise @codec.CodecError
-  /// Input bytes consumed by the last step.
+  /// Input bytes consumed by the last step, one that raised included: what it
+  /// consumed before the error. For `TrailingData`, exactly up to the end of
+  /// the stream (zero if it ended before this step's input). Zero for the
+  /// steps after an error.
   fn last_consumed(Self) -> Int32
-  /// Output bytes written by the last step.
+  /// Output bytes written by the last step, one that raised included: what it
+  /// wrote before the error. Zero for the steps after an error.
   fn last_produced(Self) -> Int32
   /// Returns the decoder to the state of a new one with the same options.
   fn reset(Self) -> Unit
@@ -76,9 +82,11 @@ pub(open) trait Decode {
 /// `Decode`; `action` takes the place of `end`.
 pub(open) trait Encode {
   fn step(Self, BytesView, MutArrayView[Byte], action~ : EncodeAction) -> Status raise @codec.CodecError
-  /// Input bytes consumed by the last step.
+  /// Input bytes consumed by the last step, one that raised included: what it
+  /// consumed before the error. Zero for the steps after an error.
   fn last_consumed(Self) -> Int32
-  /// Output bytes written by the last step.
+  /// Output bytes written by the last step, one that raised included: what it
+  /// wrote before the error. Zero for the steps after an error.
   fn last_produced(Self) -> Int32
   /// Returns the encoder to the state of a new one with the same options.
   fn reset(Self) -> Unit

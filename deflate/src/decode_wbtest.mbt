@@ -169,6 +169,7 @@ test "errors stick until reset, and reset forgets the stream" {
     _ => "decoded"
   }
   inspect(first, content="Corrupt: reserved block type")
+  // The inflater's own Corrupt reports nothing (README, known limits).
   assert_eq(decoder.last_consumed(), 0)
   assert_eq(decoder.last_produced(), 0)
   let again = try decoder.step_into(stream, out, end=true) catch {
@@ -239,4 +240,50 @@ test "the decoder is a gaato/codec_bytes Decode" {
     )
     @codec_bytes.Decode::reset(decoder)
   }
+}
+
+///|
+test "a step that raises reports what it took and wrote, but for the inflater's Corrupt" {
+  let v = vector("text_level6")
+  let stream = v.input()
+  // Room for one byte more: the inflater asks for room before it reads the
+  // end of the block.
+  let out = FixedArray::make(v.size + 1, b'\x00')
+  // A byte after the final block: the stream to its end, all its output.
+  let decoder = Decoder()
+  let kind = try
+    decoder.step_into(Bytes::from_array([..stream, 0]), out, end=true)
+  catch {
+    CodecError(kind, _) => kind
+  } noraise {
+    _ => fail("decoded")
+  }
+  assert_eq(kind, TrailingData)
+  assert_eq(decoder.last_consumed(), stream.length())
+  assert_eq(decoder.last_produced(), v.size)
+  assert_eq(@fixtures.sha256(Bytes::from_array(out[:v.size])), v.sha256)
+  // Cut short: everything given, and the output so far.
+  let decoder = Decoder()
+  let cut = stream[:stream.length() - 1]
+  let kind = try decoder.step_into(cut, out, end=true) catch {
+    CodecError(kind, _) => kind
+  } noraise {
+    _ => fail("decoded")
+  }
+  assert_eq(kind, Truncated)
+  assert_eq(decoder.last_consumed(), cut.length())
+  assert_true(decoder.last_produced() > v.size - 300)
+  // A stored block, then a reserved block type: the inflater wrote "hello"
+  // into the slice, but its step reports nothing.
+  let decoder = Decoder()
+  let hello = b"\x00\x05\x00\xfa\xffhello\x07"
+  let kind = try decoder.step_into(hello, out, end=true) catch {
+    CodecError(kind, _) => kind
+  } noraise {
+    _ => fail("decoded")
+  }
+  assert_eq(kind, Corrupt)
+  assert_eq(Bytes::from_array(out[:5]), b"hello")
+  assert_eq(decoder.last_consumed(), 0)
+  assert_eq(decoder.last_produced(), 0)
 }

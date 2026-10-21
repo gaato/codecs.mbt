@@ -12,8 +12,9 @@
 // preset dictionary (FDICT), before any DEFLATE byte: with the dictionary for
 // a stream that names it, without for one that does not, which ignores it as
 // zlib does. A later stream (after `reset`) that needs the same kind resets
-// it; one that needs the other kind replaces it. The decoder keeps the
-// dictionary's last 32 KiB to make an inner decoder with it.
+// it; one that needs the other kind replaces it. The decoder keeps a view of
+// the dictionary's last 32 KiB (the caller's bytes, which are immutable, not
+// a copy) to make an inner decoder with it.
 
 ///|
 priv enum State {
@@ -37,8 +38,9 @@ const HEADER_MAX : Int32 = 6
 /// DEFLATE decoder (a 32 KiB window and its tables) and a few header bytes,
 /// never the whole input or output.
 pub struct Decoder {
-  // The preset dictionary's last 32 KiB and its Adler-32.
-  priv dictionary : Bytes?
+  // A view of the preset dictionary's last 32 KiB, and the dictionary's
+  // Adler-32.
+  priv dictionary : BytesView?
   priv dictionary_id : UInt32?
   // The inner decoder, once a header has been read, and whether it holds the
   // dictionary.
@@ -71,7 +73,10 @@ pub struct Decoder {
 /// names a dictionary raises `DictionaryRequired(Some(id))` without one, with
 /// the Adler-32 of the dictionary it needs, and `DictionaryMismatch` when
 /// `dictionary` is another; to decode it, make a new decoder with the right
-/// dictionary and start over. A stream that names none ignores `dictionary`.
+/// dictionary and start over (`dictionary_id` says which one it is). A stream
+/// that names none ignores `dictionary`. The decoder keeps a view of the
+/// dictionary's last 32 KiB, not a copy, so the bytes the view belongs to
+/// stay alive as long as the decoder.
 ///
 /// `until` says where the stream ends. `EndOfInput`, the default, decodes the
 /// stream up to the end of the input, and bytes after its trailer raise
@@ -84,8 +89,8 @@ pub fn Decoder::Decoder(
 ) -> Decoder {
   let empty_out = FixedArray::make(0, b'\x00')
   {
-    dictionary: dictionary.map(d => d[(d.length() - 32768).max(0):].to_owned()),
-    dictionary_id: dictionary.map(@adler32.of_bytes),
+    dictionary: dictionary.map(d => d[(d.length() - 32768).max(0):]),
+    dictionary_id: dictionary.map(dictionary_id),
     inner: None,
     inner_dictionary: false,
     until,
@@ -121,20 +126,15 @@ pub fn Decoder::reset(self : Decoder) -> Unit {
 
 ///|
 /// Bytes held for the stream: those of the raw DEFLATE decoder (see
-/// `@deflate.Decoder::memory_usage`: 74,240, and the dictionary's last 32 KiB
-/// when it holds one) once a header has been read, and the dictionary's last
-/// 32 KiB kept to make one. At most 139,776 bytes with a dictionary, 74,240
-/// without. The header and trailer bytes, at most 6, are not counted.
+/// `@deflate.Decoder::memory_usage`) once a header has been read, 74,240,
+/// with a dictionary or without. A dictionary is the caller's bytes, kept by
+/// reference, and not counted; the header and trailer bytes, at most 6, are
+/// not counted either.
 pub fn Decoder::memory_usage(self : Decoder) -> Int32 {
-  let inner = match self.inner {
+  match self.inner {
     Some(d) => d.memory_usage()
     None => 0
   }
-  let dictionary = match self.dictionary {
-    Some(d) => d.length()
-    None => 0
-  }
-  inner + dictionary
 }
 
 ///|
@@ -147,13 +147,20 @@ pub fn Decoder::is_finished(self : Decoder) -> Bool {
 
 ///|
 /// Input bytes the latest `step` accepted: all of them on `NeedMoreInput`.
-/// Zero after a step that raised.
+/// A step that raised accepted the bytes up to the error; for
+/// `TrailingData`, exactly up to the end of the stream, or none if the
+/// stream ended before this step's input. A `Corrupt` found inside the
+/// DEFLATE data does not count the step's DEFLATE bytes (README, known
+/// limits).
 pub fn Decoder::last_consumed(self : Decoder) -> Int32 {
   self.step_consumed
 }
 
 ///|
-/// Output bytes the latest `step` wrote. Zero after a step that raised.
+/// Output bytes the latest `step` wrote, a step that raised included: the
+/// output before the error. A `Corrupt` found inside the DEFLATE data does
+/// not count the output its step wrote into the slice (README, known
+/// limits).
 pub fn Decoder::last_produced(self : Decoder) -> Int32 {
   self.step_produced
 }
@@ -168,8 +175,8 @@ pub fn Decoder::last_produced(self : Decoder) -> Int32 {
 /// bytes after it raise `TrailingData`; under `until=EndOfMember` it answers
 /// `Done` right after the trailer, whatever `end` says. Output comes before
 /// the Adler-32 that covers it is checked, so `ChecksumMismatch` can follow
-/// output already handed out. After an error the decoder raises it again
-/// until `reset`.
+/// output already handed out. After an error the decoder raises it again,
+/// consuming and writing nothing, until `reset`.
 pub fn Decoder::step(
   self : Decoder,
   input : BytesView,
@@ -270,8 +277,13 @@ fn Decoder::run(self : Decoder, end~ : Bool) -> Status raise Stop {
             _ => inner.step(rest, room, end~)
           }
         } catch {
-          // The DEFLATE data's error, whatever its kind.
-          CodecError(kind, message) => raise Fail(kind, message)
+          // The DEFLATE data's error, whatever its kind, after what the inner
+          // decoder took and wrote before it.
+          CodecError(kind, message) => {
+            self.in_pos += inner.last_consumed()
+            self.out_pos += inner.last_produced()
+            raise Fail(kind, message)
+          }
         }
         let produced = inner.last_produced()
         self.adler = @adler32.update(self.adler, room.exact_view(end=produced))
@@ -355,14 +367,25 @@ fn Decoder::fill(self : Decoder, n : Int32) -> Unit raise Stop {
 }
 
 ///|
-/// Records a terminal error and raises it.
+/// Records a terminal error and raises it, with the step's counts.
 fn[T] Decoder::fail(
   self : Decoder,
   err : @codec.CodecError,
 ) -> T raise @codec.CodecError {
   self.failure = Some(err)
+  self.step_consumed = self.in_pos
+  self.step_produced = self.out_pos
   self.release_step()
   raise err
+}
+
+///|
+/// The id a zlib stream gives `dictionary` (DICTID, RFC 1950): its Adler-32.
+/// A stream that names a preset dictionary raises
+/// `DictionaryRequired(Some(id))` without one; the dictionary whose
+/// `dictionary_id` is `id` is the one to decode it with.
+pub fn dictionary_id(dictionary : BytesView) -> UInt32 {
+  @adler32.of_bytes(dictionary)
 }
 
 ///|

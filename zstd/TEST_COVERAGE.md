@@ -42,7 +42,7 @@ and corruptions.
 - moon's bundled tcc cannot link on some hosts (openSUSE); the script sets
   `MOON_CC=cc` unless it is already set.
 
-Snapshot at the last full measurement (2026-10-20): **99.3 %** (584/588
+Snapshot at the last full measurement (2026-10-21): **99.3 %** (588/592
 lines).
 
 ## Policy
