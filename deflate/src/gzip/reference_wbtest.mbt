@@ -32,7 +32,6 @@ test "seeded corruptions: the decoder answers as zlib does" {
         input.length(),
         first~,
         whole~,
-        padded=c.padded,
         members=true,
       )
       is Some(why) {

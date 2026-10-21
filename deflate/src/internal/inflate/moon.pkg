@@ -1,0 +1,11 @@
+// The raw DEFLATE decoder (RFC 1951) that the three packages share: the
+// root package's `Decoder` and the zlib and gzip decoders each hold one, and
+// zlib chooses its preset dictionary once the stream's header has named it.
+
+import {
+  "gaato/codec",
+  "gaato/codec_bytes",
+  "gaato/deflate/internal/huffman",
+}
+
+supported_targets = "js + native + wasm + wasm-gc"

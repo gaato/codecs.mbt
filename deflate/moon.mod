@@ -1,10 +1,11 @@
 // Apache-2.0. Three packages: raw DEFLATE (RFC 1951) at the root, and the zlib
 // (RFC 1950) and gzip (RFC 1952) formats in deflate/zlib and deflate/gzip,
-// which hold a raw decoder or encoder as a value. The raw decoding and encoding
-// are built today on moonbit-community/flate's inflater and deflater
-// (Apache-2.0), which no public signature names, so that an implementation of
-// this module's own can replace them without a breaking change. Depends otherwise only on the workspace's contract
-// modules, gaato/codec and gaato/codec_bytes.
+// which hold a raw decoder or encoder as a value. The raw decoder is this
+// module's own; the raw encoding is built today on moonbit-community/flate's
+// deflater (Apache-2.0), which no public signature names, so that an encoder
+// of this module's own can replace it without a breaking change. Depends
+// otherwise only on the workspace's contract modules, gaato/codec and
+// gaato/codec_bytes.
 
 name = "gaato/deflate"
 

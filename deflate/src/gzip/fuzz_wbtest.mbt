@@ -46,11 +46,11 @@ test "corrupted streams raise errors or decode, within bounds, never abort" {
     tally,
     content=(
       #|{
-      #|  "ChecksumMismatch": 1389,
-      #|  "Corrupt": 919,
-      #|  "Truncated": 623,
-      #|  "decoded": 67,
-      #|  "TrailingData": 2,
+      #|  "ChecksumMismatch": 1416,
+      #|  "Corrupt": 896,
+      #|  "Truncated": 627,
+      #|  "decoded": 57,
+      #|  "TrailingData": 4,
       #|}
     ),
   )

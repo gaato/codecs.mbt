@@ -1,0 +1,29 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/deflate/internal/inflate"
+
+import {
+  "gaato/codec",
+  "gaato/codec_bytes",
+}
+
+// Values
+
+// Errors
+
+// Types and methods
+pub struct Inflater {
+  // private fields
+}
+pub fn Inflater::dictionary(Self) -> BytesView
+pub fn Inflater::kept_bytes(Self) -> Int
+pub fn Inflater::last_consumed(Self) -> Int
+pub fn Inflater::last_produced(Self) -> Int
+pub fn Inflater::memory_usage(Self) -> Int
+pub fn Inflater::new() -> Self
+pub fn Inflater::reset(Self, dictionary? : BytesView) -> Unit
+pub fn Inflater::step(Self, BytesView, MutArrayView[Byte], end~ : Bool) -> @codec_bytes.Status raise @codec.CodecError
+pub fn Inflater::step_into(Self, BytesView, FixedArray[Byte], end~ : Bool) -> @codec_bytes.Status raise @codec.CodecError
+
+// Type aliases
+
+// Traits

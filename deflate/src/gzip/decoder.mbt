@@ -7,9 +7,8 @@
 // the trailer gather in `hdr` and are judged by the pure functions of
 // `@header`; the variable fields gather in buffers, within
 // `max_header_bytes`, or with `keep_header=false` only pass through the header
-// CRC. The DEFLATE data goes through a `@deflate.Decoder` that
-// stops right after the final block (`EndOfMember`), so the trailer is what it
-// leaves of the input; it writes straight into the caller's slice, and the
+// CRC. The DEFLATE data goes through an `@inflate.Inflater`, which stops right
+// after the final block, so the trailer is what it leaves of the input; the
 // CRC-32 and the length are updated from what it wrote.
 //
 // After a member, under `EndOfInput`, the next bytes must begin another
@@ -72,7 +71,7 @@ pub extend Header with @debug.Debug::{to_repr}
 /// DEFLATE decoder (a 32 KiB window and its tables) and the current member's
 /// header, never the whole input or output.
 pub struct Decoder {
-  priv inner : @deflate.Decoder
+  priv inner : @inflate.Inflater
   priv until : @codec_bytes.Until
   priv keep_header : Bool
   priv max_header_bytes : Int32
@@ -131,7 +130,7 @@ pub fn Decoder::Decoder(
 ) -> Decoder {
   let empty_out = FixedArray::make(0, b'\x00')
   {
-    inner: @deflate.Decoder(until=EndOfMember),
+    inner: @inflate.Inflater::new(),
     until,
     keep_header,
     max_header_bytes: max_header_bytes.max(0),
@@ -207,18 +206,14 @@ pub fn Decoder::is_finished(self : Decoder) -> Bool {
 /// Input bytes the latest `step` accepted: all of them on `NeedMoreInput`.
 /// A step that raised accepted the bytes up to the error; for
 /// `TrailingData`, exactly up to the end of the stream, or none if the
-/// stream ended before this step's input. A `Corrupt` found inside the
-/// DEFLATE data does not count the step's DEFLATE bytes (README, known
-/// limits).
+/// stream ended before this step's input.
 pub fn Decoder::last_consumed(self : Decoder) -> Int32 {
   self.step_consumed
 }
 
 ///|
 /// Output bytes the latest `step` wrote, a step that raised included: the
-/// output before the error. A `Corrupt` found inside the DEFLATE data does
-/// not count the output its step wrote into the slice (README, known
-/// limits).
+/// output before the error.
 pub fn Decoder::last_produced(self : Decoder) -> Int32 {
   self.step_produced
 }
@@ -234,8 +229,10 @@ pub fn Decoder::last_produced(self : Decoder) -> Int32 {
 /// between members. Under `until=EndOfMember` the stream ends after its first
 /// member, whatever `end` says. Output comes before the CRC-32 that covers it
 /// is checked, so `ChecksumMismatch` can follow output already handed out.
-/// After an error the decoder raises it again, consuming and writing nothing,
-/// until `reset`.
+/// Any other error comes after all the output before it: when `output` fills
+/// first, the step answers `NeedMoreOutput` and a later one hands out the
+/// rest and raises. After an error the decoder raises it again, consuming and
+/// writing nothing, until `reset`.
 pub fn Decoder::step(
   self : Decoder,
   input : BytesView,
@@ -370,8 +367,8 @@ fn Decoder::run(self : Decoder, end~ : Bool) -> Status raise Stop {
             _ => self.inner.step(rest, room, end~)
           }
         } catch {
-          // The DEFLATE data's error, whatever its kind, after what the inner
-          // decoder took and wrote before it.
+          // The DEFLATE data's error, whatever its kind, after what the
+          // inflater took and wrote before it.
           CodecError(kind, message) => {
             self.in_pos += self.inner.last_consumed()
             self.out_pos += self.inner.last_produced()

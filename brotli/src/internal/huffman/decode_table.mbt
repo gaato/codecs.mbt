@@ -27,7 +27,8 @@ pub struct Builder {
   priv counts : FixedArray[Int32]
   priv next : FixedArray[Int32]
   priv sorted : FixedArray[Int32]
-  priv sub_bits : FixedArray[Int32]
+  // The second-level index bits under each root entry, at most 15 - 1.
+  priv sub_bits : FixedArray[Byte]
 }
 
 ///|
@@ -45,8 +46,17 @@ pub fn Builder::Builder(root_bits~ : Int32, max_alphabet~ : Int32) -> Builder {
     counts: FixedArray::make(MAX_CODE_LENGTH + 1, 0),
     next: FixedArray::make(MAX_CODE_LENGTH + 2, 0),
     sorted: FixedArray::make(max_alphabet, 0),
-    sub_bits: FixedArray::make(1 << root_bits, 0),
+    sub_bits: FixedArray::make(1 << root_bits, b'\x00'),
   }
+}
+
+///|
+/// The bytes the builder's scratch space takes, counting 4 bytes for an
+/// `Int` and 1 for a `Byte`: a decoder that holds a builder counts them in
+/// its memory.
+pub fn Builder::memory_usage(self : Builder) -> Int32 {
+  4 * (self.counts.length() + self.next.length() + self.sorted.length()) +
+  self.sub_bits.length()
 }
 
 ///|
@@ -96,12 +106,12 @@ pub fn Builder::build(
   }
   // First pass: the longest code under each root entry sizes its subtable.
   let sub_bits = self.sub_bits
-  sub_bits.fill(0)
+  sub_bits.fill(b'\x00')
   let mut code = 0
   for l in 1..<=MAX_CODE_LENGTH {
     for _ in 0..<counts[l] {
       if l > root_bits {
-        sub_bits[reverse_bits(code, l) & (root_size - 1)] = l - root_bits
+        sub_bits[reverse_bits(code, l) & (root_size - 1)] = (l - root_bits).to_byte()
       }
       code += 1
     }
@@ -109,8 +119,9 @@ pub fn Builder::build(
   }
   let mut size = root_size
   for r in 0..<root_size {
-    if sub_bits[r] > 0 {
-      size += 1 << sub_bits[r]
+    let sub = sub_bits[r].to_int()
+    if sub > 0 {
+      size += 1 << sub
     }
   }
   guard base >= 0 && base + size <= table.length() else {
@@ -121,9 +132,10 @@ pub fn Builder::build(
   }
   let mut offset = root_size
   for r in 0..<root_size {
-    if sub_bits[r] > 0 {
-      table[base + r] = ((offset << 4) | (sub_bits[r] + root_bits)).to_uint16()
-      offset += 1 << sub_bits[r]
+    let sub = sub_bits[r].to_int()
+    if sub > 0 {
+      table[base + r] = ((offset << 4) | (sub + root_bits)).to_uint16()
+      offset += 1 << sub
     }
   }
   // Second pass: fill the entries.

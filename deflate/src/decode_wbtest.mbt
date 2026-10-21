@@ -168,9 +168,9 @@ test "errors stick until reset, and reset forgets the stream" {
   } noraise {
     _ => "decoded"
   }
-  inspect(first, content="Corrupt: reserved block type")
-  // The inflater's own Corrupt reports nothing (README, known limits).
-  assert_eq(decoder.last_consumed(), 0)
+  inspect(first, content="Corrupt: a block of the reserved type (BTYPE 3)")
+  // The step took the byte that holds BTYPE.
+  assert_eq(decoder.last_consumed(), 1)
   assert_eq(decoder.last_produced(), 0)
   let again = try decoder.step_into(stream, out, end=true) catch {
     CodecError(kind, _) => Some(kind)
@@ -194,7 +194,7 @@ test "errors stick until reset, and reset forgets the stream" {
 }
 
 ///|
-test "the inflater's messages, without its prefix" {
+test "messages say what is wrong" {
   let message = (input : Bytes) => {
     try decompress(input) catch {
       CodecError(kind, message) => "\{Repr(kind)}: \{message}"
@@ -202,10 +202,10 @@ test "the inflater's messages, without its prefix" {
       _ => "decoded"
     }
   }
-  inspect(message(b""), content="Truncated: unexpected end of input")
+  inspect(message(b""), content="Truncated: the DEFLATE data ends early")
   inspect(
     message(b"\x01\x05\x00\xfb\xff"),
-    content="Corrupt: stored block length mismatch",
+    content="Corrupt: a stored block's LEN and NLEN disagree",
   )
 }
 
@@ -243,12 +243,10 @@ test "the decoder is a gaato/codec_bytes Decode" {
 }
 
 ///|
-test "a step that raises reports what it took and wrote, but for the inflater's Corrupt" {
+test "a step that raises reports what it took and wrote" {
   let v = vector("text_level6")
   let stream = v.input()
-  // Room for one byte more: the inflater asks for room before it reads the
-  // end of the block.
-  let out = FixedArray::make(v.size + 1, b'\x00')
+  let out = FixedArray::make(v.size, b'\x00')
   // A byte after the final block: the stream to its end, all its output.
   let decoder = Decoder()
   let kind = try
@@ -273,8 +271,8 @@ test "a step that raises reports what it took and wrote, but for the inflater's 
   assert_eq(kind, Truncated)
   assert_eq(decoder.last_consumed(), cut.length())
   assert_true(decoder.last_produced() > v.size - 300)
-  // A stored block, then a reserved block type: the inflater wrote "hello"
-  // into the slice, but its step reports nothing.
+  // A stored block, then a reserved block type: "hello", and the byte that
+  // holds BTYPE.
   let decoder = Decoder()
   let hello = b"\x00\x05\x00\xfa\xffhello\x07"
   let kind = try decoder.step_into(hello, out, end=true) catch {
@@ -284,6 +282,6 @@ test "a step that raises reports what it took and wrote, but for the inflater's 
   }
   assert_eq(kind, Corrupt)
   assert_eq(Bytes::from_array(out[:5]), b"hello")
-  assert_eq(decoder.last_consumed(), 0)
-  assert_eq(decoder.last_produced(), 0)
+  assert_eq(decoder.last_consumed(), hello.length())
+  assert_eq(decoder.last_produced(), 5)
 }

@@ -29,13 +29,7 @@ test "seeded corruptions: the decoder answers as zlib does" {
     let input = @fixtures.corrupt(c, vector(c.source).input())
     let first = @fixtures.outcome(Decoder(until=EndOfMember), input)
     let whole = @fixtures.outcome(Decoder(), input)
-    if @fixtures.disagreement(
-        c.zlib,
-        input.length(),
-        first~,
-        whole~,
-        padded=c.padded,
-      )
+    if @fixtures.disagreement(c.zlib, input.length(), first~, whole~)
       is Some(why) {
       fail("\{c.source} op \{c.op} at \{c.at} value \{c.value}: \{why}")
     }

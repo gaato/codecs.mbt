@@ -1,45 +1,16 @@
 // The streaming decoder.
 //
-// The decoding is moonbit-community/flate's raw `Inflater`; this type holds it
-// to `gaato/codec_bytes`'s contract where the inflater's own rules differ, and
-// keeps every flate type out of the public signatures, so that a decoder of
-// this module's own can take its place without breaking anyone.
-//
-// What the inflater does, and what is done here about it:
-//
-// - It never takes a whole byte past the final block: a unit reads bytes only
-//   as its bits need them, the native fast path gives back the bytes it loaded
-//   ahead, and the bytes it keeps aside for an unfinished unit all belong to
-//   that unit. So under `EndOfMember` what follows the stream is
-//   `input[last_consumed():]`, and under `EndOfInput` any of it is
-//   `TrailingData` (raw DEFLATE cannot be concatenated). The tests check it
-//   under every split.
-// - It answers `Done` as soon as the final block ends, whatever `end` says.
-//   Under `EndOfInput` the contract wants `Done` only with `end`: until then,
-//   a stream that has ended answers `NeedMoreInput`, and a byte that arrives
-//   after it raises `TrailingData`.
-// - It raises its own `InflateError`, which is turned into `gaato/codec`'s
-//   `CodecError` and kept here, so that the error sticks as the contract
-//   says, in this type's terms.
-// - A step that raises reports nothing consumed or produced, though it may
-//   have written into the caller's slice. The contract wants the counts of a
-//   step that raises, so the inflater is never told `end`: a stream cut
-//   short is found here, when the inflater asks for more input after the
-//   end, with its counts. Only a `Corrupt` inside the DEFLATE data, found by
-//   the inflater, still reports nothing (README, known limits).
-// - It refuses what zlib refuses, with zlib's kind of error, with two
-//   exceptions found by the crafted streams (src/vectors_wbtest.mbt): a
-//   dynamic block without an end-of-block code is refused only when the
-//   input runs out (`Truncated`), where zlib refuses its header (`Corrupt`);
-//   and an all-zero code-length code is `Corrupt` at once, where zlib reads a
-//   length of zero from every bit and asks for more input.
-// - It writes straight into the caller's slice and holds no decoded byte
-//   back, so `NeedMoreInput` means everything is out and `Done` leaves
-//   nothing pending.
+// The decoding is `@inflate.Inflater`'s, which zlib and gzip hold too: it
+// stops right after the final block, consuming nothing past it, and hands
+// out every byte before an error before it raises. This type adds where a
+// raw DEFLATE stream ends: under `EndOfInput`, `Done` waits for `end`, and a
+// byte after the final block raises `TrailingData` (raw DEFLATE cannot be
+// concatenated); under `EndOfMember`, `Done` comes right after the final
+// block, and what follows is `input[last_consumed():]`.
 
 ///|
 priv enum State {
-  /// The inflater is inside the stream.
+  /// The final block has not ended.
   Running
   /// The final block has ended; under `EndOfInput`, `Done` waits for `end`.
   Ended
@@ -52,28 +23,12 @@ priv enum State {
 const WINDOW_SIZE : Int32 = 32768
 
 ///|
-/// The most the inflater's second-level Huffman tables hold, in bytes. A
-/// table has second-level entries only for codes longer than 9 bits: 64
-/// entries of 4 bytes for each 9-bit prefix they start with, and each such
-/// prefix holds at least two codes, so at most 143 prefixes for the 286
-/// literal/length codes and 15 for the 30 distance codes.
-const LINK_TABLE_BYTES : Int32 = (143 + 15) * 64 * 4
-
-///|
-/// The most bytes the inflater keeps aside for a unit that the input cut
-/// short: the longest unit, a dynamic block header, is at most 2,286 bits
-/// (286 bytes), held in an array of at most twice that.
-const STAGED_BYTES : Int32 = 1024
-
-///|
 /// A streaming raw DEFLATE decoder (RFC 1951). Feed it input in chunks of any
 /// size with `step` and collect output in slices of any size; it holds the
 /// 32 KiB window and the Huffman tables of the current block, never the whole
 /// input or output.
-///
-/// It is built on moonbit-community/flate's inflater today.
 pub struct Decoder {
-  priv inflater : @flate.Inflater
+  priv inflater : @inflate.Inflater
   // The last 32 KiB of the preset dictionary, all the window can use: a view
   // of the caller's bytes, which are immutable, for `reset`.
   priv dictionary : BytesView?
@@ -103,11 +58,10 @@ pub fn Decoder::Decoder(
   until~ : @codec_bytes.Until = EndOfInput,
 ) -> Decoder {
   let dictionary = dictionary.map(d => d[(d.length() - WINDOW_SIZE).max(0):])
+  let inflater = @inflate.Inflater::new()
+  inflater.reset(dictionary?)
   {
-    inflater: match dictionary {
-      Some(d) => @flate.Inflater(dictionary=d)
-      None => @flate.Inflater()
-    },
+    inflater,
     dictionary,
     until,
     state: Running,
@@ -121,10 +75,7 @@ pub fn Decoder::Decoder(
 /// Starts a new stream with the same options: the same dictionary, and the
 /// same `until`.
 pub fn Decoder::reset(self : Decoder) -> Unit {
-  match self.dictionary {
-    Some(d) => self.inflater.reset(dictionary=d)
-    None => self.inflater.reset()
-  }
+  self.inflater.reset(dictionary?=self.dictionary)
   self.state = Running
   self.failure = None
   self.step_consumed = 0
@@ -132,15 +83,14 @@ pub fn Decoder::reset(self : Decoder) -> Unit {
 }
 
 ///|
-/// Bytes held for the stream, as an upper bound: the 32 KiB window, the
-/// second-level Huffman tables of the current block (at most 40,448 bytes)
-/// and the bytes kept aside for a unit cut short (at most 1 KiB). The
-/// inflater does not say how much of its tables a block uses, so this is the
-/// same from the first step to the last: 74,240 bytes, with a dictionary or
-/// without. A dictionary is the caller's bytes, kept by reference, and not
-/// counted.
-pub fn Decoder::memory_usage(_ : Decoder) -> Int32 {
-  WINDOW_SIZE + LINK_TABLE_BYTES + STAGED_BYTES
+/// Bytes held for the stream: the 32 KiB window, the Huffman tables of a
+/// block and the scratch space they are built with, and the bytes kept aside
+/// for a unit cut short. All of it is allocated when the decoder is made, so
+/// this is the same from the first step to the last, with a dictionary or
+/// without (see RESOURCE_BOUNDS.md). A dictionary is the caller's bytes, kept
+/// by reference, and not counted.
+pub fn Decoder::memory_usage(self : Decoder) -> Int32 {
+  self.inflater.memory_usage()
 }
 
 ///|
@@ -155,17 +105,14 @@ pub fn Decoder::is_finished(self : Decoder) -> Bool {
 /// Input bytes the latest `step` accepted: all of them on `NeedMoreInput`.
 /// A step that raised accepted the bytes up to the error; for
 /// `TrailingData`, exactly up to the end of the stream, or none if the
-/// stream ended before this step's input. Zero after a `Corrupt` found
-/// inside the DEFLATE data (README, known limits).
+/// stream ended before this step's input.
 pub fn Decoder::last_consumed(self : Decoder) -> Int32 {
   self.step_consumed
 }
 
 ///|
 /// Output bytes the latest `step` wrote, a step that raised included: the
-/// output before the error. Zero after a `Corrupt` found inside the DEFLATE
-/// data, which may follow output written into the slice (README, known
-/// limits).
+/// output before the error.
 pub fn Decoder::last_produced(self : Decoder) -> Int32 {
   self.step_produced
 }
@@ -216,19 +163,18 @@ fn Decoder::step_with(
   }
   match self.state {
     Running => {
-      // Without `end`, the inflater never raises `Truncated`, which would
-      // lose the step's counts; a cut is found below instead.
       let status = try {
         match fixed_output {
-          Some(out) => self.inflater.step_into(input, out, end=false)
-          None => self.inflater.step(input, output, end=false)
+          Some(out) => self.inflater.step_into(input, out, end~)
+          None => self.inflater.step(input, output, end~)
         }
       } catch {
-        // Without `end`, a step raises only `Corrupt`: the inflater's other
-        // kinds come from its one-shot functions, not used here. It does not
-        // say what this step consumed and wrote.
-        @flate.InflateError(_, message) =>
-          self.fail(CodecError(Corrupt, plain(message)), 0, 0)
+        err =>
+          self.fail(
+            err,
+            self.inflater.last_consumed(),
+            self.inflater.last_produced(),
+          )
       }
       let consumed = self.inflater.last_consumed()
       let produced = self.inflater.last_produced()
@@ -237,14 +183,8 @@ fn Decoder::step_with(
           self.state = Ended
           self.ended(input, consumed, produced, end~)
         }
-        NeedMoreInput if end =>
-          self.fail(
-            CodecError(Truncated, "unexpected end of input"),
-            consumed,
-            produced,
-          )
-        NeedMoreInput => self.finish(NeedMoreInput, consumed, produced)
-        NeedMoreOutput => self.finish(NeedMoreOutput, consumed, produced)
+        NeedMoreInput | NeedMoreOutput =>
+          self.finish(status, consumed, produced)
       }
     }
     Ended => self.ended(input, 0, 0, end~)
@@ -317,16 +257,6 @@ fn[T] Decoder::fail(
   self.step_consumed = consumed
   self.step_produced = produced
   raise err
-}
-
-///|
-/// An inflater message without its "corrupt: " prefix, which the error kind
-/// already says.
-fn plain(message : String) -> String {
-  match message.strip_prefix("corrupt: ") {
-    Some(rest) => rest.to_owned()
-    None => message
-  }
 }
 
 ///|

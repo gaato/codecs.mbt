@@ -24,7 +24,9 @@
       "src/zlib/internal/header",
       "src/gzip",
       "src/gzip/internal/crc32",
-      "src/gzip/internal/header"
+      "src/gzip/internal/header",
+      "src/internal/huffman",
+      "src/internal/inflate"
     ]
   },
   "copies": {
@@ -38,6 +40,17 @@
         "decode_table_spec_test.mbt"
       ],
       "lz77": ["hash.mbt", "matcher.mbt", "matcher_test.mbt"]
+    },
+    "deflate": {
+      "huffman": [
+        "huffman.mbt",
+        "huffman_test.mbt",
+        "huffman_spec_test.mbt",
+        "decode_table.mbt",
+        "decode_table_spec_test.mbt",
+        "enough.mbt",
+        "enough_test.mbt"
+      ]
     }
   }
 }

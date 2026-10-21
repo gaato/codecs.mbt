@@ -18,6 +18,7 @@ pub struct Builder {
 }
 pub fn Builder::Builder(root_bits~ : Int, max_alphabet~ : Int) -> Self
 pub fn Builder::build(Self, FixedArray[UInt16], Int, FixedArray[Int], Int, invalid~ : UInt16) -> Int
+pub fn Builder::memory_usage(Self) -> Int
 
 // Type aliases
 

@@ -20,8 +20,7 @@
 //   and 1952 (every reserved value, every malformed code, every field cut
 //   short, every checksum wrong), with what zlib makes of each.
 // - `oracle`: seeded corruptions of the vectors of at most 40,000 bytes, as
-//   the source's name and the edit, with what zlib makes of each (and, where
-//   it asks for more input, of the corruption followed by zeros): the
+//   the source's name and the edit, with what zlib makes of each: the
 //   differential fuzz.
 //
 // What zlib makes of a stream is Node's answer (zlib.inflateRawSync,
@@ -1648,7 +1647,6 @@ fn render(
   crafted : Array[Crafted],
   corruptions : Array[Mutation],
   answers : Array[String],
-  padded : Array[String],
 ) -> String {
   let out = StringBuilder()
   out.write_string(
@@ -1756,23 +1754,15 @@ fn render(
       $|]
       $|
       $|///|
-      $|/// Seeded corruptions of the vectors, and what zlib makes of them; where
-      $|/// zlib asks for more input, also of them followed by 1 KiB of zeros.
+      $|/// Seeded corruptions of the vectors, and what zlib makes of them.
       $|let oracle : Array[Corruption] = [
       $|
     ),
   )
-  let mut next_padded = 0
   for i, m in corruptions {
     let answer = answers[crafted.length() + i]
-    let after = if answer == "err Truncated" {
-      next_padded += 1
-      padded[next_padded - 1]
-    } else {
-      ""
-    }
     out.write_string(
-      "  { source: \"\{m.source}\", op: \{m.op}, at: \{m.at}, value: \{m.value}, zlib: \"\{answer}\", padded: \"\{after}\" },\n",
+      "  { source: \"\{m.source}\", op: \{m.op}, at: \{m.at}, value: \{m.value}, zlib: \"\{answer}\" },\n",
     )
   }
   out.write_string("]\n")
@@ -2020,26 +2010,9 @@ async fn main {
       }),
     ]
     let answers = reference(questions)
-    // Where zlib asks for more input, what it makes of the stream followed by
-    // zero bytes: whether the stream is refused once zlib has read enough.
-    let padded_questions = []
-    for i, m in corruptions {
-      if answers[crafted.length() + i] == "err Truncated" {
-        let input = apply(m, by_name[m.source])
-        padded_questions.push(
-          (
-            node_format(format),
-            concat([input, Bytes::make(1024, b'\x00')]),
-            None,
-          ),
-        )
-      }
-    }
-    let padded = reference(padded_questions)
     let text = formatted(
       render(
         format, version, vectors, dictionaries, flushed, crafted, corruptions, answers,
-        padded,
       ),
     )
     if check {

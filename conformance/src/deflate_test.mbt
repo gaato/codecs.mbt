@@ -1,31 +1,8 @@
 ///|
 /// What gaato/deflate documents for a raw DEFLATE decoder, with a dictionary
-/// or without: the 32 KiB window, the inflater's second-level Huffman tables
-/// and the bytes it keeps for a unit cut short.
-let deflate_memory : Int32 = 74240
-
-///|
-/// The one gap in rule 4 that gaato/deflate documents (its README, known
-/// limits): moonbit-community/flate 0.9.0 does not say what a step that
-/// raises consumed and wrote, so a `Corrupt` that the inflater finds inside
-/// the DEFLATE data comes without the output its step wrote, and the output
-/// before it depends on the split. These are the inflater's messages for
-/// those errors, as gaato/deflate passes them on (without "corrupt: "); every
-/// other error, the framing's included, must give the same output under
-/// every split.
-let flate_corrupt_messages : Array[String] = [
-  "bad Huffman code", "bad code-length symbol", "bad code-length tree", "bad distance tree",
-  "bad literal/length tree", "code-length repeat overflow", "distance too far back",
-  "invalid distance code", "invalid literal/length code", "repeat with no previous length",
-  "reserved block type", "stored block length mismatch", "too many distance codes",
-  "too many literal codes", "unexpected decoder error",
-]
-
-///|
-/// Whether a run ended with one of the inflater's own `Corrupt` errors.
-fn flate_corrupt(run : @codec_harness.Transcript) -> Bool {
-  run.error is Some(Corrupt) && flate_corrupt_messages.contains(run.message)
-}
+/// or without (its RESOURCE_BOUNDS.md): the 32 KiB window, the Huffman
+/// tables and what builds them, and the bytes kept for a unit cut short.
+let deflate_memory : Int32 = 46592
 
 ///|
 test "raw DEFLATE keeps the byte-stream contract" {
@@ -37,7 +14,6 @@ test "raw DEFLATE keeps the byte-stream contract" {
     memory_limit=_ => deflate_memory,
     one_member=_ => true,
     garbage=[b"\x00", b"\xff\xff\xff\xff", b"\x1f\x8b\x08\x00"],
-    short_output=flate_corrupt,
   )
 }
 
@@ -50,7 +26,6 @@ test "zlib keeps the byte-stream contract" {
     memory_limit=_ => deflate_memory,
     one_member=_ => true,
     garbage=[b"\x00", b"\x78\x9c\x03\x00\x00\x00\x00\x01", b"\xff\xff"],
-    short_output=flate_corrupt,
   )
 }
 
@@ -67,7 +42,6 @@ test "gzip keeps the byte-stream contract" {
       !v.name.contains("members") && !v.name.contains("member_between")
     },
     garbage=[b"\x00\x00\x00\x00", b"\xff\xff\xff\xff", b"\x1f\x8c\x08\x00"],
-    short_output=flate_corrupt,
   )
 }
 
@@ -81,7 +55,6 @@ test "corrupted DEFLATE, zlib and gzip streams never break the contract" {
       seed=1951,
       rounds=300,
       memory_limit=Some(deflate_memory),
-      short_output=flate_corrupt,
     )
   }
   for v in zlib_vectors[:6] {
@@ -92,7 +65,6 @@ test "corrupted DEFLATE, zlib and gzip streams never break the contract" {
       seed=1950,
       rounds=300,
       memory_limit=Some(deflate_memory),
-      short_output=flate_corrupt,
     )
   }
   for v in gzip_vectors[:12] {
@@ -103,7 +75,6 @@ test "corrupted DEFLATE, zlib and gzip streams never break the contract" {
       seed=1952,
       rounds=300,
       memory_limit=Some(deflate_memory + 65536),
-      short_output=flate_corrupt,
     )
   }
 }

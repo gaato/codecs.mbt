@@ -3,25 +3,23 @@
 // A zlib stream (RFC 1950) is a 2-byte header, a 4-byte dictionary id when
 // FDICT is set, raw DEFLATE, and the Adler-32 of the data, big-endian. The
 // header and the trailer gather in `hdr` and are judged by the pure functions
-// of `@header`; the DEFLATE data goes through a `@deflate.Decoder` that stops
-// right after the final block (`EndOfMember`), so the trailer is what it
-// leaves of the input. Its output is the caller's, written straight into the
-// caller's slice, and the Adler-32 is updated from it.
+// of `@header`; the DEFLATE data goes through an `@inflate.Inflater`, which
+// stops right after the final block, so the trailer is what it leaves of the
+// input. Its output is the caller's, and the Adler-32 is updated from it.
 //
-// The inner decoder is made when the header says whether the stream names a
-// preset dictionary (FDICT), before any DEFLATE byte: with the dictionary for
-// a stream that names it, without for one that does not, which ignores it as
-// zlib does. A later stream (after `reset`) that needs the same kind resets
-// it; one that needs the other kind replaces it. The decoder keeps a view of
-// the dictionary's last 32 KiB (the caller's bytes, which are immutable, not
-// a copy) to make an inner decoder with it.
+// The one inflater starts its stream once the header says whether the
+// stream names a preset dictionary (FDICT), before any DEFLATE byte: with the
+// dictionary for a stream that names it, without for one that does not,
+// which ignores it as zlib does. The decoder keeps a view of the
+// dictionary's last 32 KiB (the caller's bytes, which are immutable, not a
+// copy) to give the inflater.
 
 ///|
 priv enum State {
   Header
   DictionaryId
-  /// The DEFLATE data, through the inner decoder.
-  Data(@deflate.Decoder)
+  /// The DEFLATE data, through the inflater.
+  Data
   Trailer
   /// The trailer is checked; under `EndOfInput`, `Done` waits for `end`.
   Ended
@@ -42,10 +40,9 @@ pub struct Decoder {
   // Adler-32.
   priv dictionary : BytesView?
   priv dictionary_id : UInt32?
-  // The inner decoder, once a header has been read, and whether it holds the
-  // dictionary.
-  priv mut inner : @deflate.Decoder?
-  priv mut inner_dictionary : Bool
+  // The DEFLATE data's decoder, started for each stream once its header is
+  // read.
+  priv inner : @inflate.Inflater
   priv until : @codec_bytes.Until
   // Header and trailer bytes gathered so far.
   priv hdr : FixedArray[Byte]
@@ -91,8 +88,7 @@ pub fn Decoder::Decoder(
   {
     dictionary: dictionary.map(d => d[(d.length() - 32768).max(0):]),
     dictionary_id: dictionary.map(dictionary_id),
-    inner: None,
-    inner_dictionary: false,
+    inner: @inflate.Inflater::new(),
     until,
     hdr: FixedArray::make(HEADER_MAX, b'\x00'),
     hdr_len: 0,
@@ -112,8 +108,8 @@ pub fn Decoder::Decoder(
 
 ///|
 /// Starts a new stream with the same options: the same dictionary, and the
-/// same `until`. The inner decoder is kept, and reset when the next stream's
-/// header is read.
+/// same `until`. The inflater starts the next stream once its header is
+/// read.
 pub fn Decoder::reset(self : Decoder) -> Unit {
   self.release_step()
   self.hdr_len = 0
@@ -126,15 +122,12 @@ pub fn Decoder::reset(self : Decoder) -> Unit {
 
 ///|
 /// Bytes held for the stream: those of the raw DEFLATE decoder (see
-/// `@deflate.Decoder::memory_usage`) once a header has been read, 74,240,
-/// with a dictionary or without. A dictionary is the caller's bytes, kept by
-/// reference, and not counted; the header and trailer bytes, at most 6, are
-/// not counted either.
+/// `@deflate.Decoder::memory_usage`), the same from the first step to the
+/// last, with a dictionary or without. A dictionary is the caller's bytes,
+/// kept by reference, and not counted; the header and trailer bytes, at most
+/// 6, are not counted either.
 pub fn Decoder::memory_usage(self : Decoder) -> Int32 {
-  match self.inner {
-    Some(d) => d.memory_usage()
-    None => 0
-  }
+  self.inner.memory_usage()
 }
 
 ///|
@@ -149,18 +142,14 @@ pub fn Decoder::is_finished(self : Decoder) -> Bool {
 /// Input bytes the latest `step` accepted: all of them on `NeedMoreInput`.
 /// A step that raised accepted the bytes up to the error; for
 /// `TrailingData`, exactly up to the end of the stream, or none if the
-/// stream ended before this step's input. A `Corrupt` found inside the
-/// DEFLATE data does not count the step's DEFLATE bytes (README, known
-/// limits).
+/// stream ended before this step's input.
 pub fn Decoder::last_consumed(self : Decoder) -> Int32 {
   self.step_consumed
 }
 
 ///|
 /// Output bytes the latest `step` wrote, a step that raised included: the
-/// output before the error. A `Corrupt` found inside the DEFLATE data does
-/// not count the output its step wrote into the slice (README, known
-/// limits).
+/// output before the error.
 pub fn Decoder::last_produced(self : Decoder) -> Int32 {
   self.step_produced
 }
@@ -175,8 +164,10 @@ pub fn Decoder::last_produced(self : Decoder) -> Int32 {
 /// bytes after it raise `TrailingData`; under `until=EndOfMember` it answers
 /// `Done` right after the trailer, whatever `end` says. Output comes before
 /// the Adler-32 that covers it is checked, so `ChecksumMismatch` can follow
-/// output already handed out. After an error the decoder raises it again,
-/// consuming and writing nothing, until `reset`.
+/// output already handed out. Any other error comes after all the output
+/// before it: when `output` fills first, the step answers `NeedMoreOutput`
+/// and a later one hands out the rest and raises. After an error the decoder
+/// raises it again, consuming and writing nothing, until `reset`.
 pub fn Decoder::step(
   self : Decoder,
   input : BytesView,
@@ -267,7 +258,8 @@ fn Decoder::run(self : Decoder, end~ : Bool) -> Status raise Stop {
           Some(_) => self.start(dictionary=true)
         }
       }
-      Data(inner) => {
+      Data => {
+        let inner = self.inner
         let rest = self.view[self.in_pos:]
         let room = self.out.mut_view(start=self.out_pos)
         let status = try {
@@ -277,8 +269,8 @@ fn Decoder::run(self : Decoder, end~ : Bool) -> Status raise Stop {
             _ => inner.step(rest, room, end~)
           }
         } catch {
-          // The DEFLATE data's error, whatever its kind, after what the inner
-          // decoder took and wrote before it.
+          // The DEFLATE data's error, whatever its kind, after what the
+          // inflater took and wrote before it.
           CodecError(kind, message) => {
             self.in_pos += inner.last_consumed()
             self.out_pos += inner.last_produced()
@@ -325,28 +317,16 @@ fn Decoder::run(self : Decoder, end~ : Bool) -> Status raise Stop {
 }
 
 ///|
-/// Begins the DEFLATE data, with or without the preset dictionary: resets the
-/// inner decoder when it is of that kind, makes one otherwise.
+/// Begins the DEFLATE data, with or without the preset dictionary.
 fn Decoder::start(self : Decoder, dictionary~ : Bool) -> Unit {
-  let inner = match self.inner {
-    Some(d) if self.inner_dictionary == dictionary => {
-      d.reset()
-      d
-    }
-    _ => {
-      let d = match self.dictionary {
-        Some(bytes) if dictionary =>
-          @deflate.Decoder(dictionary=bytes, until=EndOfMember)
-        _ => @deflate.Decoder(until=EndOfMember)
-      }
-      self.inner = Some(d)
-      self.inner_dictionary = dictionary
-      d
-    }
+  if dictionary {
+    self.inner.reset(dictionary?=self.dictionary)
+  } else {
+    self.inner.reset()
   }
   self.adler = @adler32.INITIAL
   self.hdr_len = 0
-  self.state = Data(inner)
+  self.state = Data
 }
 
 ///|

@@ -6,8 +6,7 @@
 /// garbage give the same output and error under every split, a decoder that
 /// stops after the first member leaves the next vector unread (for vectors
 /// that `one_member` says hold a single member), and `reset` forgets. `make`
-/// builds a decoder for a window of the given bits. `short_output` is the
-/// format's documented gap, if any (see `@codec_harness.check_error_splits`).
+/// builds a decoder for a window of the given bits.
 fn[D : @codec_bytes.Decode] conform(
   label : String,
   vectors : Array[Vector],
@@ -15,7 +14,6 @@ fn[D : @codec_bytes.Decode] conform(
   memory_limit~ : (Int32) -> Int32,
   garbage~ : Array[Bytes],
   one_member~ : (Vector) -> Bool,
-  short_output~ : (@codec_harness.Transcript) -> Bool = _ => false,
 ) -> Unit raise {
   for i, v in vectors {
     let input = v.input()
@@ -49,7 +47,6 @@ fn[D : @codec_bytes.Decode] conform(
         seed=i.reinterpret_as_uint(),
         memory_limit=Some(memory_limit(v.window_bits)),
         small=1 << 16,
-        short_output~,
       ) catch {
         e => fail("\{label} \{v.name}, \{broken.length()} bytes: \{e}")
       }

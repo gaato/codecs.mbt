@@ -25,8 +25,10 @@ fn check_bounds(d : Decoder, room : Int32) -> Unit raise {
   }
   assert_true(held <= d.held && kept <= d.held)
   assert_true(d.held <= d.max_header_bytes)
+  assert_true(d.inner.kept_bytes() <= 5)
+  assert_eq(d.inner.memory_usage(), 46592)
   assert_eq(d.memory_usage(), d.inner.memory_usage() + d.held)
-  assert_true(d.memory_usage() <= 74240 + d.max_header_bytes)
+  assert_true(d.memory_usage() <= 46592 + d.max_header_bytes)
 }
 
 ///|
@@ -55,7 +57,7 @@ test "output slices, header fields and reported memory stay within their bounds"
       peak = peak.max(d.memory_usage())
     },
   )
-  inspect(peak, content="134240")
+  inspect(peak, content="106592")
 }
 
 ///|

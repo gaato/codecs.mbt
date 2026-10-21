@@ -25,20 +25,22 @@ streams built bit by bit, and seeded pseudo-random splits and corruptions.
 ### What is measured
 
 - Sources: every non-test `.mbt` of the three library packages, `src/`,
-  `src/zlib/` and `src/gzip/`, and of their internal packages
-  `src/zlib/internal/adler32/`, `src/zlib/internal/header/`,
+  `src/zlib/` and `src/gzip/`, and of their internal packages: the raw
+  DEFLATE decoder `src/internal/inflate/`, the copy of the shared Huffman
+  part `src/internal/huffman/` (generated from `parts/huffman`, with its
+  tests), `src/zlib/internal/adler32/`, `src/zlib/internal/header/`,
   `src/gzip/internal/crc32/` and `src/gzip/internal/header/`. The test-only
   package `src/internal/fixtures/` and the cross-check tool
   `src/internal/crosscheck/` are not measured, nor is moonbit-community/flate,
-  which the raw decoder and the raw encoder hold.
+  which the raw encoder holds.
 - Counts are Coveralls lines: lines with at least one instrumented point,
   covered when any point on them ran.
 
 The pitfalls the script pins (stale counters, `-f summary` skewing totals,
 tcc on openSUSE) are described in zstd's ledger, `zstd/TEST_COVERAGE.md`.
 
-Snapshot at the last full measurement (2026-10-21): **99.8 %** (522/523
-lines), the one uncovered line ledgered below.
+Snapshot at the last full measurement (2026-10-21): **99.3 %** (878/884
+lines), the six uncovered lines ledgered below.
 
 ## Policy
 
@@ -61,12 +63,16 @@ Must be covered by tests:
 - suspension on input and on output in every state, through byte-sized and
   random splits; for the encoders, that every split gives the same stream,
   that a flush makes the stream so far decode to the input so far, and that
-  steps after the end take nothing.
+  steps after the end take nothing;
+- every check of RFC 1951 in the raw DEFLATE decoder, each held to zlib's
+  answer, kind of error included, by the crafted streams and the seeded
+  corruptions (`src/reference_wbtest.mbt`); its fast path, under the same
+  streams given whole, with codes that encoders rarely write (distance codes
+  of 15 bits with 13 extra bits, matches that run from a dictionary into the
+  output) built bit by bit in `src/internal/inflate/inflater_wbtest.mbt`.
 
-The raw DEFLATE decoding is the inflater's; its checks of RFC 1951 are held
-to zlib's by the crafted streams and the seeded corruptions
-(`src/reference_wbtest.mbt`), not by this ledger. The raw DEFLATE encoding is
-the deflater's; its streams are held to zlib's decoder by
+The raw DEFLATE encoding is moonbit-community/flate's deflater; its streams
+are held to zlib's decoder, and to this module's, by
 `scripts/crosscheck.mbtx`.
 
 Accepted as uncovered (needs a row):
@@ -82,4 +88,7 @@ Budgets are exact uncovered counts at the last measurement.
 
 | File | Budget | Reason |
 | --- | --- | --- |
+| src/internal/huffman/decode_table.mbt | 3 | The `abort`s of `Builder::Builder` (a root outside 1 to 15 bits, an alphabet past 4096 symbols) and of `Builder::build` (a table without room): the `panic` tests of `src/internal/huffman/decode_table_spec_test.mbt` run them, but the abort ends the test before its coverage counts are written. |
+| src/internal/inflate/blocks.mbt | 1 | In `Inflater::run`, the `abort` for the fast path running out of input: unreachable by construction, since it runs only while the input holds the 8 bytes a unit can need. |
+| src/internal/inflate/inflater.mbt | 1 | In `Inflater::step_with`, the `abort` for an unfinished unit that keeps more bytes than `stash` holds: unreachable by construction, since a unit needs at most 6 bytes beyond the bits held and keeps only those it fell short with. |
 | src/gzip/encoder.mbt | 1 | In `Encoder::Encoder`, the `abort` for a header that cannot be written (`Header::is_writable`): the `panic` tests of `src/gzip/encode_wbtest.mbt` run it, for `Encoder` and `compress`, but the abort ends the test before its coverage counts are written. |

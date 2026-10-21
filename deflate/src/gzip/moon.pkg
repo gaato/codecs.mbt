@@ -2,6 +2,7 @@ import {
   "gaato/codec",
   "gaato/codec_bytes",
   "gaato/deflate",
+  "gaato/deflate/internal/inflate",
   "gaato/deflate/gzip/internal/crc32",
   "gaato/deflate/gzip/internal/header",
   "moonbitlang/core/debug",

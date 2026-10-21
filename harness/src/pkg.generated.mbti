@@ -8,7 +8,7 @@ import {
 }
 
 // Values
-pub fn[S : Stepper] check_error_splits(() -> S, BytesView, seed~ : UInt, memory_limit? : Int?, small? : Int, short_output? : (Transcript) -> Bool) -> Transcript raise
+pub fn[S : Stepper] check_error_splits(() -> S, BytesView, seed~ : UInt, memory_limit? : Int?, small? : Int) -> Transcript raise
 
 pub fn[E : @codec_bytes.Encode, D : @codec_bytes.Decode] check_flush(() -> E, () -> D, BytesView, flush_at~ : Array[Int]) -> Unit raise
 
@@ -26,7 +26,7 @@ pub fn[S : Stepper] check_truncation(() -> S, BytesView, Transcript, max_prefixe
 
 pub fn[S : Stepper] drive(S, BytesView, input_sizes? : Sizes, output_sizes? : Sizes, memory_limit? : Int?, first_member? : Bool) -> Transcript raise
 
-pub fn[S : Stepper] fuzz(() -> S, BytesView, seed~ : UInt, rounds~ : Int, memory_limit? : Int?, short_output? : (Transcript) -> Bool) -> Map[String, Int] raise
+pub fn[S : Stepper] fuzz(() -> S, BytesView, seed~ : UInt, rounds~ : Int, memory_limit? : Int?) -> Map[String, Int] raise
 
 pub fn sha256(BytesView) -> String
 

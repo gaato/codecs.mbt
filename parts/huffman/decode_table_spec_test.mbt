@@ -267,3 +267,15 @@ test "panic Builder: a root of 16 bits" {
 test "panic Builder: an alphabet past what entries hold" {
   ignore(@huffman.Builder(root_bits=8, max_alphabet=4097))
 }
+
+///|
+test "Builder::memory_usage counts its scratch space" {
+  inspect(
+    @huffman.Builder(root_bits=10, max_alphabet=286).memory_usage(),
+    content="2300",
+  )
+  inspect(
+    @huffman.Builder(root_bits=8, max_alphabet=30).memory_usage(),
+    content="508",
+  )
+}

@@ -1,6 +1,7 @@
 ///|
-/// What `memory_usage` reports, with a dictionary or without.
-const BOUND : Int32 = WINDOW_SIZE + LINK_TABLE_BYTES + STAGED_BYTES
+/// What `memory_usage` reports, with a dictionary or without
+/// (RESOURCE_BOUNDS.md).
+const BOUND : Int32 = 46592
 
 ///|
 /// Checks the limits RESOURCE_BOUNDS.md states, after a step that had `room`
@@ -12,12 +13,13 @@ fn check_bounds(d : Decoder, room : Int32) -> Unit raise {
     None => 0
   }
   assert_true(dictionary <= WINDOW_SIZE)
+  assert_true(d.inflater.kept_bytes() <= 5)
   assert_eq(d.memory_usage(), BOUND)
 }
 
 ///|
 test "output slices and reported memory stay within their bounds" {
-  inspect(BOUND, content="74240")
+  assert_eq(Decoder().memory_usage(), BOUND)
   for v in vectors {
     guard v.size <= 300000 else { continue }
     let (got, _) = @fixtures.drive(
@@ -54,7 +56,7 @@ test "only the last 32 KiB of a dictionary are kept, by reference" {
   }
   inspect(
     Decoder(dictionary=Bytes::make(40000, b'd')).memory_usage(),
-    content="74240",
+    content="46592",
   )
 }
 

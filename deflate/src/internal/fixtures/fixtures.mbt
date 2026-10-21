@@ -25,15 +25,13 @@ pub(all) struct Crafted {
 
 ///|
 /// A seeded corruption of a vector (see `corrupt`), and what zlib makes of
-/// it; where zlib asks for more input, `padded` is what it makes of it
-/// followed by 1 KiB of zeros, and empty otherwise.
+/// it.
 pub(all) struct Corruption {
   source : String
   op : Int32
   at : Int32
   value : Int32
   zlib : String
-  padded : String
 }
 
 ///|
@@ -189,25 +187,13 @@ pub fn Rng::below(self : Rng, bound : Int32) -> Int32 {
 /// rest, and reads anything else after a member as another, which fails; the
 /// decoders here raise `TrailingData` for both, after a first member that
 /// decodes.
-///
-/// The inflater refuses some streams before zlib does (see the crafted
-/// streams' exceptions): where zlib asks for more input, a refusal as
-/// `Corrupt` agrees when zlib, given zeros after the stream, refuses it as
-/// `Corrupt` too (`padded`).
 pub fn disagreement(
   zlib : String,
   length : Int32,
   first~ : String,
   whole~ : String,
   members~ : Bool = false,
-  padded~ : String = "",
 ) -> String? {
-  if zlib == "err Truncated" &&
-    padded == "err Corrupt" &&
-    first == "err Corrupt" &&
-    whole == "err Corrupt" {
-    return None
-  }
   let stopped_early = match zlib.split(" ").collect() {
     ["ok", consumed, _] => {
       let consumed = @string.parse_int(consumed) catch { _ => length }

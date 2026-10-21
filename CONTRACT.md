@@ -211,7 +211,7 @@ here, so that adding one later does not require changing it.
 | Brotli | implemented (Decode and Encode) | No framing: one stream per input, so `EndOfMember` and `EndOfInput` end at the same place. |
 | gzip | implemented (Decode and Encode) | Several members under `EndOfInput`; the header of each member is metadata on the concrete type. Bytes after a member that do not begin another, zero padding included, raise `TrailingData`. |
 | zlib | implemented (Decode and Encode) | A preset dictionary in the header raises `DictionaryRequired` with its Adler-32. No concatenation. |
-| raw DEFLATE | implemented (Decode and Encode) | No header and no checksum. Trailing bytes after the final block raise `TrailingData`. A `Corrupt` found inside the DEFLATE data does not yet report what its call wrote (rule 4); see gaato/deflate's README. |
+| raw DEFLATE | implemented (Decode and Encode) | No header and no checksum. Trailing bytes after the final block raise `TrailingData`. |
 | LZ4 frame | fits | Concatenated frames and skippable frames. The legacy frame has no end marker and rejects `EndOfMember`. |
 | xz | fits | Several streams with padding. The memory limit is resumable on the concrete type. Filter chains that cannot flush raise `Unsupported`. |
 | .lzma | fits | No magic and no checksum; trailing bytes are `TrailingData`. Cannot flush. |

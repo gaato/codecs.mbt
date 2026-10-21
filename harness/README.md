@@ -39,14 +39,6 @@ once has consumed exactly the stream and written all its output),
 `check_reset`, and `fuzz` (corrupted inputs never break the contract, each
 under `check_error_splits`; returns how often each outcome happened).
 
-A codec with a documented gap in reporting the output of a step that raises
-passes `short_output`, a predicate on the transcript that names exactly the
-errors of the gap, to `check_error_splits` and `fuzz`: when both runs end in
-such an error, they need only raise the same kind, with the output of one
-beginning the other's. gaato/deflate's is the only one, for the `Corrupt`
-that moonbit-community/flate finds inside DEFLATE data
-(`conformance/src/deflate_test.mbt`).
-
 For an encoder and a decoder of the same format: `check_roundtrip` encodes
 an input whole and under every split, requires every encoding to equal the
 whole one and to decode, with a fresh decoder, back to the input; and

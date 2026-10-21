@@ -194,18 +194,12 @@ pub fn[S : Stepper] check_reset(
 /// with a byte of room. Every run must agree with the whole one: the same
 /// output, everything written before an error included, and the same kind of
 /// error. Returns the whole run.
-///
-/// `short_output` names a gap of a codec's own, documented with it: errors
-/// whose step does not report what it wrote. When it holds for both runs,
-/// they need only raise the same kind, and the output of one must begin the
-/// other's.
 pub fn[S : Stepper] check_error_splits(
   make : () -> S,
   input : BytesView,
   seed~ : UInt32,
   memory_limit~ : Int32? = None,
   small~ : Int32 = 4096,
-  short_output~ : (Transcript) -> Bool = _ => false,
 ) -> Transcript raise {
   let whole = drive(make(), input, memory_limit~)
   let rng = Rng::new(seed)
@@ -224,15 +218,6 @@ pub fn[S : Stepper] check_error_splits(
     if run.agrees(whole) {
       continue
     }
-    if short_output(whole) &&
-      short_output(run) &&
-      run.error == whole.error &&
-      (
-        starts_with(whole.output, run.output) ||
-        starts_with(run.output, whole.output)
-      ) {
-      continue
-    }
     fail(
       "input in \{input_sizes.label}, output in \{output_sizes.label}: " +
       "\{describe(run)}, whole: \{describe(whole)}",
@@ -245,7 +230,7 @@ pub fn[S : Stepper] check_error_splits(
 /// Runs `rounds` corrupted copies of `input` (bits flipped, bytes replaced,
 /// inserted, deleted, or the tail cut) through the codec under the
 /// contract's checks, each under several splits that must agree
-/// (`check_error_splits`, with `short_output`), and returns how often each
+/// (`check_error_splits`), and returns how often each
 /// outcome happened, by name. A corrupted input may decode or raise any
 /// `CodecError`; breaking the contract fails.
 pub fn[S : Stepper] fuzz(
@@ -254,7 +239,6 @@ pub fn[S : Stepper] fuzz(
   seed~ : UInt32,
   rounds~ : Int32,
   memory_limit~ : Int32? = None,
-  short_output~ : (Transcript) -> Bool = _ => false,
 ) -> Map[String, Int32] raise {
   let rng = Rng::new(seed)
   let outcomes : Map[String, Int32] = Map([])
@@ -265,7 +249,6 @@ pub fn[S : Stepper] fuzz(
       mutated,
       seed=rng.below(1 << 20).reinterpret_as_uint(),
       memory_limit~,
-      short_output~,
     ) catch {
       e => fail("round \{round} from seed \{seed}: \{e}")
     }

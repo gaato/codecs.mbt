@@ -206,7 +206,10 @@ test "errors stick until reset, with a kind and a message" {
     message(b"\x78\x9d"),
     content="Corrupt: the header check (FCHECK) fails",
   )
-  inspect(message(b"\x78\x9c\x07"), content="Corrupt: reserved block type")
+  inspect(
+    message(b"\x78\x9c\x07"),
+    content="Corrupt: a block of the reserved type (BTYPE 3)",
+  )
   inspect(
     message(b"\x78\x9c\x03\x00\x00\x00\x00\x02"),
     content="ChecksumMismatch: the Adler-32 of the data does not match the stream's",
