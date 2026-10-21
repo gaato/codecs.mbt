@@ -49,17 +49,37 @@ pub const START_SIZE : Int32 = 4
 /// reads more: the magic number, the compression method (8, DEFLATE, is the
 /// only one) and the flags, none of the reserved ones set.
 pub fn check_start(b : BytesView) -> Result[Unit, String] {
-  if b[0] != b'\x1f' || b[1] != b'\x8b' {
-    return Err("not a gzip stream (the magic number is not 1f 8b)")
+  match
+    start_refusal(b[0].to_int(), b[1].to_int(), b[2].to_int(), b[3].to_int()) {
+    0 => Ok(())
+    1 => Err("not a gzip stream (the magic number is not 1f 8b)")
+    2 => Err("compression method \{b[2].to_int()} is not DEFLATE (8)")
+    _ => Err("reserved header flags are set (FLG \{b[3].to_int()})")
   }
-  if b[2] != b'\x08' {
-    return Err("compression method \{b[2].to_int()} is not DEFLATE (8)")
+}
+
+///|
+/// Why `check_start` refuses a header that starts with ID1, ID2, CM and FLG:
+/// 0 for not at all, 1 for the magic number, 2 for the compression method,
+/// 3 for a reserved flag.
+fn start_refusal(
+  id1 : Int32,
+  id2 : Int32,
+  cm : Int32,
+  flg : Int32,
+) -> Int32 where {
+  proof_require: start_pre(id1, id2, cm, flg),
+  proof_ensure: result => result == spec_start_refusal(id1, id2, cm, flg),
+} {
+  if id1 != 0x1f || id2 != 0x8b {
+    1
+  } else if cm != 8 {
+    2
+  } else if @proof_bits.shr(flg, 5) != 0 {
+    3
+  } else {
+    0
   }
-  let flags = b[3].to_int()
-  if (flags & 0xE0) != 0 {
-    return Err("reserved header flags are set (FLG \{flags})")
-  }
-  Ok(())
 }
 
 ///|

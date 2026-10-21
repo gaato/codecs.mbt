@@ -1,0 +1,617 @@
+// Checks a module's proof ledger, PROOFS.md, against its code.
+//
+// The ledger has two tables and a budget line:
+//
+//   ## Proved
+//   | Function | Package | Property | Prelude | Bridges | Solvers |
+//   ## Trusted bridges
+//   | Bridge | Package | Claim | Backing test |
+//   Bridge budget: N
+//
+// Function and Bridge cells hold a backticked name (`f` or `T::f`), Package a
+// backticked package directory relative to the module, Bridges backticked
+// bridge names (or "none"), Backing test a backticked test file relative to
+// the module followed by the quoted names of its tests, as bounds_check.mbtx
+// reads them.
+//
+// It checks that:
+// - every Proved row names a package that scripts/modules.json lists under
+//   "proved" for the module, with the same prelude, and a function there
+//   whose contract has a `proof_ensure`;
+// - the Solvers cell is "Z3, CVC5" when modules.json says CVC5 proves the
+//   package and does not list the function under "z3_only", else starts with
+//   "Z3 only" and gives the reason; a package with the unbounded prelude must
+//   be proved by both, but for the functions "z3_only" names;
+// - every function marked `proof_axiomatized` in the module has a Trusted
+//   bridges row, every row names one, every backing test exists, every
+//   bridge a Proved row names has a row, and the rows are within the budget;
+// - the logic of the proved packages (.mbtp files and the contracts, loop
+//   invariants and proof_asserts of .mbt files) never puts a disjunction, an
+//   implication or a quantifier in parentheses on the right of `&&`, nor an
+//   implication or a quantifier on the right of `||`. moonc drops those
+//   parentheses when it writes Why3, which then reads `a && (b → c)` as
+//   `(a && b) → c`: a different claim from the one written. Name the
+//   parenthesized part as a predicate instead;
+// - the closed tables of the proved packages say what their names say: a
+//   logic function named pow2* maps k to 2^k, one named small_* maps k to k.
+//
+// What it cannot judge is whether a property says enough, or whether a
+// backing test really covers its bridge's domain; that is the reviewer's job.
+//
+// Usage, from the repository root:
+//   moon run scripts/proof_check.mbtx -- MODULE   (checks MODULE/PROOFS.md)
+//
+// Exit status: 0 = the ledger agrees with the code, 1 = it does not, 2 = the
+// ledger or the configuration is missing or malformed.
+
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/async@0.22.5/stdio",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/x@0.5.6/sys",
+}
+
+///|
+/// Prints `message` on stderr and exits with `code`.
+async fn[T] die(code : Int, message : String) -> T {
+  @stdio.stderr.write("\{message}\n")
+  @sys.exit(code)
+  panic()
+}
+
+///|
+/// Whether `path` is a regular file, or a link to one.
+async fn is_file(path : String) -> Bool {
+  (@fs.kind(path) is Regular) catch {
+    _ => false
+  }
+}
+
+///|
+/// A row like `|---|:--:|`.
+fn separator(line : String) -> Bool {
+  line.length() >= 3 &&
+  line.has_suffix("|") &&
+  line
+  .view(start_offset=1, end_offset=line.length() - 1)
+  .iter()
+  .all(c => c is ('-' | ':' | '|' | ' '))
+}
+
+///|
+/// The body rows of the table under `## heading`, as trimmed cells.
+fn table(text : String, heading : String) -> Array[Array[String]] {
+  let rows = []
+  let mut in_table = false
+  let mut seen_header = false
+  for raw in text.split("\n") {
+    let line = raw.to_owned()
+    if line.has_prefix("## ") {
+      in_table = line == "## \{heading}"
+      seen_header = false
+      continue
+    }
+    if !in_table || !line.has_prefix("|") || separator(line) {
+      continue
+    }
+    if !seen_header {
+      seen_header = true
+      continue
+    }
+    let cells = line.split("|").to_array()
+    rows.push(
+      cells[1:cells.length() - 1].map(c => c.trim(chars=" ").to_owned()),
+    )
+  }
+  rows
+}
+
+///|
+priv enum Token {
+  Code(String)
+  Quoted(String)
+}
+
+///|
+/// The backticked and the quoted parts of a cell, in order.
+fn tokens(cell : String) -> Array[Token] {
+  let out = []
+  for i = 0; i < cell.length(); {
+    let c = cell[i]
+    if c == '`' || c == '"' {
+      let close = cell
+        .view(start_offset=i + 1)
+        .find(if c == '`' { "`" } else { "\"" })
+      if close is Some(len) {
+        let token = cell
+          .view(start_offset=i + 1, end_offset=i + 1 + len)
+          .to_owned()
+        out.push(if c == '`' { Code(token) } else { Quoted(token) })
+        continue i + len + 2
+      }
+    }
+    continue i + 1
+  }
+  out
+}
+
+///|
+/// The backticked parts of a cell.
+fn codes(cell : String) -> Array[String] {
+  tokens(cell).filter_map(t => if t is Code(c) { Some(c) } else { None })
+}
+
+///|
+/// The non-test .mbt files and the .mbtp files of a package directory.
+async fn sources(dir : String) -> Array[String] {
+  guard @fs.exists(dir) else { return [] }
+  let out = []
+  for entry in @fs.readdir(dir, sort=true) {
+    if (entry.has_suffix(".mbt") &&
+      !entry.has_suffix("_test.mbt") &&
+      !entry.has_suffix("_wbtest.mbt")) ||
+      entry.has_suffix(".mbtp") {
+      out.push("\{dir}/\{entry}")
+    }
+  }
+  out
+}
+
+///|
+/// The package directories under `dir`, `dir` included, that hold a moon.pkg.
+async fn packages_under(dir : String) -> Array[String] {
+  let out = []
+  if @fs.exists("\{dir}/moon.pkg") {
+    out.push(dir)
+  }
+  for entry in @fs.readdir(dir, sort=true) {
+    let path = "\{dir}/\{entry}"
+    if !entry.has_prefix(".") && entry != "_build" && @fs.kind(path) is Directory {
+      out.append(packages_under(path))
+    }
+  }
+  out
+}
+
+///|
+/// The text of the function `name` (`f` or `T::f`) in `text`, from its `fn`
+/// to the start of its body, or None.
+fn signature(text : String, name : String) -> String? {
+  for needle in ["fn \{name}(", "fn \{name}[", "fn[T] \{name}("] {
+    if text.find(needle) is Some(at) {
+      let rest = text.view(start_offset=at)
+      // A contracted function's body follows `} {` on a line of its own;
+      // an uncontracted one's follows `{` at the end of the signature line.
+      let end = match (rest.find("\n} {"), rest.find("{\n")) {
+        (Some(a), Some(b)) => if rest.view(end_offset=b).contains("where") { a } else { b }
+        (Some(a), None) => a
+        (None, Some(b)) => b
+        (None, None) => rest.length()
+      }
+      return Some(rest.view(end_offset=end).to_owned())
+    }
+  }
+  None
+}
+
+///|
+/// The names of the functions marked `proof_axiomatized` in `text`.
+fn axiomatized(text : String) -> Array[String] {
+  let out = []
+  let mut from = 0
+  while text.view(start_offset=from).find("proof_axiomatized: true") is Some(at) {
+    let pos = from + at
+    // The nearest `fn ` before it starts the bridge's signature.
+    let before = text.view(end_offset=pos)
+    if before.rev_find("fn ") is Some(f) {
+      let rest = before.view(start_offset=f + 3)
+      let end = match rest.find("(") {
+        Some(e) => e
+        None => rest.length()
+      }
+      out.push(rest.view(end_offset=end).trim(chars=" ").to_owned())
+    }
+    from = pos + 1
+  }
+  out
+}
+
+///|
+/// The logic parts of a .mbt file: its `where { ... }` blocks and its
+/// `proof_assert` statements (to the next line indented no deeper).
+fn logic_of_mbt(text : String) -> Array[String] {
+  let out = []
+  let chars = text.to_array()
+  let mut from = 0
+  while text.view(start_offset=from).find("where {") is Some(at) {
+    let open = from + at + 6
+    let mut depth = 0
+    let mut i = open
+    while i < chars.length() {
+      if chars[i] == '{' {
+        depth += 1
+      } else if chars[i] == '}' {
+        depth -= 1
+        if depth == 0 {
+          break
+        }
+      }
+      i += 1
+    }
+    out.push(text.view(start_offset=open, end_offset=i).to_owned())
+    from = i
+  }
+  let lines = text.split("\n").map(l => l.to_owned()).to_array()
+  for i, line in lines {
+    let trimmed = line.trim_start(chars=" ")
+    guard trimmed.has_prefix("proof_assert ") else { continue }
+    let indent = line.length() - trimmed.length()
+    let buf = StringBuilder()
+    buf.write_string(trimmed.to_owned())
+    for j = i + 1; j < lines.length(); j = j + 1 {
+      let next = lines[j]
+      let t = next.trim_start(chars=" ")
+      if t.length() == 0 || next.length() - t.length() <= indent {
+        break
+      }
+      buf.write_string("\n")
+      buf.write_string(next)
+    }
+    out.push(buf.to_string())
+  }
+  out
+}
+
+///|
+/// `text` without its `//` comments.
+fn without_comments(text : String) -> String {
+  text
+  .split("\n")
+  .map(line => match line.find("//") {
+    Some(at) => line.view(end_offset=at)
+    None => line
+  })
+  .map(l => l.to_owned())
+  .collect()
+  .join("\n")
+}
+
+///|
+/// The operands that moonc writes to Why3 without their parentheses: after
+/// `&&`, a parenthesized group with `||`, `→`, `∀` or `∃` at its top level;
+/// after `||`, one with `→`, `∀` or `∃`. Each finding is the operand's text.
+fn misparenthesized(logic : String) -> Array[String] {
+  let out = []
+  let chars = logic.to_array()
+  let n = chars.length()
+  for i = 0; i + 1 < n; i = i + 1 {
+    let op = if chars[i] == '&' && chars[i + 1] == '&' {
+      "&&"
+    } else if chars[i] == '|' && chars[i + 1] == '|' {
+      "||"
+    } else {
+      continue
+    }
+    let mut j = i + 2
+    while j < n && (chars[j] == ' ' || chars[j] == '\n') {
+      j += 1
+    }
+    guard j < n && chars[j] == '(' else { continue }
+    // The balanced group from chars[j], and what its top level holds.
+    let mut depth = 0
+    let mut bad = false
+    let mut k = j
+    while k < n {
+      let c = chars[k]
+      if c == '(' || c == '[' || c == '{' {
+        depth += 1
+      } else if c == ')' || c == ']' || c == '}' {
+        depth -= 1
+        if depth == 0 {
+          break
+        }
+      } else if depth == 1 {
+        let low = c == '→' ||
+          c == '∀' ||
+          c == '∃' ||
+          (op == "&&" && c == '|' && k + 1 < n && chars[k + 1] == '|')
+        if low {
+          bad = true
+        }
+      }
+      k += 1
+    }
+    if bad {
+      let end = if k < n { k + 1 } else { n }
+      out.push(
+        String::from_array(chars[i:end]).split("\n").map(l => l.trim(chars=" ")).collect().join(" "),
+      )
+    }
+  }
+  out
+}
+
+///|
+/// The decimal number at the start of `s`, if any.
+fn leading_number(s : StringView) -> Int64? {
+  let mut v = 0L
+  let mut seen = false
+  for c in s {
+    if c >= '0' && c <= '9' {
+      v = v * 10 + (c.to_int() - '0'.to_int()).to_int64()
+      seen = true
+    } else {
+      break
+    }
+  }
+  if seen {
+    Some(v)
+  } else {
+    None
+  }
+}
+
+///|
+/// Why the closed table `name` of `body` does not say what its name says,
+/// or None. `body` is the text after the function's signature.
+fn table_mismatch(name : String, body : String) -> String? {
+  let power = name.has_prefix("pow2")
+  guard power || name.has_prefix("small_") else { return None }
+  // The arms `k == N { V }`, then the last `else { V }`.
+  let mut last_n = -1L
+  let mut from = 0
+  let mut arms = 0
+  while body.view(start_offset=from).find(" == ") is Some(at) {
+    let pos = from + at + 4
+    guard leading_number(body.view(start_offset=pos)) is Some(n) else { break }
+    let open = match body.view(start_offset=pos).find("{ ") {
+      Some(o) => pos + o + 2
+      None => break
+    }
+    guard leading_number(body.view(start_offset=open)) is Some(v) else {
+      return Some("an arm without a number")
+    }
+    let want = if power { 1L << n.to_int() } else { n }
+    if v != want {
+      return Some("at \{n} it holds \{v}, not \{want}")
+    }
+    last_n = n
+    arms += 1
+    from = open
+  }
+  guard arms > 0 else { return Some("no arms found") }
+  // The final else holds the entry after the last arm.
+  guard body.rev_find("else { ") is Some(at) else {
+    return Some("no final else")
+  }
+  guard leading_number(body.view(start_offset=at + 7)) is Some(v) else {
+    return Some("a final else without a number")
+  }
+  let n = last_n + 1
+  let want = if power { 1L << n.to_int() } else { n }
+  if v != want {
+    return Some("past the arms it holds \{v}, not \{want}")
+  }
+  None
+}
+
+///|
+/// The closed tables (`fn NAME(k : Int) -> ...`) of a .mbtp text.
+fn closed_tables(text : String) -> Array[(String, String)] {
+  let out = []
+  let lines = text.split("\n").map(l => l.to_owned()).to_array()
+  for i, line in lines {
+    guard line.has_prefix("fn ") || line.has_prefix("pub fn ") else { continue }
+    guard line.contains("(k : Int)") else { continue }
+    let start = line.find("fn ").unwrap() + 3
+    let name = line.view(start_offset=start, end_offset=line.find("(").unwrap()).to_owned()
+    let body = StringBuilder()
+    for j = i + 1; j < lines.length() && lines[j] != "}"; j = j + 1 {
+      body.write_string(lines[j])
+      body.write_string("\n")
+    }
+    out.push((name, body.to_string()))
+  }
+  out
+}
+
+///|
+async fn main {
+  guard @env.args() is [_, module_dir, ..] else {
+    die(2, "usage: moon run scripts/proof_check.mbtx -- MODULE")
+  }
+  let module_dir = module_dir.trim_end(chars="/").to_owned()
+  let config_path = "scripts/modules.json"
+  guard @fs.exists(config_path) else {
+    die(2, "no \{config_path}: run from the repository root")
+  }
+  let config = @json.parse(@fs.read_file(config_path).text())
+  guard config is { "proved": Object(all), .. } &&
+    all.get(module_dir) is Some(Object(proved)) else {
+    die(2, "\{config_path} lists no \"proved\" packages for \{module_dir}")
+  }
+  // Package directory -> (prelude, whether CVC5 proves it).
+  let packages : Map[String, (String, Bool)] = Map([])
+  // The functions only Z3 proves.
+  let z3_only : Array[String] = []
+  for pkg, entry in proved {
+    guard entry is { "prelude": String(prelude), "solvers": Array(solvers), .. } else {
+      die(2, "\{config_path}: proved.\{module_dir}.\{pkg} needs a prelude and solvers")
+    }
+    packages[pkg] = (prelude, solvers.iter().any(s => s is String("cvc5")))
+    if entry is { "z3_only": Array(names), .. } {
+      for n in names {
+        if n is String(n) {
+          z3_only.push(n)
+        }
+      }
+    }
+  }
+  let ledger = "\{module_dir}/PROOFS.md"
+  guard is_file(ledger) else { die(2, "proof_check.mbtx: no ledger at \{ledger}") }
+  let text = @fs.read_file(ledger).text()
+  let proved_rows = table(text, "Proved")
+  let bridge_rows = table(text, "Trusted bridges")
+  guard !proved_rows.is_empty() else {
+    die(2, "proof_check.mbtx: no \"Proved\" table in \{ledger}")
+  }
+  let bad = Ref(false)
+  let fail = (message : String) => {
+    println(message)
+    bad.val = true
+  }
+  // The bridges, by name, that the Trusted bridges table lists.
+  let listed : Map[String, String] = Map([])
+  for row in bridge_rows {
+    guard row.length() >= 4 else {
+      fail("BAD ROW     bridges: \{row.join(" | ")}")
+      continue
+    }
+    let name = codes(row[0])
+    let pkg = codes(row[1])
+    guard name is [name] && pkg is [pkg] else {
+      fail("BAD ROW     bridges: \{row[0]} needs one backticked name and package")
+      continue
+    }
+    listed[name] = pkg
+    // The backing tests.
+    let mut file = ""
+    let mut named = 0
+    for token in tokens(row[3]) {
+      match token {
+        Code(path) => file = path
+        Quoted(test_name) => {
+          let path = "\{module_dir}/\{file}"
+          if file == "" || !is_file(path) {
+            fail("NO FILE     \{name}: \{file}")
+          } else if !@fs.read_file(path).text().contains("test \"\{test_name}\" {") {
+            fail("NO TEST     \{name}: \{file} has no test \"\{test_name}\"")
+          } else {
+            named += 1
+          }
+        }
+      }
+    }
+    if named == 0 {
+      fail("NO TESTS    \{name}: the row names no backing test")
+    }
+  }
+  // Every axiomatized function of the module is listed, in its package.
+  let found : Map[String, String] = Map([])
+  for dir in packages_under("\{module_dir}/src") {
+    let pkg = dir.view(start_offset=module_dir.length() + 1).to_owned()
+    for file in sources(dir) {
+      guard file.has_suffix(".mbt") else { continue }
+      for name in axiomatized(@fs.read_file(file).text()) {
+        found[name] = pkg
+        match listed.get(name) {
+          Some(p) if p == pkg => ()
+          Some(p) => fail("WRONG PKG   bridge \{name} is in \{pkg}, the ledger says \{p}")
+          None => fail("UNLISTED    bridge \{name} in \{file}")
+        }
+      }
+    }
+  }
+  for name, pkg in listed {
+    if !found.contains(name) {
+      fail("NO BRIDGE   \{name}: no proof_axiomatized function in \{pkg}")
+    }
+  }
+  // The budget.
+  let budget = match text.find("Bridge budget: ") {
+    Some(at) =>
+      match leading_number(text.view(start_offset=at + 15)) {
+        Some(n) => n.to_int()
+        None => -1
+      }
+    None => -1
+  }
+  if budget < 0 {
+    fail("NO BUDGET   \{ledger} has no \"Bridge budget: N\" line")
+  } else if listed.length() > budget {
+    fail("OVER BUDGET \{listed.length()} bridges, budget \{budget}")
+  }
+  // The Proved rows.
+  let mut functions = 0
+  for row in proved_rows {
+    guard row.length() >= 6 else {
+      fail("BAD ROW     proved: \{row.join(" | ")}")
+      continue
+    }
+    let name = codes(row[0])
+    let pkg = codes(row[1])
+    guard name is [name] && pkg is [pkg] else {
+      fail("BAD ROW     proved: \{row[0]} needs one backticked name and package")
+      continue
+    }
+    guard packages.get(pkg) is Some((prelude, by_cvc5)) else {
+      fail("NOT PROVED  \{name}: \{config_path} does not prove \{pkg}")
+      continue
+    }
+    if row[3] != prelude {
+      fail("PRELUDE     \{name}: the ledger says \{row[3]}, \{config_path} \{prelude}")
+    }
+    let solvers = row[5]
+    let by_cvc5 = by_cvc5 && !z3_only.contains(name)
+    if by_cvc5 {
+      if solvers != "Z3, CVC5" {
+        fail("SOLVERS     \{name}: CVC5 proves \{pkg}, so the cell is \"Z3, CVC5\", not \"\{solvers}\"")
+      }
+    } else if !solvers.has_prefix("Z3 only") || solvers.length() <= 9 {
+      fail("SOLVERS     \{name}: \"Z3 only\" and the reason, not \"\{solvers}\"")
+    }
+    if prelude == "unbounded" && !by_cvc5 && !z3_only.contains(name) {
+      fail("SOLVERS     \{name}: an unbounded proof must hold with both solvers")
+    }
+    for bridge in codes(row[4]) {
+      if !listed.contains(bridge) {
+        fail("NO BRIDGE   \{name} uses \{bridge}, which the bridge table lacks")
+      }
+    }
+    let mut ok = false
+    for file in sources("\{module_dir}/\{pkg}") {
+      guard file.has_suffix(".mbt") else { continue }
+      if signature(@fs.read_file(file).text(), name) is Some(sig) {
+        ok = sig.contains("proof_ensure:")
+      }
+    }
+    if ok {
+      functions += 1
+    } else {
+      fail("NO CONTRACT \{name}: no function in \{pkg} with a proof_ensure")
+    }
+  }
+  // The logic of the proved packages.
+  for pkg, _ in packages {
+    for file in sources("\{module_dir}/\{pkg}") {
+      let source = @fs.read_file(file).text()
+      let logic = if file.has_suffix(".mbtp") {
+        [source]
+      } else {
+        logic_of_mbt(source)
+      }
+      for part in logic {
+        for operand in misparenthesized(without_comments(part)) {
+          fail("PARENS      \{file}: \{operand}")
+        }
+      }
+      if file.has_suffix(".mbtp") {
+        for item in closed_tables(source) {
+          let (name, body) = item
+          if table_mismatch(name, body) is Some(why) {
+            fail("TABLE       \{file}: \{name} \{why}")
+          }
+        }
+      }
+    }
+  }
+  if bad.val {
+    println("proof check: FAIL")
+    @sys.exit(1)
+  }
+  println(
+    "proof check: OK - \{functions} proved functions, \{listed.length()} bridges of a budget of \{budget}",
+  )
+}

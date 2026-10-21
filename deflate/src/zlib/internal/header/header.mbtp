@@ -1,0 +1,22 @@
+// RFC 1950 section 2.2: CMF is CINFO (high 4 bits) and CM (low 4 bits); FLG
+// is FLEVEL (2 bits), FDICT and FCHECK (5 bits), such that CMF * 256 + FLG is
+// a multiple of 31. CM 8 is DEFLATE, whose window is 2^(CINFO + 8) bytes,
+// CINFO at most 7 (32 KiB).
+
+// The checks in zlib's order: 0 when all pass.
+fn zlib_refusal(cmf : Int, flg : Int) -> Int {
+  if (cmf * 256 + flg) % 31 != 0 { 1 } else { if cmf % 16 != 8 { 2 } else { if cmf / 16 > 7 { 3 } else { 0 } } }
+}
+
+predicate header_post(cmf : Int, flg : Int, r : HeaderParse) {
+  match r {
+    Refused(code) => code == zlib_refusal(cmf, flg) && code != 0
+    Parsed(h) =>
+      zlib_refusal(cmf, flg) == 0 &&
+      h.window_bits == cmf / 16 + 8 &&
+      8 <= h.window_bits && h.window_bits <= 15 &&
+      @proof_bits.pow2(h.window_bits) <= 32768 &&
+      h.level == flg / 64 &&
+      h.dictionary == (flg / 32 % 2 == 1)
+  }
+}

@@ -1,0 +1,49 @@
+name: Proofs (second solver)
+
+# The proofs again with CVC5, the second solver: weekly and on request rather
+# than on every push, since it takes several minutes (the gates of ci.yml
+# prove with Z3 on every push). Run it before a release too.
+
+on:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: proofs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cvc5:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 90
+    container:
+      image: ghcr.io/gaato/moonbit:0.10.15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Trust the workspace (container runs as a different user)
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Install CVC5 1.4.2
+        # The official static release, pinned by checksum: 1.4.2 has a fix for
+        # a rewrite that answered unsat wrongly (cvc5 #13039).
+        # scripts/prove.mbtx refuses any other version.
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends unzip
+          curl -fsSL -o /tmp/cvc5.zip https://github.com/cvc5/cvc5/releases/download/cvc5-1.4.2/cvc5-Linux-x86_64-static.zip
+          echo "7eb18f8c814c36a46c5a7d003983e9cfbc4b0a9828d6dd596239291bd4cc61d8  /tmp/cvc5.zip" | sha256sum -c -
+          unzip -q /tmp/cvc5.zip -d /opt
+          echo /opt/cvc5-Linux-x86_64-static/bin >> "$GITHUB_PATH"
+
+      - name: Registry index
+        run: moon update
+
+      - name: Prove with CVC5
+        run: moon run scripts/prove.mbtx -- --solver cvc5

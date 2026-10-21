@@ -1,0 +1,47 @@
+// After k bytes of a chunk that started with a, b < 2^16:
+//   a <= 65535 + 255 k,  2 b <= 2 * 65535 (k + 1) + 255 k (k + 1).
+// At k = NMAX = 5552 the bound on b is 4,294,773,495 < 2^32 (zlib's NMAX).
+// MathInt has no operators (see mathint.mbt), hence the method chains.
+fn tri(x : MathInt) -> MathInt {
+  x.times(x.plus(im(1)))
+}
+
+fn a_bound(k : Int) -> MathInt {
+  im(65535).plus(im(255).times(im(k)))
+}
+
+fn b2_bound(k : Int) -> MathInt {
+  im(131070)
+  .times(im(k).plus(im(1)))
+  .plus(im(255).times(tri(im(k))))
+}
+
+predicate chunk_inv(a : UInt, b : UInt, k : Int) {
+  0 <= k && k <= 5552 &&
+  um(a).le(a_bound(k)) &&
+  um(b).plus(um(b)).le(b2_bound(k))
+}
+
+// 255 k (k + 1) + 510 (k + 1) = 255 (k + 1) (k + 2): b2_bound(k) plus twice
+// the largest a2 is b2_bound(k + 1).
+predicate tri_step(k : Int) {
+  im(255)
+  .times(tri(im(k)))
+  .plus(im(510).times(im(k).plus(im(1))))
+  .eq(im(255).times(tri(im(k).plus(im(1)))))
+}
+
+// k (k + 1) is increasing for k >= 0.
+lemma tri_bound(k : Int) where {
+  proof_require: 0 <= k,
+  proof_require: k <= 5551,
+  proof_ensure: im(k).times(im(k).plus(im(1))).le(im(5551).times(im(5552))),
+} {
+  proof_assert im(k).times(im(k)).le(im(5551).times(im(k)))
+  proof_assert im(5551).times(im(k)).le(im(5551).times(im(5551)))
+}
+
+// Both halves of a checksum that has absorbed at least one byte are reduced.
+predicate adler_reduced(r : UInt) {
+  r % 65536U < 65521U && r / 65536U < 65521U
+}

@@ -1,0 +1,42 @@
+// Reading a bit field with arithmetic: for header parsers that assemble a
+// number from bytes and state, as a contract, that each field is the
+// number's digits in base 2^width.
+
+// `f` is the field of width `w` (a power of two) at scale `s` in `v`: `lo`
+// holds the bits below it and `hi` those above; `q`, `v / s`, is a variable
+// of its own because CVC5 proves `(s * q + lo) / s == q` but not the same
+// step with `q` spelled `f + w * hi`.
+pub predicate field_at(
+  v : Int,
+  lo : Int,
+  q : Int,
+  f : Int,
+  hi : Int,
+  s : Int,
+  w : Int,
+) {
+  v == lo + s * q &&
+  q == f + w * hi &&
+  0 <= lo && lo < s &&
+  0 <= f && f < w &&
+  0 <= hi
+}
+
+lemma field_extract(
+  v : Int,
+  lo : Int,
+  q : Int,
+  f : Int,
+  hi : Int,
+  s : Int,
+  w : Int,
+) where {
+  proof_require: field_at(v, lo, q, f, hi, s, w),
+  proof_ensure: v / s % w == f,
+} {
+  proof_assert v == s * q + lo
+  proof_assert lo / s == 0
+  proof_assert (s * q + lo) / s == q
+  proof_assert v / s == q
+  proof_assert (w * hi + f) % w == f
+}

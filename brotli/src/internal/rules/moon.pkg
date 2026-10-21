@@ -1,5 +1,12 @@
 // RFC 7932's rules for the values the decoder has read, as pure functions:
 // header fields, block switches, distances and the context map transform.
-// The decoder's state machine reads the bits and calls these.
+// The decoder's state machine reads the bits and calls these. `moon prove`
+// checks them against the RFC (PROOFS.md lists what it proves).
+
+import {
+  "gaato/brotli/internal/proof_bits",
+}
+
+proof_enabled = true
 
 supported_targets = "js + native + wasm + wasm-gc"

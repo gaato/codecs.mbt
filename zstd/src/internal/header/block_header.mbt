@@ -36,13 +36,32 @@ pub extend BlockHeader with @debug.Debug::{to_repr}
 /// Decodes `value`, the header's three bytes read little-endian, or refuses
 /// the reserved block type.
 pub fn parse_block_header(value : Int32) -> Result[BlockHeader, String] {
-  let last = (value & 1) != 0
-  let size = (value >> 3) & 0x1FFFFF
-  match (value >> 1) & 3 {
-    0 => Ok({ last, block_type: Raw, size, })
-    1 => Ok({ last, block_type: Rle, size, })
-    2 => Ok({ last, block_type: Compressed, size, })
-    _ => Err("a block of the reserved type")
+  match block_header_of(value & 0xFFFFFF) {
+    Some(header) => Ok(header)
+    None => Err("a block of the reserved type")
+  }
+}
+
+///|
+/// `parse_block_header` for a header of 24 bits, `None` for the reserved
+/// type.
+fn block_header_of(
+  value : Int32,
+) -> BlockHeader? where {
+  proof_require: 0 <= value && value < 16777216,
+  proof_ensure: result => block_header_post(value, result),
+} {
+  let last = @proof_bits.low_bits(value, 1) != 0
+  let size = @proof_bits.shr(value, 3)
+  let block_type = @proof_bits.low_bits(@proof_bits.shr(value, 1), 2)
+  if block_type == 0 {
+    Some({ last, block_type: Raw, size, })
+  } else if block_type == 1 {
+    Some({ last, block_type: Rle, size, })
+  } else if block_type == 2 {
+    Some({ last, block_type: Compressed, size, })
+  } else {
+    None
   }
 }
 
@@ -53,17 +72,35 @@ pub fn BlockHeader::check(
   self : BlockHeader,
   block_max : Int32,
 ) -> Result[BlockHeader, String] {
-  if self.size > block_max {
-    Err(
-      match self.block_type {
-        Raw => "a raw block larger than the block limit"
-        Rle => "an RLE block larger than the block limit"
-        Compressed => "a compressed block larger than the block limit"
-      },
-    )
-  } else if self.block_type is Compressed && self.size == 0 {
-    Err("an empty compressed block")
+  match block_refusal(self, block_max) {
+    0 => Ok(self)
+    1 =>
+      Err(
+        match self.block_type {
+          Raw => "a raw block larger than the block limit"
+          Rle => "an RLE block larger than the block limit"
+          Compressed => "a compressed block larger than the block limit"
+        },
+      )
+    _ => Err("an empty compressed block")
+  }
+}
+
+///|
+/// Why `BlockHeader::check` refuses `header`: 0 for not at all, 1 for a
+/// block larger than `block_max`, 2 for an empty compressed block.
+fn block_refusal(
+  header : BlockHeader,
+  block_max : Int32,
+) -> Int32 where {
+  proof_ensure: result => block_refusal_post(header, block_max, result),
+} {
+  if header.size > block_max {
+    1
   } else {
-    Ok(self)
+    match header.block_type {
+      Compressed => if header.size == 0 { 2 } else { 0 }
+      _ => 0
+    }
   }
 }

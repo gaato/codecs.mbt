@@ -18,13 +18,38 @@ pub fn stream_sizes(
   size2 : Int32,
   size3 : Int32,
 ) -> Result[(Int32, Int32, Int32, Int32), String] {
+  match fourth_stream_size(total, size1, size2, size3) {
+    Some(size4) => Ok((size1, size2, size3, size4))
+    None =>
+      Err(
+        if total < 10 {
+          "four Huffman streams in fewer than 10 bytes"
+        } else {
+          "a Huffman jump table past its streams"
+        },
+      )
+  }
+}
+
+///|
+/// The size of the fourth stream, what the jump table and the other three
+/// leave of `total`, when the streams fit and the fourth has a byte.
+fn fourth_stream_size(
+  total : Int32,
+  size1 : Int32,
+  size2 : Int32,
+  size3 : Int32,
+) -> Int32? where {
+  proof_require: jump_table_pre(total, size1, size2, size3),
+  proof_ensure: result => jump_table_post(total, size1, size2, size3, result),
+} {
   let size4 = total - 6 - size1 - size2 - size3
   if total < 10 {
-    Err("four Huffman streams in fewer than 10 bytes")
+    None
   } else if size4 <= 0 {
-    Err("a Huffman jump table past its streams")
+    None
   } else {
-    Ok((size1, size2, size3, size4))
+    Some(size4)
   }
 }
 

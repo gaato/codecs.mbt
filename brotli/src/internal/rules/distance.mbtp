@@ -1,0 +1,149 @@
+// RFC 7932 section 4: distance codes.
+
+// A distance code of the alphabet section 9.2 sets up: NPOSTFIX 0 to 3,
+// NDIRECT at most 15 << NPOSTFIX, and 16 + NDIRECT + (48 << NPOSTFIX) codes.
+predicate distance_code_pre(code : Int, npostfix : Int, ndirect : Int) {
+  0 <= npostfix && npostfix <= 3 &&
+  0 <= ndirect && ndirect <= 15 * @proof_bits.pow2(npostfix) &&
+  0 <= code && code < 16 + ndirect + 48 * @proof_bits.pow2(npostfix)
+}
+
+// ndistbits = 1 + ((dcode - NDIRECT - 16) >> (NPOSTFIX + 1)) for the codes
+// past the direct ones, none for the others.
+fn spec_extra_bits(code : Int, npostfix : Int, ndirect : Int) -> Int {
+  if code < 16 + ndirect {
+    0
+  } else {
+    1 + (code - 16 - ndirect) / @proof_bits.pow2(npostfix + 1)
+  }
+}
+
+// The extra bits' value fits the number of extra bits. (A named predicate:
+// moonc drops the parentheses of an implication or a disjunction on the
+// right of `&&` when it writes Why3, which then reads `a && (b → c)` as
+// `(a && b) → c`. scripts/proof_check.mbtx refuses such operands.)
+predicate distance_pre(code : Int, extra : Int, npostfix : Int, ndirect : Int) {
+  distance_code_pre(code, npostfix, ndirect) &&
+  extra_fits(code, extra, npostfix, ndirect)
+}
+
+predicate extra_fits(code : Int, extra : Int, npostfix : Int, ndirect : Int) {
+  code >= 16 + ndirect →
+    0 <= extra &&
+    extra < @proof_bits.pow2(spec_extra_bits(code, npostfix, ndirect))
+}
+
+// The table of short codes: which of the last distances each one starts
+// from (1 the last, 2 the second-to-last, ...) and what it adds.
+fn short_back(code : Int) -> Int {
+  if code < 4 { code + 1 } else { if code < 10 { 1 } else { 2 } }
+}
+
+fn short_delta(code : Int) -> Int {
+  if code == 4 { -1 } else { if code == 5 { 1 } else { if code == 6 { -2 } else { if code == 7 { 2 } else { if code == 8 { -3 } else { if code == 9 { 3 } else { if code == 10 { -1 } else { if code == 11 { 1 } else { if code == 12 { -2 } else { if code == 13 { 2 } else { if code == 14 { -3 } else { if code == 15 { 3 } else { 0 } } } } } } } } } } } }
+}
+
+fn short_last(code : Int, last1 : Int, last2 : Int, last3 : Int, last4 : Int) -> Int {
+  if short_back(code) == 1 { last1 } else { if short_back(code) == 2 { last2 } else { if short_back(code) == 3 { last3 } else { last4 } } }
+}
+
+fn short_distance(
+  code : Int,
+  last1 : Int,
+  last2 : Int,
+  last3 : Int,
+  last4 : Int,
+) -> Int {
+  short_last(code, last1, last2, last3, last4) + short_delta(code)
+}
+
+// The distance of a code with extra bits, `c` places past the direct ones,
+// as section 4 computes it:
+//   ndistbits = 1 + ((dcode - NDIRECT - 16) >> (NPOSTFIX + 1))
+//   hcode = (dcode - NDIRECT - 16) >> NPOSTFIX
+//   lcode = (dcode - NDIRECT - 16) & POSTFIX_MASK
+//   offset = ((2 + (hcode & 1)) << ndistbits) - 4
+//   distance = ((offset + dextra) << NPOSTFIX) + lcode + NDIRECT + 1
+fn long_bits(c : Int, npostfix : Int) -> Int {
+  1 + c / @proof_bits.pow2(npostfix + 1)
+}
+
+fn spec_offset(c : Int, npostfix : Int) -> Int {
+  (2 + c / @proof_bits.pow2(npostfix) % 2) * @proof_bits.pow2(long_bits(c, npostfix)) - 4
+}
+
+fn spec_long_distance(c : Int, extra : Int, npostfix : Int, ndirect : Int) -> Int {
+  (spec_offset(c, npostfix) + extra) * @proof_bits.pow2(npostfix) +
+  c % @proof_bits.pow2(npostfix) +
+  ndirect +
+  1
+}
+
+predicate long_offset_pre(c : Int, npostfix : Int) {
+  0 <= npostfix && npostfix <= 3 &&
+  0 <= c && c < 48 * @proof_bits.pow2(npostfix)
+}
+
+predicate long_distance_pre(c : Int, extra : Int, npostfix : Int, ndirect : Int) {
+  0 <= npostfix && npostfix <= 3 &&
+  0 <= ndirect && ndirect <= 15 * @proof_bits.pow2(npostfix) &&
+  0 <= c && c < 48 * @proof_bits.pow2(npostfix) &&
+  0 <= extra && extra < @proof_bits.pow2(long_bits(c, npostfix))
+}
+
+// Short codes against the last distances, refused when that is below one;
+// direct codes; codes with extra bits, which always name a distance past the
+// direct ones.
+predicate distance_post(
+  code : Int,
+  extra : Int,
+  npostfix : Int,
+  ndirect : Int,
+  last1 : Int,
+  last2 : Int,
+  last3 : Int,
+  last4 : Int,
+  r : Option[Int],
+) {
+  match r {
+    None =>
+      code < 16 && short_distance(code, last1, last2, last3, last4) < 1
+    Some(d) =>
+      1 <= d &&
+      short_ok(code, d, last1, last2, last3, last4) &&
+      direct_ok(code, d, ndirect) &&
+      long_ok(code, extra, npostfix, ndirect, d)
+  }
+}
+
+predicate short_ok(
+  code : Int,
+  d : Int,
+  last1 : Int,
+  last2 : Int,
+  last3 : Int,
+  last4 : Int,
+) {
+  code < 16 → d == short_distance(code, last1, last2, last3, last4)
+}
+
+predicate direct_ok(code : Int, d : Int, ndirect : Int) {
+  16 <= code && code < 16 + ndirect → d == code - 15
+}
+
+predicate long_ok(code : Int, extra : Int, npostfix : Int, ndirect : Int, d : Int) {
+  code >= 16 + ndirect →
+    d == spec_long_distance(code - 16 - ndirect, extra, npostfix, ndirect) &&
+    d > ndirect
+}
+
+// 2^k <= 2^24, by cases: a named predicate, so that the solver unfolds the
+// table once.
+predicate pow2_le_2_24(k : Int) {
+  @proof_bits.pow2(k) <= 16777216
+}
+
+// At NPOSTFIX `k`, multiplying by 2^NPOSTFIX is multiplying by `m`.
+predicate scaled_at(x : Int, npostfix : Int, k : Int, m : Int) {
+  npostfix == k → x * @proof_bits.pow2(npostfix) == m * x
+}

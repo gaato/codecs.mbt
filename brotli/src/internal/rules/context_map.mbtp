@@ -1,0 +1,35 @@
+// The list of inverse move-to-front holds each of 0 to 255 once: a
+// permutation, which a move to the front keeps. (Each quantifier is a
+// predicate of its own: scripts/proof_check.mbtx refuses one in parentheses
+// after `&&`, which moonc writes to Why3 without them.)
+
+predicate identity_prefix(mtf : FixedArray[Byte], i : Int) {
+  mtf.length() == 256 && identity_below(mtf, i)
+}
+
+predicate identity_below(mtf : FixedArray[Byte], i : Int) {
+  ∀ k : Int, 0 <= k && k < i → mtf[k].to_int() == k
+}
+
+predicate mtf_perm(mtf : FixedArray[Byte]) {
+  mtf.length() == 256 && distinct_except(mtf, -1)
+}
+
+// The entries of the list but the one at `j` are distinct.
+predicate distinct_except(mtf : FixedArray[Byte], j : Int) {
+  ∀ a : Int, ∀ b : Int,
+    0 <= a && a < 256 && 0 <= b && b < 256 && a != b && a != j && b != j →
+      mtf[a].to_int() != mtf[b].to_int()
+}
+
+// None of the entries of the list but the one at `j` is `value`.
+predicate absent_except(mtf : FixedArray[Byte], j : Int, value : Byte) {
+  ∀ a : Int, 0 <= a && a < 256 && a != j → mtf[a].to_int() != value.to_int()
+}
+
+// While the entries before `j` shift up by one, the list without position
+// `j` holds distinct values, none of them `value`, the entry that moves to
+// the front.
+predicate perm_except(mtf : FixedArray[Byte], j : Int, value : Byte) {
+  distinct_except(mtf, j) && absent_except(mtf, j, value)
+}

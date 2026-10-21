@@ -1,0 +1,52 @@
+// RFC 7932 section 9.1: the stream header's bit patterns, first bit least
+// significant, and the WBITS each one gives. The patterns are a prefix code,
+// so the header matches at most one of them; 0b0010001 is reserved.
+predicate wbits_pattern(header : Int, wbits : Int, length : Int) {
+  (length == 1 && wbits == 16 && header % 2 == 0) ||
+  (length == 4 && 18 <= wbits && wbits <= 24 &&
+    header % 16 == 2 * (wbits - 17) + 1) ||
+  (length == 7 && wbits == 17 && header % 128 == 1) ||
+  (length == 7 && 10 <= wbits && wbits <= 15 &&
+    header % 128 == 16 * (wbits - 8) + 1)
+}
+
+predicate window_bits_post(header : Int, r : Option[(Int, Int)]) {
+  match r {
+    None => header % 128 == 17
+    Some((wbits, length)) => wbits_pattern(header, wbits, length)
+  }
+}
+
+// Section 9.2: MNIBBLES nibbles of MLEN - 1. More than four may not end in a
+// zero nibble.
+predicate meta_block_length_pre(bits : Int, nibbles : Int) {
+  4 <= nibbles && nibbles <= 6 && 0 <= bits && bits < @proof_bits.pow2(4 * nibbles)
+}
+
+predicate meta_block_length_post(bits : Int, nibbles : Int, r : Option[Int]) {
+  match r {
+    None => nibbles > 4 && bits < @proof_bits.pow2(4 * (nibbles - 1))
+    Some(len) =>
+      !(nibbles > 4 && bits < @proof_bits.pow2(4 * (nibbles - 1))) &&
+      len == bits + 1 &&
+      1 <= len && len <= 16777216
+  }
+}
+
+// Section 9.2: MSKIPBYTES bytes of MSKIPLEN - 1, none for an empty metadata
+// block. More than one may not end in a zero byte.
+predicate metadata_length_pre(bits : Int, bytes : Int) {
+  0 <= bytes && bytes <= 3 && 0 <= bits && bits < @proof_bits.pow2(8 * bytes)
+}
+
+predicate metadata_length_post(bits : Int, bytes : Int, r : Option[Int]) {
+  match r {
+    None => bytes > 1 && bits < @proof_bits.pow2(8 * (bytes - 1))
+    Some(len) =>
+      (bytes == 0 && len == 0) ||
+      (bytes > 0 &&
+        !(bytes > 1 && bits < @proof_bits.pow2(8 * (bytes - 1))) &&
+        len == bits + 1 &&
+        1 <= len && len <= 16777216)
+  }
+}

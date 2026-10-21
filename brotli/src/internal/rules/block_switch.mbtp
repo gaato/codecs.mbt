@@ -1,0 +1,28 @@
+// RFC 7932 section 6: block type code 0 is the second-to-last type, 1 the
+// last type plus one, and 2 + t type t, all modulo NBLTYPES.
+predicate next_block_type_pre(
+  code : Int,
+  current : Int,
+  previous : Int,
+  types : Int,
+) {
+  1 <= types &&
+  0 <= code && code < types + 2 &&
+  0 <= current && current < types &&
+  0 <= previous && previous < types
+}
+
+fn spec_block_type(code : Int, current : Int, previous : Int) -> Int {
+  if code == 0 { previous } else { if code == 1 { current + 1 } else { code - 2 } }
+}
+
+predicate next_block_type_post(
+  code : Int,
+  current : Int,
+  previous : Int,
+  types : Int,
+  r : Int,
+) {
+  r == spec_block_type(code, current, previous) % types &&
+  0 <= r && r < types
+}

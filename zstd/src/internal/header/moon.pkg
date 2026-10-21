@@ -2,10 +2,16 @@
 // functions: frame, block and literals section headers, and the jump table
 // in front of four Huffman streams. The state machine gathers the bytes and
 // turns an `Err` into corruption; keeping the decisions here lets the tests
-// check them exhaustively against references written from RFC 8878.
+// check them exhaustively against references written from RFC 8878, and
+// `moon prove` check them against the RFC (PROOFS.md lists what it proves).
 
 import {
+  "gaato/zstd/internal/frame",
+  "gaato/zstd/internal/proof_bits",
+  "gaato/zstd/internal/proof_fields",
   "moonbitlang/core/debug",
 }
+
+proof_enabled = true
 
 supported_targets = "js + native + wasm + wasm-gc"

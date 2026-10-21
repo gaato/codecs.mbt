@@ -23,7 +23,8 @@ let usage : String =
   #|
   #|  moon run scripts/release.mbtx -- bump <module> <version>
   #|      set a module's version and every sibling import of it, and move its
-  #|      CHANGELOG [Unreleased] entries under <version> (local edit)
+  #|      CHANGELOG [Unreleased] entries under <version> (local edit); for a
+  #|      module with proofs, reminds to run the second-solver check
   #|  moon run scripts/release.mbtx -- note <module> <section> <text>
   #|      add "- <text>" under ### <section> of the module's [Unreleased]
   #|  moon run scripts/release.mbtx -- check
@@ -284,6 +285,12 @@ async fn bump(dir : String, version : String) -> Unit {
     println("  \{path}")
   }
   changelog_release(dir, version)
+  // The gates prove with Z3 on every push; the second solver runs weekly.
+  if @fs.exists("\{dir}/PROOFS.md") {
+    println(
+      "  before publishing, prove with the second solver: run the \"Proofs (second solver)\" workflow, or moon run scripts/prove.mbtx -- --solver cvc5",
+    )
+  }
 }
 
 ///|

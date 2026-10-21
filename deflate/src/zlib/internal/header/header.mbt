@@ -16,18 +16,49 @@ pub(all) struct Header {
 pub fn parse(cmf : Byte, flg : Byte) -> Result[Header, String] {
   let cmf = cmf.to_int()
   let flg = flg.to_int()
+  match header_of(cmf, flg) {
+    Parsed(header) => Ok(header)
+    Refused(1) => Err("the header check (FCHECK) fails")
+    Refused(2) => Err("compression method \{cmf & 15} is not DEFLATE (8)")
+    Refused(_) => Err("a window of 2^\{(cmf >> 4) + 8} bytes is over 32 KiB")
+  }
+}
+
+///|
+/// What `header_of` makes of CMF and FLG.
+priv enum HeaderParse {
+  Parsed(Header)
+  /// Why the header is refused: 1 for the header check, 2 for the
+  /// compression method, 3 for the window.
+  Refused(Int32)
+}
+
+///|
+/// `parse` on the bytes' values.
+fn header_of(
+  cmf : Int32,
+  flg : Int32,
+) -> HeaderParse where {
+  proof_require: @proof_bits.is_byte(cmf) && @proof_bits.is_byte(flg),
+  proof_ensure: result => header_post(cmf, flg, result),
+} {
   if (cmf * 256 + flg) % 31 != 0 {
-    return Err("the header check (FCHECK) fails")
+    Refused(1)
+  } else {
+    let cm = @proof_bits.low_bits(cmf, 4)
+    let cinfo = @proof_bits.shr(cmf, 4)
+    if cm != 8 {
+      Refused(2)
+    } else if cinfo > 7 {
+      Refused(3)
+    } else {
+      Parsed({
+        window_bits: cinfo + 8,
+        level: @proof_bits.shr(flg, 6),
+        dictionary: @proof_bits.low_bits(@proof_bits.shr(flg, 5), 1) != 0,
+      })
+    }
   }
-  let cm = cmf & 15
-  if cm != 8 {
-    return Err("compression method \{cm} is not DEFLATE (8)")
-  }
-  let cinfo = cmf >> 4
-  if cinfo > 7 {
-    return Err("a window of 2^\{cinfo + 8} bytes is over 32 KiB")
-  }
-  Ok({ window_bits: cinfo + 8, level: flg >> 6, dictionary: (flg & 0x20) != 0, })
 }
 
 ///|

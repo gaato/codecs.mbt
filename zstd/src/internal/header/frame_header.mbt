@@ -26,42 +26,12 @@ pub extend FrameHeader with Eq::{equal, not_equal}
 pub extend FrameHeader with @debug.Debug::{to_repr}
 
 ///|
-/// The size of the Dictionary_ID field (Dictionary_ID_Flag).
-fn dictionary_id_size(descriptor : Int32) -> Int32 {
-  match descriptor & 3 {
-    0 => 0
-    1 => 1
-    2 => 2
-    _ => 4
-  }
-}
-
-///|
-/// The size of the Frame_Content_Size field (Frame_Content_Size_Flag): a
-/// single-segment frame always has one.
-fn content_size_size(descriptor : Int32) -> Int32 {
-  match (descriptor >> 6) & 3 {
-    0 => if (descriptor & 0x20) != 0 { 1 } else { 0 }
-    1 => 2
-    2 => 4
-    _ => 8
-  }
-}
-
-///|
 /// The length of the frame header that starts with Frame_Header_Descriptor
 /// `descriptor`, or why the header is refused: its reserved bit is set.
 pub fn frame_header_len(descriptor : Int32) -> Result[Int32, String] {
-  if (descriptor & 0x08) != 0 {
-    Err("the frame header's reserved bit is set")
-  } else {
-    let window_descriptor_size = if (descriptor & 0x20) != 0 { 0 } else { 1 }
-    Ok(
-      1 +
-      window_descriptor_size +
-      dictionary_id_size(descriptor) +
-      content_size_size(descriptor),
-    )
+  match @frame.header_len(descriptor & 0xFF) {
+    Some(len) => Ok(len)
+    None => Err("the frame header's reserved bit is set")
   }
 }
 
@@ -70,8 +40,7 @@ pub fn frame_header_len(descriptor : Int32) -> Result[Int32, String] {
 /// 3.1.1.1.2): `2^(10 + Exponent)` and `Mantissa` eighths of it more.
 /// Computed in 64 bits: up to 2^41 + 7 * 2^38.
 pub fn window_size(window_descriptor : Int32) -> UInt64 {
-  let base = 1UL << (10 + ((window_descriptor >> 3) & 31))
-  base + (base >> 3) * (window_descriptor & 7).to_uint64()
+  @frame.window_size(window_descriptor & 0xFF)
 }
 
 ///|
@@ -86,9 +55,9 @@ pub fn parse_frame_header(
   frame_header_len(descriptor).map(header_len => {
     let single_segment = (descriptor & 0x20) != 0
     let did_at = if single_segment { 1 } else { 2 }
-    let did_size = dictionary_id_size(descriptor)
+    let did_size = @frame.dictionary_id_size(descriptor)
     let fcs_at = did_at + did_size
-    let content_size = match content_size_size(descriptor) {
+    let content_size = match @frame.content_size_size(descriptor) {
       0 => None
       2 => Some(le(header, fcs_at, 2) + 256)
       n => Some(le(header, fcs_at, n))

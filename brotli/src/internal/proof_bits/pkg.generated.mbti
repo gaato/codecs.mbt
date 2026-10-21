@@ -1,0 +1,23 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/brotli/internal/proof_bits"
+
+// Values
+pub fn is_byte(Int) -> Bool
+
+pub fn low_bits(Int, Int) -> Int
+
+pub fn pow2(Int) -> Int
+
+pub fn shift_ok(Int) -> Bool
+
+pub fn shl(Int, Int) -> Int
+
+pub fn shr(Int, Int) -> Int
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+
+// Traits

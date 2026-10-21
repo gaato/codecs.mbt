@@ -1,0 +1,11 @@
+// Generated from parts/proof_bits/moon.pkg by scripts/gen_parts.mbtx: edit it there, not here.
+// Trusted bridges from machine bit operations to integer arithmetic, for the
+// packages that `moon prove` checks. The prover rejects `>>`, `<<` and `&` in
+// a contracted body, so a proved function calls these instead; each one's
+// contract states what it computes, and its tests check that over the domain
+// its precondition allows. A format copies this package and lists every
+// bridge in its PROOFS.md.
+
+proof_enabled = true
+
+supported_targets = "js + native + wasm + wasm-gc"

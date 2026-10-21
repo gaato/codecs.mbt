@@ -1,0 +1,18 @@
+#proof_import("int.Int")
+fn MathInt::plus(self : MathInt, other : MathInt) -> MathInt = "(+)"
+
+#proof_import("int.Int")
+fn MathInt::times(self : MathInt, other : MathInt) -> MathInt = "(*)"
+
+#proof_import("int.Int")
+fn MathInt::le(self : MathInt, other : MathInt) -> Bool = "(<=)"
+
+#proof_import("int.Int")
+fn MathInt::eq(self : MathInt, other : MathInt) -> Bool = "(=)"
+
+// The value of an Int / UInt as an unbounded integer (the prelude's `model`).
+#proof_import("moonbit_builtin_prelude.Int")
+fn im(x : Int) -> MathInt = "model"
+
+#proof_import("moonbit_builtin_prelude.UInt")
+fn um(x : UInt) -> MathInt = "model"

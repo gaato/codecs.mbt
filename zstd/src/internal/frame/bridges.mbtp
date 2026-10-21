@@ -1,0 +1,11 @@
+// What the bridges of bridges.mbt stand for, as closed tables.
+
+// 2^k as a UInt64, for the window exponents 10 to 41.
+fn pow2_u64(k : Int) -> UInt64 {
+  if k == 10 { 1024UL } else { if k == 11 { 2048UL } else { if k == 12 { 4096UL } else { if k == 13 { 8192UL } else { if k == 14 { 16384UL } else { if k == 15 { 32768UL } else { if k == 16 { 65536UL } else { if k == 17 { 131072UL } else { if k == 18 { 262144UL } else { if k == 19 { 524288UL } else { if k == 20 { 1048576UL } else { if k == 21 { 2097152UL } else { if k == 22 { 4194304UL } else { if k == 23 { 8388608UL } else { if k == 24 { 16777216UL } else { if k == 25 { 33554432UL } else { if k == 26 { 67108864UL } else { if k == 27 { 134217728UL } else { if k == 28 { 268435456UL } else { if k == 29 { 536870912UL } else { if k == 30 { 1073741824UL } else { if k == 31 { 2147483648UL } else { if k == 32 { 4294967296UL } else { if k == 33 { 8589934592UL } else { if k == 34 { 17179869184UL } else { if k == 35 { 34359738368UL } else { if k == 36 { 68719476736UL } else { if k == 37 { 137438953472UL } else { if k == 38 { 274877906944UL } else { if k == 39 { 549755813888UL } else { if k == 40 { 1099511627776UL } else { 2199023255552UL } } } } } } } } } } } } } } } } } } } } } } } } } } } } } } }
+}
+
+// The UInt64 with the value of a mantissa, 0 to 7.
+fn small_u64(k : Int) -> UInt64 {
+  if k == 0 { 0UL } else { if k == 1 { 1UL } else { if k == 2 { 2UL } else { if k == 3 { 3UL } else { if k == 4 { 4UL } else { if k == 5 { 5UL } else { if k == 6 { 6UL } else { 7UL } } } } } } }
+}

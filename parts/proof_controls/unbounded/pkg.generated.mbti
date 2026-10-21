@@ -1,0 +1,15 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/codec_parts/proof_controls/unbounded"
+
+// Values
+pub fn half_below_500(Int) -> Int
+
+pub fn low_bits_below_7(Int) -> Int
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+
+// Traits

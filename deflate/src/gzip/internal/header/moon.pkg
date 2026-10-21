@@ -1,9 +1,13 @@
 // The decisions on the bytes of a gzip member's header and trailer (RFC 1952
 // section 2.3), as pure functions: the decoder gathers the bytes and calls
-// them.
+// them. `moon prove` checks the fixed header's against the RFC (see
+// PROOFS.md).
 
 supported_targets = "js + native + wasm + wasm-gc"
 
 import {
+  "gaato/deflate/internal/proof_bits",
   "moonbitlang/core/debug",
 }
+
+proof_enabled = true

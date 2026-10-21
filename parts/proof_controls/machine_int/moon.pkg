@@ -1,0 +1,9 @@
+// A negative control for `moon prove` with machine integers
+// (MOON_PROVE_PRELUDE_OVERRIDE): code that overflows. scripts/prove.mbtx
+// requires every solver to fail on it; one that proves it is broken, or the
+// machine-integer prelude is not in effect and the "no overflow" proofs mean
+// nothing.
+
+proof_enabled = true
+
+supported_targets = "js + native + wasm + wasm-gc"

@@ -1,7 +1,11 @@
 // Runs the repository validation suite.
 //
 // Usage, from the repository root:
-//   moon run scripts/gates.mbtx -- [--no-js] [--no-wasm]
+//   moon run scripts/gates.mbtx -- [--no-js] [--no-wasm] [--no-prove] [--second-solver]
+//
+// --no-prove skips `moon prove` (for a machine without Z3 4.16.0); the proof
+// ledgers are still checked against the code. --second-solver proves again
+// with CVC5 1.4.2 after Z3 (see scripts/prove.mbtx).
 //
 // Each step is echoed as "+ <command>" and streams its output as it runs; the
 // first failing step ends the suite with that step's exit status.
@@ -57,10 +61,14 @@ async fn main {
   let targets = ["native"]
   let mut skip_js = false
   let mut skip_wasm = false
+  let mut skip_prove = false
+  let mut second_solver = false
   for arg in @env.args()[1:] {
     match arg {
       "--no-js" => skip_js = true
       "--no-wasm" => skip_wasm = true
+      "--no-prove" => skip_prove = true
+      "--second-solver" => second_solver = true
       _ => die(2, "unknown option: \{arg}")
     }
   }
@@ -80,6 +88,13 @@ async fn main {
   run("moon", ["update"])
   // The modules' copies of parts/ are what parts/ holds.
   run("moon", ["run", "scripts/gen_parts.mbtx", "--", "--check"])
+  // Every proof ledger (PROOFS.md) agrees with the code: the proved functions
+  // have contracts, every trusted bridge is listed with tests that exist.
+  for dir in ledgered() {
+    if @fs.exists("\{dir}/PROOFS.md") {
+      run("moon", ["run", "scripts/proof_check.mbtx", "--", dir])
+    }
+  }
   // Generated inputs are current: zstd's vectors and the benchmarks' (the zstd
   // and brotli commands decompress them to what the generators produce),
   // DEFLATE's, zlib's and gzip's (Node's zlib and the gzip command decompress
@@ -98,6 +113,13 @@ async fn main {
   for t in targets {
     run("moon", ["check", "--deny-warn", "--target", t])
     run("timeout", ["600", "moon", "test", "--target", t], env={ "MOON_CC": cc })
+  }
+  // The proofs, with Z3, then (on request) CVC5.
+  if !skip_prove {
+    run("moon", ["run", "scripts/prove.mbtx"])
+    if second_solver {
+      run("moon", ["run", "scripts/prove.mbtx", "--", "--solver", "cvc5"])
+    }
   }
   run("moon", ["fmt", "--check"])
   run("moon", ["info"])

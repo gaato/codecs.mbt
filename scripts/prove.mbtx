@@ -1,0 +1,354 @@
+// Runs `moon prove` on every proved package of scripts/modules.json, with one
+// solver, and on the negative controls.
+//
+// The "proved" object of scripts/modules.json lists, per module, the package
+// directories `moon prove` checks, each with its prelude ("unbounded", the
+// toolchain's default, or "machine-int", which proves every `+` and `*` free
+// of overflow) and the solvers that prove it. "proof_controls" lists packages
+// of false claims, one per prelude, that every solver must fail to prove: a
+// solver that proves one is broken, or the prelude is not in effect.
+//
+// The solver is the only prover Why3 sees: the script writes a Why3
+// configuration for it from scripts/proof/<solver>.conf.in, with the
+// toolchain's Why3 directories and the solver found on PATH, instead of the
+// one `moon prove` generates from whatever provers it finds. Z3 must be 4.16.0
+// and CVC5 1.4.2: other builds disagree (an openSUSE Z3 proved a false goal
+// with the machine-integer prelude; Debian's 4.13.3 fails a true one), and
+// CVC5 1.4.2 fixes a rewrite that answered unsat wrongly (cvc5 #13039). A
+// mise shim on PATH is resolved to the executable it runs (`mise which`), so
+// that Why3 does not start mise for every goal.
+//
+// A package passes when `moon prove` exits 0 and its report,
+// _build/verif/<module>/<package>/<name>.proof.json, says "success"; a
+// control passes when `moon prove` exits non-zero and the report says
+// "proof_failure". One `moon prove` runs at a time, each with a time limit,
+// and Why3 runs one prover at a time.
+//
+// Usage, from the repository root:
+//   moon run scripts/prove.mbtx -- [--solver z3|cvc5]
+// The default is Z3, the gate's solver. With CVC5 (the second-solver check),
+// only the packages whose "solvers" include "cvc5" are proved, and goals of
+// the functions their "z3_only" lists may fail; the controls are always run.
+//
+// Exit status: 0 = every package proved and every control refused, 1 = not,
+// 2 = setup failure (no solver, wrong version, bad configuration).
+
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/async@0.22.5/process",
+  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/async@0.22.5/stdio",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/x@0.5.6/sys",
+}
+
+///|
+/// Prints `message` on stderr and exits with `code`.
+async fn[T] die(code : Int, message : String) -> T {
+  @stdio.stderr.write("\{message}\n")
+  @sys.exit(code)
+  panic()
+}
+
+///|
+/// The longest one `moon prove` of a package may take, in seconds.
+let package_limit : String = "3600"
+
+///|
+/// A solver: its executable, the version it must report, and the limit, in
+/// seconds, of its last attempt at a goal, by prelude.
+struct Solver {
+  name : String
+  executable : String
+  version : String
+  limit : (String) -> String
+}
+
+///|
+let z3 : Solver = {
+  name: "z3",
+  executable: "z3",
+  version: "4.16.0",
+  limit: _ => "10",
+}
+
+///|
+/// CVC5 needs longer than Z3 on the machine-integer goals.
+let cvc5 : Solver = {
+  name: "cvc5",
+  executable: "cvc5",
+  version: "1.4.2",
+  limit: prelude => if prelude == "machine-int" { "120" } else { "30" },
+}
+
+///|
+/// The `name = "..."` and `source = "..."` of `dir`/moon.mod; the source is
+/// "" when the packages sit at the module's root.
+async fn module_info(dir : String) -> (String, String) {
+  let mut name = ""
+  let mut source = ""
+  for line in @fs.read_file("\{dir}/moon.mod").text().split("\n") {
+    if line.strip_prefix("name = \"") is Some(rest) &&
+      rest.strip_suffix("\"") is Some(n) {
+      name = n.to_owned()
+    }
+    if line.strip_prefix("source = \"") is Some(rest) &&
+      rest.strip_suffix("\"") is Some(s) {
+      source = s.to_owned()
+    }
+  }
+  if name == "" {
+    die(2, "\{dir}/moon.mod has no name")
+  }
+  (name, source)
+}
+
+///|
+/// The report `moon prove` writes for the package at `dir` (repository
+/// relative), whose module is `module_dir`.
+async fn report_path(module_dir : String, dir : String) -> String {
+  let (name, source) = module_info(module_dir)
+  let mut pkg = dir.view(start_offset=module_dir.length() + 1).to_owned()
+  if source != "" {
+    pkg = pkg.strip_prefix("\{source}/").map(s => s.to_owned()).unwrap_or(pkg)
+  }
+  let last = match pkg.rev_find("/") {
+    Some(at) => pkg.view(start_offset=at + 1).to_owned()
+    None => pkg
+  }
+  "_build/verif/\{name}/\{pkg}/\{last}.proof.json"
+}
+
+///|
+/// The first file named `name` in a directory of PATH.
+async fn on_path(name : String) -> String? {
+  let path = @env.get_env_var("PATH").unwrap_or("")
+  for dir in path.split(":") {
+    let candidate = "\{dir}/\{name}"
+    if dir != "" && @fs.exists(candidate) {
+      return Some(candidate)
+    }
+  }
+  None
+}
+
+///|
+/// The toolchain's directory: MOON_HOME, else ~/.moon.
+fn moon_home() -> String {
+  match @env.get_env_var("MOON_HOME") {
+    Some(h) if h != "" => h
+    _ => "\{@env.get_env_var("HOME").unwrap_or("")}/.moon"
+  }
+}
+
+///|
+/// Writes the Why3 configuration for `solver` at `limit` and returns its path.
+async fn write_config(
+  solver : Solver,
+  prover : String,
+  limit : String,
+) -> String {
+  let lib = "\{moon_home()}/lib"
+  // `lib/..` and not `share`: with moonup, MOON_HOME/lib links to the
+  // toolchain, whose share/why3 MOON_HOME/share lacks.
+  let datadir = "\{lib}/../share/why3"
+  guard @fs.exists("\{datadir}/drivers") else {
+    die(2, "prove.mbtx: no Why3 data at \{datadir} (set MOON_HOME)")
+  }
+  let template = @fs.read_file("scripts/proof/\{solver.name}.conf.in").text()
+  let text = template
+    .replace_all(old="@WHY3_DATADIR@", new=datadir)
+    .replace_all(old="@WHY3_LIBDIR@", new="\{lib}/why3")
+    .replace_all(old="@PROVER@", new=prover)
+    .replace_all(old="@VERSION@", new=solver.version)
+    .replace_all(old="@LIMIT@", new=limit)
+  @fs.mkdir("_build/proof", recursive=true, allow_exist=true)
+  let path = "_build/proof/\{solver.name}-\{limit}.conf"
+  @fs.write_file(path, text)
+  path
+}
+
+///|
+/// The "result" of a report, or "missing".
+async fn result_of(path : String) -> (String, String) {
+  guard @fs.exists(path) else { return ("missing", "") }
+  let report = @json.parse(@fs.read_file(path).text()) catch {
+    _ => return ("unreadable", "")
+  }
+  let result = match report {
+    { "result": String(r), .. } => r
+    _ => "unknown"
+  }
+  let summary = match report {
+    { "summary": Object(s), .. } => {
+      let parts = []
+      for kind, count in s {
+        if count is Number(n, ..) && n > 0 {
+          parts.push("\{n.to_int()} \{kind}")
+        }
+      }
+      parts.join(", ")
+    }
+    _ => ""
+  }
+  (result, summary)
+}
+
+///|
+/// The seconds since `start` (from `@env.now`, in milliseconds), to a tenth.
+fn seconds_since(start : UInt64) -> String {
+  let ms = @env.now() - start
+  "\{ms / 1000}.\{ms % 1000 / 100}"
+}
+
+///|
+/// The functions whose goals a report lists as failed (a goal is named
+/// `<function>'vc`).
+async fn failed_functions(path : String) -> Array[String] {
+  let report = @json.parse(@fs.read_file(path).text()) catch { _ => return [] }
+  guard report is { "failures": Array(failures), .. } else { return [] }
+  let out = []
+  for f in failures {
+    if f is { "goal": String(goal), .. } {
+      let name = match goal.find("'") {
+        Some(at) => goal.view(end_offset=at).to_owned()
+        None => goal
+      }
+      if !out.contains(name) {
+        out.push(name)
+      }
+    }
+  }
+  out
+}
+
+///|
+async fn main {
+  let solver = match @env.args()[1:] {
+    [] | ["--solver", "z3"] => z3
+    ["--solver", "cvc5"] => cvc5
+    _ => die(2, "usage: moon run scripts/prove.mbtx -- [--solver z3|cvc5]")
+  }
+  let config_path = "scripts/modules.json"
+  guard @fs.exists(config_path) else {
+    die(2, "no \{config_path}: run from the repository root")
+  }
+  let config = @json.parse(@fs.read_file(config_path).text())
+  guard config
+    is { "proved": Object(proved), "proof_controls": Object(controls), .. } else {
+    die(2, "\{config_path} needs \"proved\" and \"proof_controls\" objects")
+  }
+  guard on_path(solver.executable) is Some(found) else {
+    die(2, "prove.mbtx: no \{solver.executable} on PATH")
+  }
+  let prover = if found.contains("/mise/shims/") {
+    let (code, out) = @process.collect_output_merged("mise", [
+      "which", solver.executable,
+    ])
+    let path = out.text().trim(chars="\n ").to_owned()
+    if code == 0 && path != "" {
+      path
+    } else {
+      found
+    }
+  } else {
+    found
+  }
+  let (_, version) = @process.collect_output_merged(prover, ["--version"])
+  guard version.text().contains(solver.version) else {
+    die(
+      2,
+      "prove.mbtx: \{prover} is not \{solver.name} \{solver.version} (it says \{version.text().trim_end(chars="\n")})",
+    )
+  }
+  let machine_int = "\{moon_home()}/lib/prelude_proof_machine_int"
+  // Module directory, package directory, prelude, whether it is a control,
+  // and the functions whose goals this solver may leave unproved.
+  let jobs : Array[(String, String, String, Bool, Array[String])] = []
+  for module_dir, packages in proved {
+    guard packages is Object(packages) else {
+      die(2, "\{config_path}: proved.\{module_dir} must map packages")
+    }
+    for pkg, entry in packages {
+      guard entry
+        is { "prelude": String(prelude), "solvers": Array(solvers), .. } else {
+        die(2, "\{config_path}: proved.\{module_dir}.\{pkg} needs a prelude and solvers")
+      }
+      let excused = match entry {
+        { "z3_only": Array(names), .. } if solver.name != "z3" =>
+          names.filter_map(n => if n is String(n) { Some(n) } else { None })
+        _ => []
+      }
+      if solvers.iter().any(s => s is String(n) && n == solver.name) {
+        jobs.push((module_dir, "\{module_dir}/\{pkg}", prelude, false, excused))
+      }
+    }
+  }
+  for dir, prelude in controls {
+    guard prelude is String(prelude) else {
+      die(2, "\{config_path}: proof_controls.\{dir} must name a prelude")
+    }
+    let module_dir = dir.view(end_offset=dir.find("/").unwrap_or(dir.length())).to_owned()
+    jobs.push((module_dir, dir, prelude, true, []))
+  }
+  let mut bad = false
+  let started = @env.now()
+  for job in jobs {
+    let (module_dir, dir, prelude, control, excused) = job
+    let env : Map[String, String] = Map([])
+    if prelude == "machine-int" {
+      env["MOON_PROVE_PRELUDE_OVERRIDE"] = machine_int
+    } else if prelude != "unbounded" {
+      die(2, "\{config_path}: \{dir} has prelude \{prelude}, not unbounded or machine-int")
+    }
+    let conf = write_config(solver, prover, (solver.limit)(prelude))
+    let report = report_path(module_dir, dir)
+    if @fs.exists(report) {
+      @fs.remove(report)
+    }
+    let t0 = @env.now()
+    let code = @shell.Cmd(
+      "timeout",
+      [package_limit, "moon", "prove", "--why3-config", conf, "-j", "1", dir],
+      env~,
+      stdout=Discard,
+      stderr=Discard,
+    ).status()
+    let seconds = seconds_since(t0)
+    let (result, summary) = result_of(report)
+    let ok = if control {
+      code != 0 && result == "proof_failure"
+    } else if code == 0 && result == "success" {
+      true
+    } else {
+      // Failures only in the functions this solver is excused from.
+      result == "proof_failure" &&
+      !excused.is_empty() &&
+      failed_functions(report).iter().all(f => excused.contains(f))
+    }
+    let what = if control { "refused" } else { "proved" }
+    let verdict = (if ok { what } else { "FAIL" }).pad_end(7, ' ')
+    println(
+      "\{verdict}  \{dir.pad_end(44, ' ')} \{prelude.pad_end(11, ' ')} \{seconds} s  \{result}: \{summary}",
+    )
+    if ok && result != "success" && !control {
+      println("         unproved, as modules.json allows: \{excused.join(", ")}")
+    }
+    if !ok {
+      bad = true
+      if control {
+        println("         a control must fail to prove: exit \{code}, result \{result}")
+      } else {
+        println("         exit \{code}; failures in \{report}")
+      }
+    }
+  }
+  let total = seconds_since(started)
+  if bad {
+    println("prove (\{solver.name}): FAIL")
+    @sys.exit(1)
+  }
+  println("prove (\{solver.name}): OK - \{jobs.length()} packages in \{total} s")
+}

@@ -1,0 +1,14 @@
+// RFC 1952 section 2.3.1: a member starts with ID1 = 31 and ID2 = 139, CM = 8
+// (DEFLATE), then FLG, whose bits 5 to 7 are reserved and must be zero.
+
+predicate start_pre(id1 : Int, id2 : Int, cm : Int, flg : Int) {
+  @proof_bits.is_byte(id1) &&
+  @proof_bits.is_byte(id2) &&
+  @proof_bits.is_byte(cm) &&
+  @proof_bits.is_byte(flg)
+}
+
+// The checks in zlib's order: 0 when all pass.
+fn spec_start_refusal(id1 : Int, id2 : Int, cm : Int, flg : Int) -> Int {
+  if id1 != 31 || id2 != 139 { 1 } else { if cm != 8 { 2 } else { if flg >= 32 { 3 } else { 0 } } }
+}

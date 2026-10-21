@@ -1,4 +1,7 @@
 // Adler-32 (RFC 1950 section 9), the checksum of a zlib stream's data and of
-// its preset dictionary.
+// its preset dictionary. `moon prove` checks update_bytes with machine
+// integers, every `+` and `*` proved not to overflow (see PROOFS.md).
+
+proof_enabled = true
 
 supported_targets = "js + native + wasm + wasm-gc"

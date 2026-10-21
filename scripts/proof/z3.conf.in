@@ -1,0 +1,24 @@
+[main]
+magic = 14
+datadir = "@WHY3_DATADIR@"
+libdir = "@WHY3_LIBDIR@"
+memlimit = 4000
+running_provers_max = 1
+timelimit = 10.000000
+
+[partial_prover]
+name = "Z3"
+path = "@PROVER@"
+version = "@VERSION@"
+
+[strategy]
+code = "start:
+c Z3,@VERSION@ .2 1000
+c Z3,@VERSION@ 1 1000
+t compute_specified start
+t split_vc start
+c Z3,@VERSION@ 10 4000
+"
+desc = "Z3 only"
+name = "MoonBit_Auto"
+shortcut = "4"

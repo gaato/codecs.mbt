@@ -1,9 +1,12 @@
 // The decisions on the bytes of a zlib stream's header and trailer (RFC 1950
 // section 2.2), as pure functions: the decoder gathers the bytes and calls
-// them.
+// them. `moon prove` checks the header's against the RFC (see PROOFS.md).
 
 supported_targets = "js + native + wasm + wasm-gc"
 
 import {
+  "gaato/deflate/internal/proof_bits",
   "moonbitlang/core/debug",
 }
+
+proof_enabled = true

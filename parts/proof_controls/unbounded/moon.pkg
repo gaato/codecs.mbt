@@ -1,0 +1,12 @@
+// A negative control for `moon prove` with unbounded integers: claims that
+// are false, through the bridges of proof_bits. scripts/prove.mbtx requires
+// every solver to fail on it; one that proves it is broken (an openSUSE Z3
+// build proved false goals), or the bridges contradict each other.
+
+import {
+  "gaato/codec_parts/proof_bits",
+}
+
+proof_enabled = true
+
+supported_targets = "js + native + wasm + wasm-gc"

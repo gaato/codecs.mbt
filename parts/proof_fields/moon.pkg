@@ -1,0 +1,8 @@
+// Reading bit fields with arithmetic, for the proofs of header parsers. A
+// package of its own, apart from proof_bits: its lemma is proved here, where
+// nothing else is in the solvers' context, and not next to the table of
+// powers of two.
+
+proof_enabled = true
+
+supported_targets = "js + native + wasm + wasm-gc"

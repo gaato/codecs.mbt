@@ -41,11 +41,18 @@ pub fn next_block_type(
   current~ : Int32,
   previous~ : Int32,
   types~ : Int32,
-) -> Int32 {
-  let t = match code {
-    0 => previous
-    1 => current + 1
-    _ => code - 2
+) -> Int32 where {
+  proof_require: next_block_type_pre(code, current, previous, types),
+  proof_ensure: result => {
+    next_block_type_post(code, current, previous, types, result)
+  },
+} {
+  let t = if code == 0 {
+    previous
+  } else if code == 1 {
+    current + 1
+  } else {
+    code - 2
   }
   if t >= types {
     t - types

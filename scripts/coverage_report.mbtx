@@ -27,6 +27,8 @@
 //   module-relative paths, so the module's directory is stripped.
 // - `-f summary` omits fully covered files; use the Coveralls JSON.
 // - moon's bundled tcc cannot link on some hosts (openSUSE); use the system cc.
+// - The instrumentation can count the lines of a `proof_assert`, which the
+//   program does not run; they are left out.
 
 import {
   "moonbitlang/async@0.22.5",
@@ -225,6 +227,29 @@ fn percent(part : Int, whole : Int) -> String {
 }
 
 ///|
+/// The 0-based lines of `text` that `proof_assert` statements take: the line
+/// with the keyword and those after it indented deeper.
+fn proof_lines(text : String) -> Array[Int] {
+  let out = []
+  let lines = text.split("\n").map(l => l.to_owned()).to_array()
+  for i, line in lines {
+    let trimmed = line.trim_start(chars=" ")
+    guard trimmed.has_prefix("proof_assert ") else { continue }
+    let indent = line.length() - trimmed.length()
+    out.push(i)
+    for j = i + 1; j < lines.length(); j = j + 1 {
+      let next = lines[j]
+      let t = next.trim_start(chars=" ")
+      if t.length() == 0 || next.length() - t.length() <= indent {
+        break
+      }
+      out.push(j)
+    }
+  }
+  out
+}
+
+///|
 /// Checks `json_file` against the ledger of `dir`; the module's exit status.
 async fn check(
   dir : String,
@@ -254,6 +279,14 @@ async fn check(
     if !in_scope(file, scope) {
       continue
     }
+    // A `proof_assert` is a step of a proof that `moon prove` checks; it is
+    // erased from the program, yet the instrumentation may count its lines.
+    let proof = if @fs.exists(name) {
+      proof_lines(@fs.read_file(name).text())
+    } else {
+      []
+    }
+    let lines = lines.mapi((i, l) => if proof.contains(i) { Json::null() } else { l })
     let tot = lines.filter(l => l is Number(_, ..)).length()
     let cov = lines.filter(l => l is Number(n, ..) && n > 0).length()
     // Declaration-only files have no executable points.

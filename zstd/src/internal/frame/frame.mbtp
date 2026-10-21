@@ -1,0 +1,38 @@
+// RFC 8878 section 3.1.1.1.1: the fields of Frame_Header_Descriptor, bit 7
+// first: Frame_Content_Size_Flag (2 bits), Single_Segment_Flag, an unused
+// bit, the reserved bit, Content_Checksum_Flag, Dictionary_ID_Flag (2 bits).
+
+// DID_Field_Size from Dictionary_ID_Flag: 0, 1, 2 or 4 bytes.
+fn spec_did_size(descriptor : Int) -> Int {
+  if descriptor % 4 == 0 { 0 } else { if descriptor % 4 == 1 { 1 } else { if descriptor % 4 == 2 { 2 } else { 4 } } }
+}
+
+// FCS_Field_Size from Frame_Content_Size_Flag: 0 (1 with Single_Segment_Flag),
+// 2, 4 or 8 bytes.
+fn spec_fcs_size(descriptor : Int) -> Int {
+  if descriptor / 64 == 0 { descriptor / 32 % 2 } else { if descriptor / 64 == 1 { 2 } else { if descriptor / 64 == 2 { 4 } else { 8 } } }
+}
+
+// The header: the descriptor, a Window_Descriptor unless the frame is a
+// single segment, then the two fields. Refused for the reserved bit.
+predicate header_len_post(descriptor : Int, r : Option[Int]) {
+  match r {
+    None => descriptor / 8 % 2 == 1
+    Some(n) =>
+      descriptor / 8 % 2 == 0 &&
+      n == 2 - descriptor / 32 % 2 + spec_did_size(descriptor) + spec_fcs_size(descriptor) &&
+      2 <= n && n <= 14
+  }
+}
+
+// Section 3.1.1.1.2: windowBase = 1 << (10 + Exponent), windowAdd =
+// (windowBase / 8) * Mantissa. Exponent is 5 bits, so the window is at most
+// 2^41 + 7 * 2^38.
+predicate window_post(wd : Int, r : UInt64) {
+  r == pow2_u64(10 + wd / 8) + pow2_u64(10 + wd / 8) / 8UL * small_u64(wd % 8) &&
+  r <= 4123168604160UL
+}
+
+predicate is_byte(b : Int) {
+  0 <= b && b <= 255
+}

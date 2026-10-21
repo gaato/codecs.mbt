@@ -1,0 +1,22 @@
+[main]
+magic = 14
+datadir = "@WHY3_DATADIR@"
+libdir = "@WHY3_LIBDIR@"
+memlimit = 4000
+running_provers_max = 1
+timelimit = 120.000000
+
+[partial_prover]
+name = "CVC5"
+path = "@PROVER@"
+version = "@VERSION@"
+
+[strategy]
+code = "start:
+c CVC5,@VERSION@ 5 4000
+t split_vc start
+c CVC5,@VERSION@ @LIMIT@ 4000
+"
+desc = "CVC5 only"
+name = "MoonBit_Auto"
+shortcut = "4"

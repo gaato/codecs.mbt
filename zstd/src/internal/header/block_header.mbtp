@@ -1,0 +1,36 @@
+// RFC 8878 section 3.1.1.2: the block header is 24 bits, little-endian:
+// Last_Block (bit 0), Block_Type (bits 1-2, 3 reserved), Block_Size (bits
+// 3-23).
+predicate block_type_is(t : BlockType, code : Int) {
+  match t {
+    Raw => code == 0
+    Rle => code == 1
+    Compressed => code == 2
+  }
+}
+
+predicate block_header_post(value : Int, r : Option[BlockHeader]) {
+  match r {
+    None => value / 2 % 4 == 3
+    Some(h) =>
+      h.last == (value % 2 == 1) &&
+      block_type_is(h.block_type, value / 2 % 4) &&
+      h.size == value / 8 &&
+      0 <= h.size && h.size < 2097152
+  }
+}
+
+// Section 3.1.1.2.3: Block_Size is at most Block_Maximum_Size; a compressed
+// block is never empty (it holds at least its literals section header).
+predicate is_compressed(t : BlockType) {
+  match t {
+    Compressed => true
+    _ => false
+  }
+}
+
+predicate block_refusal_post(h : BlockHeader, block_max : Int, r : Int) {
+  (r == 1 && h.size > block_max) ||
+  (r == 2 && h.size <= block_max && is_compressed(h.block_type) && h.size == 0) ||
+  (r == 0 && h.size <= block_max && !(is_compressed(h.block_type) && h.size == 0))
+}

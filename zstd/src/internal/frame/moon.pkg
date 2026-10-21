@@ -1,0 +1,10 @@
+// The sizes a frame header descriptor gives: the header's fields and the
+// window (RFC 8878 section 3.1.1.1). A package of its own because `moon
+// prove` checks it with machine integers, every `+` and `*` proved not to
+// overflow (MOON_PROVE_PRELUDE_OVERRIDE, see PROOFS.md); the header parsers
+// in internal/header are checked with unbounded ones. Not hot, so it divides
+// where the others shift, and needs none of the bridges of internal/proof_bits.
+
+proof_enabled = true
+
+supported_targets = "js + native + wasm + wasm-gc"

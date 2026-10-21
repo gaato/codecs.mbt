@@ -8,6 +8,9 @@ share; each format's module carries copies of the files it uses.
 | `huffman` | Huffman code lengths and canonical codes for encoders, and `CodeMaker`, libdeflate's way of building length-limited codes; decoding tables (`Builder`) and their size bounds (`max_entries`) for decoders | brotli, deflate (`CodeMaker` deflate only) |
 | `bits` | `BitPacker`, an encoder's least-significant-bit-first bit writer and output buffer | brotli |
 | `lz77` | The hash and match length of LZ77 match finders; `Matcher`, a greedy one with bucketed hash chains; `HcMatchfinder` and `HtMatchfinder`, libdeflate's hash-chain and hash-table finders | brotli (`Matcher`), deflate (the other two) |
+| `proof_bits` | The trusted bridges of `moon prove`: shifts and masks behind contracts that state their arithmetic, with the tests that back them | zstd, brotli, deflate |
+| `proof_fields` | A lemma for proofs of header parsers: a bit field read with division and remainder is the field (apart from `proof_bits`, so that solvers prove it with nothing else in their context) | zstd |
+| `proof_controls` | Negative controls for `moon prove`: false claims that every solver must refuse (`scripts/prove.mbtx`) | none |
 
 ## Why copies
 
