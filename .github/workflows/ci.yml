@@ -61,7 +61,3 @@ jobs:
 
       - name: Cross-check the DEFLATE, zlib and gzip encoders with the reference decoders
         run: moon run deflate/scripts/crosscheck.mbtx
-
-      - name: Check the deflater's array bounds against moonbit-community/flate's source
-        # RESOURCE_BOUNDS.md of gaato/deflate counts these arrays.
-        run: moon run deflate/scripts/flate_bounds.mbtx

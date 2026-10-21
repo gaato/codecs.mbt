@@ -1,0 +1,14 @@
+// Compresses files with gaato/deflate and prints the sizes and the speed, for
+// deflate/scripts/ratio.mbtx. Not a benchmark of the suite: its inputs are
+// the caller's files.
+
+import {
+  "gaato/deflate",
+  "moonbitlang/core/env",
+  "moonbitlang/core/string",
+  "moonbitlang/x/fs",
+}
+
+pkgtype(kind: "executable")
+
+supported_targets = "js + native"

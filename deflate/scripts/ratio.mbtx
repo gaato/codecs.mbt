@@ -1,0 +1,196 @@
+// Measures the raw DEFLATE encoder on a directory of files: the size of each
+// file's stream and how fast it was made, at the levels asked for.
+//
+// Runs bench/src/ratio (a package of the unpublished bench module, which may
+// read files), built in release mode, over the regular files of DIR, sorted
+// by name; subdirectories are skipped. Each file is compressed whole into 64
+// KiB slices with `Finish`, as a consumer would, and timed over at least the
+// given milliseconds and two runs. The corpora are not in the repository:
+// pass a directory of them, such as the Silesia corpus
+// (https://sun.aei.polsl.pl/~sdeor/index.php?page=silesia).
+//
+// Usage, from the repository root:
+//   moon run deflate/scripts/ratio.mbtx -- DIR [--levels 1,6,9] [--time MS] [--target native|js]
+//   --levels  the levels, comma-separated (default 1,6,9)
+//   --time    the least time to measure each file at each level, in
+//             milliseconds (default 1000; 0 gives the sizes only)
+//   --target  the target to build for (default native)
+// Pin the run to one idle CPU (taskset -c N moon run ...) for steady times.
+// Exit status: 0 = measured, 2 = setup failure.
+
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/async@0.22.5/stdio",
+  "moonbitlang/core/env",
+  "moonbitlang/core/string",
+  "moonbitlang/x@0.5.6/sys",
+}
+
+///|
+let usage : String = "usage: moon run deflate/scripts/ratio.mbtx -- DIR [--levels 1,6,9] [--time MS] [--target native|js]"
+
+///|
+async fn setup_failure(message : String) -> Unit {
+  @stdio.stderr.write("\{message}\n")
+  @sys.exit(2)
+}
+
+///|
+/// `n` with thousands separators.
+fn grouped(n : Int64) -> String {
+  let digits = n.to_string()
+  let out = StringBuilder()
+  for i, c in digits {
+    if i > 0 && (digits.length() - i) % 3 == 0 {
+      out.write_char(',')
+    }
+    out.write_char(c)
+  }
+  out.to_string()
+}
+
+///|
+/// `x` with one decimal.
+fn one_decimal(x : Double) -> String {
+  let tenths = (x * 10.0).round().to_int64()
+  "\{tenths / 10}.\{tenths % 10}"
+}
+
+///|
+/// `n / d` with three decimals.
+fn ratio(n : Int64, d : Int64) -> String {
+  let thousandths = (n * 1000 + d / 2) / d
+  let frac = (thousandths % 1000).to_string()
+  "\{thousandths / 1000}.\{"0".repeat(3 - frac.length())}\{frac}"
+}
+
+///|
+async fn main {
+  let args = @env.args()[1:]
+  let mut dir = None
+  let mut levels = "1,6,9"
+  let mut time = "1000"
+  let mut target = "native"
+  let mut i = 0
+  while i < args.length() {
+    match args[i] {
+      "--levels" if i + 1 < args.length() => {
+        levels = args[i + 1]
+        i += 1
+      }
+      "--time" if i + 1 < args.length() => {
+        time = args[i + 1]
+        i += 1
+      }
+      "--target" if i + 1 < args.length() => {
+        target = args[i + 1]
+        i += 1
+      }
+      arg if !arg.has_prefix("--") && dir is None => dir = Some(arg)
+      arg => {
+        setup_failure("unknown argument \{arg}\n\{usage}")
+        return
+      }
+    }
+    i += 1
+  }
+  guard dir is Some(dir) else {
+    setup_failure(usage)
+    return
+  }
+  guard target is ("native" | "js") else {
+    setup_failure("--target must be native or js: the tool reads files")
+    return
+  }
+  if !@fs.exists("deflate/moon.mod") {
+    setup_failure("run from the repository root")
+    return
+  }
+  let files = []
+  for name in @fs.readdir(dir, include_hidden=false) {
+    let path = "\{dir}/\{name}"
+    if @fs.kind(path) is Regular {
+      files.push(path)
+    }
+  }
+  // By name, character by character (`String`'s order puts shorter first).
+  files.sort_by((a, b) => {
+    for i in 0..<a.length().min(b.length()) {
+      if a[i] != b[i] {
+        return a[i].compare(b[i])
+      }
+    }
+    a.length().compare(b.length())
+  })
+  if files.is_empty() {
+    setup_failure("no files in \{dir}")
+    return
+  }
+  let env = if @env.get_env_var("MOON_CC") is None {
+    { "MOON_CC": "cc" }
+  } else {
+    {}
+  }
+  let run = @shell.Cmd(
+    "moon",
+    [
+      "run", "--release", "--target", target, "bench/src/ratio", "--", levels, time,
+      ..files,
+    ],
+    env~,
+  ).output()
+  if run.exit_code() != 0 {
+    setup_failure(run.stderr())
+    return
+  }
+  // level, path, input size, output size, MB/s, hash
+  let mut current = ""
+  let mut total_in = 0L
+  let mut total_out = 0L
+  let mut total_seconds = 0.0
+  let flush_total = () => {
+    if current != "" {
+      let speed = if total_seconds > 0.0 {
+        " \{one_decimal(total_in.to_double() / total_seconds / 1.0e6)} MB/s"
+      } else {
+        ""
+      }
+      println(
+        "total  \{grouped(total_in)} -> \{grouped(total_out)} (\{ratio(total_out, total_in)})\{speed}\n",
+      )
+    }
+  }
+  for line in run.stdout().split("\n") {
+    if line.is_empty() {
+      continue
+    }
+    guard line.split("\t").collect() is [level, path, size, out, speed, _] else {
+      setup_failure("unexpected line from the ratio tool: \{line}")
+      return
+    }
+    if level != current {
+      flush_total()
+      current = level.to_owned()
+      total_in = 0
+      total_out = 0
+      total_seconds = 0.0
+      println("level \{level}")
+    }
+    let size = @string.parse_int64(size)
+    let out = @string.parse_int64(out)
+    let speed = @string.parse_double(speed)
+    total_in += size
+    total_out += out
+    if speed > 0.0 {
+      total_seconds += size.to_double() / (speed * 1.0e6)
+    }
+    let name = path.split("/").collect()
+    let shown = if speed > 0.0 { " \{one_decimal(speed)} MB/s" } else { "" }
+    println(
+      "  \{name[name.length() - 1]}  \{grouped(size)} -> \{grouped(out)} (\{ratio(out, size.max(1))})\{shown}",
+    )
+  }
+  flush_total()
+}

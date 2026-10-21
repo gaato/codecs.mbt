@@ -2,7 +2,7 @@ import {
   "gaato/codec",
   "gaato/codec_bytes",
   "gaato/deflate/internal/inflate",
-  "moonbit-community/flate",
+  "gaato/deflate/internal/deflate" @deflater,
 }
 
 import {

@@ -26,21 +26,23 @@ streams built bit by bit, and seeded pseudo-random splits and corruptions.
 
 - Sources: every non-test `.mbt` of the three library packages, `src/`,
   `src/zlib/` and `src/gzip/`, and of their internal packages: the raw
-  DEFLATE decoder `src/internal/inflate/`, the copy of the shared Huffman
-  part `src/internal/huffman/` (generated from `parts/huffman`, with its
-  tests), `src/zlib/internal/adler32/`, `src/zlib/internal/header/`,
+  DEFLATE decoder `src/internal/inflate/` and encoder `src/internal/deflate/`,
+  the copies of the shared parts `src/internal/huffman/` and
+  `src/internal/lz77/` (generated from `parts/`, with their tests),
+  `src/zlib/internal/adler32/`, `src/zlib/internal/header/`,
   `src/gzip/internal/crc32/` and `src/gzip/internal/header/`. The test-only
   package `src/internal/fixtures/` and the cross-check tool
-  `src/internal/crosscheck/` are not measured, nor is moonbit-community/flate,
-  which the raw encoder holds.
+  `src/internal/crosscheck/` are not measured.
 - Counts are Coveralls lines: lines with at least one instrumented point,
   covered when any point on them ran.
 
 The pitfalls the script pins (stale counters, `-f summary` skewing totals,
 tcc on openSUSE) are described in zstd's ledger, `zstd/TEST_COVERAGE.md`.
 
-Snapshot at the last full measurement (2026-10-21): **99.3 %** (878/884
-lines), the six uncovered lines ledgered below.
+Snapshot at the last full measurement (2026-10-21): **98.9 %** (1436/1452
+lines), the sixteen uncovered lines ledgered below: seven of them are the
+JS and Wasm GC variants of the match finders' reads, which native does not
+compile.
 
 ## Policy
 
@@ -69,11 +71,18 @@ Must be covered by tests:
   corruptions (`src/reference_wbtest.mbt`); its fast path, under the same
   streams given whole, with codes that encoders rarely write (distance codes
   of 15 bits with 13 extra bits, matches that run from a dictionary into the
-  output) built bit by bit in `src/internal/inflate/inflater_wbtest.mbt`.
-
-The raw DEFLATE encoding is moonbit-community/flate's deflater; its streams
-are held to zlib's decoder, and to this module's, by
-`scripts/crosscheck.mbtx`.
+  output) built bit by bit in `src/internal/inflate/inflater_wbtest.mbt`;
+- the raw DEFLATE encoder: at every level, that every split of the input and
+  of the output, with a dictionary and with flushes, gives the same stream;
+  the SHA-256 of its streams at each level, which were libdeflate 1.24's own
+  bytes for the same input when they were pinned (`src/encode_wbtest.mbt`);
+  that a block ends when its sequences fill the store
+  (`src/internal/deflate/deflater_wbtest.mbt`); the match finders against a
+  search of every earlier position, and that they read nothing past the end
+  they are given (`src/internal/lz77/`); the length-limited codes against
+  optimal ones (`src/internal/huffman/code_maker_test.mbt`). Its streams
+  are held to zlib's decoder, through Node, and to the `gzip` command, whole
+  and cut after every flush, by `scripts/crosscheck.mbtx`.
 
 Accepted as uncovered (needs a row):
 
@@ -92,3 +101,6 @@ Budgets are exact uncovered counts at the last measurement.
 | src/internal/inflate/blocks.mbt | 1 | In `Inflater::run`, the `abort` for the fast path running out of input: unreachable by construction, since it runs only while the input holds the 8 bytes a unit can need. |
 | src/internal/inflate/inflater.mbt | 1 | In `Inflater::step_with`, the `abort` for an unfinished unit that keeps more bytes than `stash` holds: unreachable by construction, since a unit needs at most 6 bytes beyond the bits held and keeps only those it fell short with. |
 | src/gzip/encoder.mbt | 1 | In `Encoder::Encoder`, the `abort` for a header that cannot be written (`Header::is_writable`): the `panic` tests of `src/gzip/encode_wbtest.mbt` run it, for `Encoder` and `compress`, but the abort ends the test before its coverage counts are written. |
+| src/internal/huffman/code_maker.mbt | 1 | The `abort` of `CodeMaker::CodeMaker` for an alphabet outside 2 to 1,024 symbols: the `panic` test of `src/internal/huffman/code_maker_test.mbt` runs it, but the abort ends the test before its coverage counts are written. |
+| src/internal/deflate/deflater.mbt | 2 | In `Deflater::step`, the `abort` for an input buffer that is full with no block complete: unreachable by construction, since the buffer holds the window, a whole block and the look-ahead, and a block ends at 65,535 bytes. |
+| src/internal/lz77/matchfinder.mbt | 7 | `load_u32`, `may_beat` and `extend_match` for JS and Wasm GC (`#cfg(not(any(target="native", target="wasm")))`), which read a byte at a time: the ledger measures native, which compiles the four-bytes-at-once ones instead. The gates run the same tests on JS and Wasm GC: the match finders' tests and the encoder's, including the SHA-256 of its output. |

@@ -1,6 +1,6 @@
 // The streaming decoder.
 //
-// Suspension model (as in moonbit-community/flate's `Inflater`): the stream
+// Suspension model (as in gaato/deflate's raw DEFLATE decoder): the stream
 // is decoded in small atomic units (a header field, one code length, one
 // command, one literal). A unit reads all its bits before it changes any
 // state; when the input runs out mid-unit it raises `NeedInput`, the bit

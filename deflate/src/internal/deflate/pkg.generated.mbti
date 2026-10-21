@@ -1,0 +1,30 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/deflate/internal/deflate"
+
+import {
+  "gaato/codec_bytes",
+}
+
+// Values
+
+// Errors
+
+// Types and methods
+pub struct Deflater {
+  // private fields
+}
+pub fn Deflater::capacities(Self) -> (Int, Int)
+pub fn Deflater::dictionary(Self) -> BytesView
+pub fn Deflater::is_finished(Self) -> Bool
+pub fn Deflater::last_consumed(Self) -> Int
+pub fn Deflater::last_produced(Self) -> Int
+pub fn Deflater::memory_usage(Self) -> Int
+pub fn Deflater::new(level~ : Int, dictionary? : BytesView) -> Self
+pub fn Deflater::reset(Self) -> Unit
+pub fn Deflater::step(Self, BytesView, MutArrayView[Byte], action~ : @codec_bytes.EncodeAction) -> @codec_bytes.Status
+pub fn Deflater::step_into(Self, BytesView, FixedArray[Byte], action~ : @codec_bytes.EncodeAction) -> @codec_bytes.Status
+pub fn Deflater::waiting(Self) -> (Int, Int)
+
+// Type aliases
+
+// Traits

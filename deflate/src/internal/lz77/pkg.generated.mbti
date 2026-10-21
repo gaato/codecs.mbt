@@ -1,0 +1,44 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/deflate/internal/lz77"
+
+// Values
+pub const REQUIRED_BYTES : Int = 5
+
+pub const WINDOW : Int = 32768
+
+pub fn hash4(FixedArray[Byte], Int, Int) -> Int
+
+pub fn match_length(FixedArray[Byte], Int, Int, Int) -> Int
+
+// Errors
+
+// Types and methods
+pub struct HcMatchfinder {
+  // private fields
+}
+pub fn HcMatchfinder::HcMatchfinder() -> Self
+pub fn HcMatchfinder::catch_up(Self, FixedArray[Byte], Int, Int) -> Unit
+pub fn HcMatchfinder::longest_match(Self, FixedArray[Byte], Int, Int, Int, Int, Int) -> Int
+pub fn HcMatchfinder::memory_usage(Self) -> Int
+pub fn HcMatchfinder::move_down(Self, Int) -> Unit
+pub fn HcMatchfinder::next_pos(Self) -> Int
+pub fn HcMatchfinder::offset(Self) -> Int
+pub fn HcMatchfinder::reset(Self, Int) -> Unit
+pub fn HcMatchfinder::skip_bytes(Self, FixedArray[Byte], Int, Int, Int) -> Unit
+
+pub struct HtMatchfinder {
+  // private fields
+}
+pub fn HtMatchfinder::HtMatchfinder() -> Self
+pub fn HtMatchfinder::catch_up(Self, FixedArray[Byte], Int, Int) -> Unit
+pub fn HtMatchfinder::longest_match(Self, FixedArray[Byte], Int, Int, Int) -> Int
+pub fn HtMatchfinder::memory_usage(Self) -> Int
+pub fn HtMatchfinder::move_down(Self, Int) -> Unit
+pub fn HtMatchfinder::next_pos(Self) -> Int
+pub fn HtMatchfinder::offset(Self) -> Int
+pub fn HtMatchfinder::reset(Self, Int) -> Unit
+pub fn HtMatchfinder::skip_bytes(Self, FixedArray[Byte], Int, Int, Int) -> Unit
+
+// Type aliases
+
+// Traits

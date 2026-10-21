@@ -86,12 +86,24 @@ test "one inflater, given the dictionary when the header names it" {
 }
 
 ///|
+/// What the raw DEFLATE encoder reports at `level` (RESOURCE_BOUNDS.md).
+fn raw_encoder_bound(level : Int32) -> Int32 {
+  match level {
+    0 => 131077
+    1 => 361948
+    2 | 3 | 4 => 542172
+    _ => 542516
+  }
+}
+
+///|
 test "the encoder reports the raw encoder's bound after every step" {
   let input = @fixtures.sample(10, 150000)
   let dictionary = @fixtures.sample(11, 40000)
-  for level in [0, 1, 6, 9] {
+  for level in 0..<=9 {
+    let bound = raw_encoder_bound(level)
     for encoder in [Encoder(level~), Encoder(level~, dictionary~)] {
-      assert_eq(encoder.memory_usage(), 689394)
+      assert_eq(encoder.memory_usage(), bound)
       let rng = @fixtures.Rng::new(level.reinterpret_as_uint())
       let _ = @fixtures.encode(
         encoder,
@@ -100,7 +112,7 @@ test "the encoder reports the raw encoder's bound after every step" {
         next_out=() => rng.below(3000),
         flush_every=50000,
         check=(e, _) => {
-          assert_eq(e.memory_usage(), 689394)
+          assert_eq(e.memory_usage(), bound)
           assert_true(e.framing.length() <= HEADER_MAX)
         },
       )

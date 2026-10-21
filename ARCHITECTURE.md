@@ -55,7 +55,7 @@ reports it through `memory_usage`.
 **Building blocks.** What several formats share is small and stable: reading
 and writing bits in the orders formats use (LSB first, MSB first, backwards),
 checksums, building canonical prefix-code tables, table construction for
-entropy coders. They are written as pure functions where possible, which is
+entropy coders, the match finders of LZ77 encoders. They are written as pure functions where possible, which is
 also where the proofs live. The decoding loops of each format stay inside the
 format: they are tuned to it, and sharing them couples formats that change for
 different reasons. A block moves out of a format when a second format needs

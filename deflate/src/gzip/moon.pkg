@@ -1,7 +1,7 @@
 import {
   "gaato/codec",
   "gaato/codec_bytes",
-  "gaato/deflate",
+  "gaato/deflate/internal/deflate" @deflater,
   "gaato/deflate/internal/inflate",
   "gaato/deflate/gzip/internal/crc32",
   "gaato/deflate/gzip/internal/header",
@@ -9,6 +9,7 @@ import {
 }
 
 import {
+  "gaato/deflate",
   "gaato/deflate/internal/fixtures",
 } for "wbtest"
 

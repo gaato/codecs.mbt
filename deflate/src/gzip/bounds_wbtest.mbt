@@ -61,6 +61,17 @@ test "output slices, header fields and reported memory stay within their bounds"
 }
 
 ///|
+/// What the raw DEFLATE encoder reports at `level` (RESOURCE_BOUNDS.md).
+fn raw_encoder_bound(level : Int32) -> Int32 {
+  match level {
+    0 => 131077
+    1 => 361948
+    2 | 3 | 4 => 542172
+    _ => 542516
+  }
+}
+
+///|
 test "the encoder reports the raw encoder's bound and its header after every step" {
   let input = @fixtures.sample(10, 150000)
   let named : Header = {
@@ -72,7 +83,8 @@ test "the encoder reports the raw encoder's bound and its header after every ste
     name: Some(b"name"),
     comment: Some(b"comment"),
   }
-  for level in [0, 1, 6, 9] {
+  for level in 0..<=9 {
+    let bound = raw_encoder_bound(level)
     for header in [None, Some(named)] {
       let encoder = Encoder(level~, header?)
       // The fixed part, and the extra field with its length, the name and
@@ -82,7 +94,7 @@ test "the encoder reports the raw encoder's bound and its header after every ste
         None => 10
       }
       assert_eq(encoder.header.length(), held)
-      assert_eq(encoder.memory_usage(), 689394 + held)
+      assert_eq(encoder.memory_usage(), bound + held)
       let rng = @fixtures.Rng::new(level.reinterpret_as_uint())
       let _ = @fixtures.encode(
         encoder,
@@ -91,7 +103,7 @@ test "the encoder reports the raw encoder's bound and its header after every ste
         next_out=() => rng.below(3000),
         flush_every=50000,
         check=(e, _) => {
-          assert_eq(e.memory_usage(), 689394 + held)
+          assert_eq(e.memory_usage(), bound + held)
           // The header, or the 8-byte trailer.
           assert_true(e.framing.length() == held || e.framing.length() == 8)
         },

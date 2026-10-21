@@ -20,6 +20,13 @@ pub fn Builder::Builder(root_bits~ : Int, max_alphabet~ : Int) -> Self
 pub fn Builder::build(Self, FixedArray[UInt16], Int, FixedArray[Int], Int, invalid~ : UInt16) -> Int
 pub fn Builder::memory_usage(Self) -> Int
 
+pub struct CodeMaker {
+  // private fields
+}
+pub fn CodeMaker::CodeMaker(max_alphabet~ : Int) -> Self
+pub fn CodeMaker::make(Self, FixedArray[Int], Int, Int, FixedArray[Int], FixedArray[Int]) -> Unit
+pub fn CodeMaker::memory_usage(Self) -> Int
+
 // Type aliases
 
 // Traits

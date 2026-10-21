@@ -26,7 +26,9 @@
       "src/gzip/internal/crc32",
       "src/gzip/internal/header",
       "src/internal/huffman",
-      "src/internal/inflate"
+      "src/internal/inflate",
+      "src/internal/lz77",
+      "src/internal/deflate"
     ]
   },
   "copies": {
@@ -39,7 +41,7 @@
         "decode_table.mbt",
         "decode_table_spec_test.mbt"
       ],
-      "lz77": ["hash.mbt", "matcher.mbt", "matcher_test.mbt"]
+      "lz77": ["hash.mbt", "hash_test.mbt", "matcher.mbt", "matcher_test.mbt"]
     },
     "deflate": {
       "huffman": [
@@ -49,7 +51,18 @@
         "decode_table.mbt",
         "decode_table_spec_test.mbt",
         "enough.mbt",
-        "enough_test.mbt"
+        "enough_test.mbt",
+        "code_maker.mbt",
+        "code_maker_test.mbt"
+      ],
+      "lz77": [
+        "hash.mbt",
+        "hash_test.mbt",
+        "matchfinder.mbt",
+        "hc_matchfinder.mbt",
+        "hc_matchfinder_test.mbt",
+        "ht_matchfinder.mbt",
+        "ht_matchfinder_test.mbt"
       ]
     }
   }

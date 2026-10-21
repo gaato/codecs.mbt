@@ -18,4 +18,5 @@ import {
   "gaato/zstd@0.3.1",
   "gaato/brotli@0.4.1",
   "gaato/deflate@0.1.0",
+  "moonbitlang/x@0.5.6",
 }

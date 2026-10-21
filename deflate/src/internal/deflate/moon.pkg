@@ -1,0 +1,14 @@
+// The raw DEFLATE encoder (RFC 1951) that the three packages share: the root
+// package's `Encoder` and the zlib and gzip encoders each hold one.
+
+import {
+  "gaato/codec_bytes",
+  "gaato/deflate/internal/huffman",
+  "gaato/deflate/internal/lz77",
+}
+
+import {
+  "gaato/deflate/internal/inflate",
+} for "wbtest"
+
+supported_targets = "js + native + wasm + wasm-gc"

@@ -5,9 +5,9 @@ share; each format's module carries copies of the files it uses.
 
 | Package | Holds | Copied into |
 | --- | --- | --- |
-| `huffman` | Huffman code lengths and canonical codes for encoders; decoding tables (`Builder`) and their size bounds (`max_entries`) for decoders | brotli, deflate |
+| `huffman` | Huffman code lengths and canonical codes for encoders, and `CodeMaker`, libdeflate's way of building length-limited codes; decoding tables (`Builder`) and their size bounds (`max_entries`) for decoders | brotli, deflate (`CodeMaker` deflate only) |
 | `bits` | `BitPacker`, an encoder's least-significant-bit-first bit writer and output buffer | brotli |
-| `lz77` | The hash and match length of LZ77 match finders; `Matcher`, a greedy one with bucketed hash chains | brotli |
+| `lz77` | The hash and match length of LZ77 match finders; `Matcher`, a greedy one with bucketed hash chains; `HcMatchfinder` and `HtMatchfinder`, libdeflate's hash-chain and hash-table finders | brotli (`Matcher`), deflate (the other two) |
 
 ## Why copies
 

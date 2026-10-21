@@ -1,7 +1,7 @@
 ///|
 /// The encoders' inputs: empty, one byte, a short repeat, a mix of words,
-/// random bytes and repeats, past several 16 KiB blocks and the 64 KiB input
-/// ring, and zeros.
+/// random bytes and repeats, past several 64 KiB blocks and the input
+/// buffer, and zeros.
 fn encoder_inputs() -> Array[Bytes] {
   [
     b"",
@@ -34,6 +34,32 @@ test "compress round-trips through the decoder at every level" {
 }
 
 ///|
+test "the shortest streams: empty, short and after a flush" {
+  // An empty stream is a fixed block with only its end, as zlib writes it,
+  // and stored at level 0.
+  assert_eq(compress(b""), b"\x03\x00")
+  assert_eq(compress(b"", level=1), b"\x03\x00")
+  assert_eq(compress(b"", level=0), b"\x01\x00\x00\xff\xff")
+  // At most 55 - 4 × level bytes with no dictionary are stored as they
+  // are, as libdeflate stores them; one more is compressed.
+  let short = b"hello, hello, hello, hello!!!!!"
+  assert_eq(short.length(), 31)
+  assert_eq(compress(short), b"\x01\x1f\x00\xe0\xff" + short)
+  let longer = short + b"!"
+  assert_true(compress(longer).length() < longer.length())
+  assert_true(compress(short, dictionary=b"hello, ").length() < short.length())
+  // A stream that ends right after a flush ends with an empty fixed block.
+  let encoder = Encoder()
+  let out = FixedArray::make(64, b'\x00')
+  assert_eq(encoder.step_into(short, out, action=Flush), NeedMoreInput)
+  let flushed = Bytes::from_array(out[:encoder.last_produced()])
+  assert_eq(flushed[flushed.length() - 4:], b"\x00\x00\xff\xff")
+  assert_eq(encoder.step_into(b"", out, action=Finish), Done)
+  assert_eq(Bytes::from_array(out[:encoder.last_produced()]), b"\x03\x00")
+  assert_eq(decompress(flushed + b"\x03\x00"), short)
+}
+
+///|
 test "levels outside 0 to 9 are clamped" {
   let input = @fixtures.sample(4, 30000)
   assert_eq(compress(input, level=-5), compress(input, level=0))
@@ -48,25 +74,102 @@ test "levels outside 0 to 9 are clamped" {
 }
 
 ///|
-test "any input split and output size give the same stream" {
-  let input = @fixtures.sample(5, 120000)
-  for level in [0, 1, 6, 9] {
+/// How the split tests cut the input and the output: chunks of `chunk`
+/// bytes (or of 1 to `chunk` bytes, drawn, with `random`), into slices of
+/// `room` bytes. Chunks of a byte, of 7, of a few thousand, and of 64 KiB and
+/// a little more, around the encoder's 65,535-byte blocks; slices of a byte,
+/// of 977 and of 64 KiB.
+let split_shapes : Array[(Int32, Int32, Bool)] = [
+  (1, 977, false),
+  (7, 1, false),
+  (1000, 65536, false),
+  (4097, 977, false),
+  (65536, 1, false),
+  (65539, 65536, false),
+  (5000, 977, true),
+  (70000, 3, true),
+]
+
+///|
+/// `input` through `encoder` cut as `shape` says, with flushes at `flush_at`.
+fn encode_split(
+  encoder : Encoder,
+  input : Bytes,
+  shape : (Int32, Int32, Bool),
+  flush_at~ : Array[Int32] = [],
+) -> Bytes raise {
+  let (chunk, room, random) = shape
+  let rng = @fixtures.Rng::new(chunk.reinterpret_as_uint())
+  encoder.reset()
+  @fixtures.encode(
+    encoder,
+    input,
+    next_in=() => if random { 1 + rng.below(chunk) } else { chunk },
+    next_out=() => room,
+    flush_at~,
+  )
+}
+
+///|
+test "any input split and output size give the same stream, at every level" {
+  // Words, random bytes and repeats over two blocks, and a run of zeros,
+  // where matches run up to the end of a block and over it.
+  let input = @fixtures.sample(5, 110000) + Bytes::make(10000, b'\x00')
+  for level in 0..<=9 {
     let whole = compress(input, level~)
-    for shape in [(1, 1), (7, 3), (16642, 1), (999, 65536), (65536, 5)] {
-      let (chunk, room) = shape
-      let rng = @fixtures.Rng::new(chunk.reinterpret_as_uint())
-      let got = @fixtures.encode(
-        Encoder(level~),
-        input,
-        next_in=() => 1 + rng.below(chunk),
-        next_out=() => room,
-      )
+    let encoder = Encoder(level~)
+    for shape in split_shapes {
       assert_eq(
-        got,
+        encode_split(encoder, input, shape),
         whole,
-        msg="level \{level}, chunks of \{chunk}, room \{room}",
+        msg="level \{level}, \{shape.0}, \{shape.1}, \{shape.2}",
       )
     }
+  }
+}
+
+///|
+test "any split gives the same stream with a dictionary and with flushes" {
+  let input = @fixtures.sample(14, 100000)
+  let dictionary = @fixtures.sample(15, 40000)
+  // Flushes at the start, twice in a row, a byte apart, and within a match's
+  // reach of a block's end; the last at the end of the input.
+  let flush_at = [0, 1, 1, 2, 9000, 65534, 65540, 100000]
+  for level in 0..<=9 {
+    let named = Encoder(level~, dictionary~)
+    let with_dictionary = compress(input, level~, dictionary~)
+    let flushed = encode_split(
+      named,
+      input,
+      (1 << 20, 1 << 16, false),
+      flush_at~,
+    )
+    let plain = Encoder(level~)
+    let flushed_plain = encode_split(
+      plain,
+      input,
+      (1 << 20, 1 << 16, false),
+      flush_at~,
+    )
+    for shape in split_shapes {
+      let msg = "level \{level}, \{shape.0}, \{shape.1}, \{shape.2}"
+      assert_eq(encode_split(named, input, shape), with_dictionary, msg~)
+      assert_eq(encode_split(named, input, shape, flush_at~), flushed, msg~)
+      assert_eq(
+        encode_split(plain, input, shape, flush_at~),
+        flushed_plain,
+        msg~,
+      )
+    }
+    // Each stream decodes to the input, through this module's decoder.
+    let (got, _) = @fixtures.drive(
+      Decoder(dictionary~),
+      flushed,
+      next_in=() => 1 << 20,
+      next_out=() => 1 << 16,
+    )
+    assert_eq(got, input, msg="level \{level}")
+    assert_eq(decompress(flushed_plain), input, msg="level \{level}")
   }
 }
 
@@ -94,7 +197,7 @@ fn decode_available(stream : BytesView, dictionary? : BytesView) -> Bytes raise 
 test "a flush is a sync flush: the stream so far decodes to the input so far" {
   let input = @fixtures.sample(6, 50000)
   let dictionary = @fixtures.sample(7, 10000)
-  for level in [0, 1, 6, 9] {
+  for level in 0..<=9 {
     for with_dictionary in [false, true] {
       let encoder = if with_dictionary {
         Encoder(level~, dictionary~)
@@ -198,6 +301,11 @@ test "reset keeps the level and the dictionary" {
 ///|
 /// The SHA-256 of `compress(input, level=n)` for n from 0 to 9, for a fixed
 /// input: the same on every target (the gates run the tests on all four).
+/// The ten are also the bytes that libdeflate 1.24 writes for this input at
+/// each level when built with the encoder's block limits
+/// (SOFT_MAX_BLOCK_LENGTH 65,535, SEQ_STORE_LENGTH 16,384, and
+/// choose_max_block_end without MIN_BLOCK_LENGTH), checked when they were
+/// made.
 test "every target writes the same bytes" {
   let input = @fixtures.sample(1951, 100000)
   let digests = [
@@ -208,17 +316,17 @@ test "every target writes the same bytes" {
   inspect(
     digests.join("\n"),
     content=(
-      #|bc0d0f696fdd12eddbd096a4dfd932847a9039faaffec3cc545a04ac8eeeaee9
-      #|320043db04928a0682a06f8023b08d79db8aff9e0bafd82b8b5c5d67d048cb80
-      #|d5399ac18c542d9fd270ce78c30b0f361c5a8ebf58aaebb386ef5649885ea007
-      #|83377f4752fe3cca6b1fac6914748188dafcfdbc868362fd383e6589aeff8209
-      #|35700490804022cc3d75c10d545dce8e5245b6ae7b7af5810ff5b5d52a7b03d8
-      #|cdee654f6131016c1e7190cb7263c1db0c7d3707a70a88ca075d3fe652286978
-      #|61677f9d23effde25fff6343197aa9e6028bc33fc444016c39eff6e897aa4285
-      #|ef842b5bdc6c5fcd16ea913ed659d5a485589041e3c8989a14e86c047f37a81a
-      #|d484d8076176b6e91370adad6e02d78dbc8881ef93538af0dd4fb6d236d52ddc
-      #|d484d8076176b6e91370adad6e02d78dbc8881ef93538af0dd4fb6d236d52ddc
-      #|b86beb2d5fa3e435505b688e2b43e90cf94671b98e00fb98f5c7fc0f992334ad
+      #|90a1187ac89e94ee2715b7c10e796f376c69130a60517ec727fe333cd5abdfdc
+      #|3409032bcd13ffbd3b47c71178e7c886d39b27fd10d6c7255f59b605515719c5
+      #|0ac431cf14dcfa4618e06e34110f9536382311955f6726cd5cb692f3b4cb44ca
+      #|b760c0ddb03b13e248ecefd836d3be5b4e402e3fcf156921a29b3d06a796d3ff
+      #|b7c8e2c1b8da454deaef94ee5b0fa988ae622606b5599e42a849b08f5192630f
+      #|8803d99bbb96acf1c1d583029a2b2aeec6fee597132f9aaa6a665940cd3212ea
+      #|3dc1798beba670d683faaac672dc6e88bb119badd2c6a03998cd86eda411fa6f
+      #|897bff0b48bc03994466aa69b02d7b9464f05816d958f2a4c776b4d745ad12ad
+      #|1ce25ac7cedf61bebfae8ac9956fd5051f45741d71f00983e04986a78ab66bcb
+      #|6a6285da9b35d69fde0c475e870dafccfb2add069d277ac7da76014b855843ac
+      #|a55acfb4da054e39fda2aac3fa6106a159a9e161274faf378d6018262056ad86
     ),
   )
 }

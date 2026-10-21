@@ -182,38 +182,60 @@ test "panic compress given a header it cannot write aborts" {
 }
 
 ///|
+/// How the split tests cut the input and the output: chunks of `chunk`
+/// bytes (or of 1 to `chunk`, drawn, with `random`), into slices of `room`
+/// bytes (or of 0 to `room`).
+let split_shapes : Array[(Int32, Int32, Bool)] = [
+  (1, 977, false),
+  (7, 1, false),
+  (1000, 65536, false),
+  (4097, 977, true),
+  (65536, 1, false),
+  (65539, 65536, true),
+]
+
+///|
+fn[E : @codec_bytes.Encode] encode_split(
+  encoder : E,
+  input : Bytes,
+  shape : (Int32, Int32, Bool),
+  flush_at~ : Array[Int32] = [],
+) -> Bytes raise {
+  let (chunk, room, random) = shape
+  let rng = @fixtures.Rng::new(chunk.reinterpret_as_uint())
+  encoder.reset()
+  @fixtures.encode(
+    encoder,
+    input,
+    next_in=() => if random { 1 + rng.below(chunk) } else { chunk },
+    next_out=() => if random { rng.below(room + 1) } else { room },
+    flush_at~,
+  )
+}
+
+///|
 test "any input split and output size give the same stream" {
   let input = @fixtures.sample(5, 120000)
   let header = headers()[headers().length() - 1]
-  for level in [0, 1, 6, 9] {
+  let flush_at = [0, 1, 1, 30000, 65537, 120000]
+  for level in 0..<=9 {
     let whole = compress(input, level~)
     let named = compress(input, level~, header~)
-    for shape in [(1, 1), (7, 3), (16642, 1), (999, 65536), (65536, 5)] {
-      let (chunk, room) = shape
-      let rng = @fixtures.Rng::new(chunk.reinterpret_as_uint())
-      let got = @fixtures.encode(
-        Encoder(level~),
-        input,
-        next_in=() => 1 + rng.below(chunk),
-        next_out=() => rng.below(room + 1),
-      )
-      assert_eq(
-        got,
-        whole,
-        msg="level \{level}, chunks of \{chunk}, room \{room}",
-      )
-      let got = @fixtures.encode(
-        Encoder(level~, header~),
-        input,
-        next_in=() => 1 + rng.below(chunk),
-        next_out=() => room,
-      )
-      assert_eq(
-        got,
-        named,
-        msg="level \{level}, chunks of \{chunk}, room \{room}",
-      )
+    let plain = Encoder(level~)
+    let with_header = Encoder(level~, header~)
+    let flushed = encode_split(
+      plain,
+      input,
+      (1 << 20, 1 << 16, false),
+      flush_at~,
+    )
+    for shape in split_shapes {
+      let msg = "level \{level}, \{shape.0}, \{shape.1}, \{shape.2}"
+      assert_eq(encode_split(plain, input, shape), whole, msg~)
+      assert_eq(encode_split(with_header, input, shape), named, msg~)
+      assert_eq(encode_split(plain, input, shape, flush_at~), flushed, msg~)
     }
+    assert_eq(decompress(flushed), input)
   }
 }
 
@@ -284,17 +306,17 @@ test "every target writes the same bytes" {
   inspect(
     digests.join("\n"),
     content=(
-      #|077bd8ebc99db3fe3d12f74e8bad4ce2c458924f821fa5389b51728d412f5e75
-      #|b9f5dca0e5290c086b8e411805e8e07f0de8ac3f2e32cb48a7b2c858f0c66f53
-      #|2e75f606a5be4a12a35c08332af634cc4d5b320d252ae1d6f884202a3362b12f
-      #|00a84ae69d2758bf7c406f47dfb534357633512b6cdfe4512719d0664d3f4fc9
-      #|cd5cef9e4166956aa33d0b934f95c50d91dd7498304e8f0c7fbdc08adf8871f5
-      #|b6e632bdce53d70fcc63a65c3f095e4af93eca8f00ad1b3bdf90113a113e1d94
-      #|4a32aba664b46285615a125e8d46b540d8394dc735a871e8d7bffc690e174073
-      #|1608a58ef88283b608a1f18b86e52476bbf62b6438565c2a8c39a5ada3e61c0f
-      #|31ac2e3fd11ecaca9495310548a3a223733e1e40ab099c6f7bb7c91e451544cc
-      #|b0ea48fd307a6bf0eba883ae7f0a4eafddcea964993f0e76423149af735f9a2c
-      #|90fa6e0cb28fe751245358d07a7a9b3f786cbe0d996d8e20902ea3b96791f507
+      #|e0254d6b56d84e23399d1788869b6edf9a591d869faafacc8c5af4ecadb99736
+      #|cf012af05302717959464ad5671fdc15e6ccde24aa4fb46697a5c4b3180cadde
+      #|5994a81dad5d481ba9ff102bdc80ce500a67874432af2539067e5b674babf31c
+      #|d5b29d82c3bba43facf61198190ea5f33e7ded8a0c87966991db0c1e3d917d7a
+      #|786ee9c9453462eb49252d960045ce661ba29871acba10bbf46ceae085382643
+      #|5f5c0201a7558954bd020546632237ca7fd55a22ed9012b9bb4a8d586a0375cd
+      #|362632e09527fcc2bdcfb134b9755de2fc27b26b2cfa26a0252f6a8ef8182a09
+      #|96af12f9ae956f94030fe7f609ab0ac6641b357cfdb9e4d733dc4bf074331c6b
+      #|8ec6aaea44695cb726021ca965222c0bb203de224863e8bc3a52dbd4214f8d62
+      #|ab4a14df4a863cd7910a884918e53c60bf004f45312f2fb25c0ab55013d2bac9
+      #|c895599e92238265e67cbb2db46b4e7599b34fc2ff12b1c591467898f2868a8c
     ),
   )
 }

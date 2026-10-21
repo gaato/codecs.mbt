@@ -1,10 +1,11 @@
 // The streaming encoder.
 //
 // A gzip stream from this encoder is one member: the header
-// (`@header.build`), the raw DEFLATE data of a `@deflate.Encoder`, and the
-// trailer, the CRC-32 and the length of the input, little-endian. The header
-// and the trailer wait in `framing` until the caller's slices take them; the
-// CRC-32 and the length are updated from the input the inner encoder takes.
+// (`@header.build`), the raw DEFLATE data of a `@deflater.Deflater`, the
+// encoder that `@deflate.Encoder` holds too, and the trailer, the CRC-32 and
+// the length of the input, little-endian. The header and the trailer wait in
+// `framing` until the caller's slices take them; the CRC-32 and the length
+// are updated from the input the inner encoder takes.
 
 ///|
 /// Whether an encoder can write this header as it is: the extra field holds
@@ -44,10 +45,10 @@ fn default_header(level : Int32) -> Header {
 ///|
 /// A streaming gzip encoder (RFC 1952). Feed it input in chunks of any size
 /// with `step` and collect output in slices of any size; it holds a raw
-/// DEFLATE encoder (see `@deflate.Encoder`) and the member's header, never
-/// the whole input or output. A stream is one member.
+/// DEFLATE encoder (the one `@deflate.Encoder` holds) and the member's
+/// header, never the whole input or output. A stream is one member.
 pub struct Encoder {
-  priv inner : @deflate.Encoder
+  priv inner : @deflater.Deflater
   // The header's bytes, the same for every stream of this encoder.
   priv header : Bytes
   // The header or the trailer bytes not handed out yet: `framing[sent:]`.
@@ -96,7 +97,7 @@ pub fn Encoder::Encoder(level~ : Int32 = 6, header? : Header) -> Encoder {
     comment=header.comment,
   )
   {
-    inner: @deflate.Encoder(level~),
+    inner: @deflater.Deflater::new(level~),
     header: bytes,
     framing: bytes,
     sent: 0,
@@ -126,8 +127,8 @@ pub fn Encoder::reset(self : Encoder) -> Unit {
 
 ///|
 /// Bytes held for the stream: those of the raw DEFLATE encoder (see
-/// `@deflate.Encoder::memory_usage`), 689,394, and the header's bytes, 10
-/// and the extra field, the name and the comment. The trailer, 8 bytes, is
+/// `@deflate.Encoder::memory_usage`), 542,516 at the default level, and the
+/// header's bytes, 10 and the extra field, the name and the comment. The trailer, 8 bytes, is
 /// not counted.
 pub fn Encoder::memory_usage(self : Encoder) -> Int32 {
   self.inner.memory_usage() + self.header.length()

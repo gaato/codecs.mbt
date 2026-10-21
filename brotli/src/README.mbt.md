@@ -112,7 +112,7 @@ test "stop at the end of the stream" {
 ## What it does
 
 - Decodes every RFC 7932 stream, including the static dictionary and its 121 transforms.
-- Takes input in chunks of any size, down to one byte, and writes output into buffers of any size; the same `step` / `Status` shape as `moonbit-community/flate`.
+- Takes input in chunks of any size, down to one byte, and writes output into buffers of any size, under the rules of [`gaato/codec_bytes`](https://mooncakes.io/docs/gaato/codec_bytes).
 - Memory is the window (at most 16 MiB, and no more than the output so far) plus tables of at most 1.3 MiB; `memory_usage()` reports it. `Decoder(max_window_bits=n)` refuses streams that need a window over `2^n - 16` bytes with `LimitExceeded`, saying how much the stream needs.
 - Every malformed stream raises `CodecError(kind, message)` with `Truncated`, `Corrupt` or `TrailingData` (bytes after the stream); `decompress(max_output=n)` raises `LimitExceeded` past `n` bytes. It does not abort. A step that raises first hands out the output that comes before the error (answering `NeedMoreOutput` while it does not fit), and `last_consumed()` and `last_produced()` count what that step took and wrote: a corrupt stream gives the same output, then the same error, however it is split. On `TrailingData`, `last_consumed()` stops at the end of the stream.
 - Encodes with greedy LZ77 (lazy by one byte) and one prefix code per meta-block: about google/brotli's quality 4, and close to gzip -6. Its streams decode with google/brotli's decoder (`scripts/crosscheck.mbtx`).

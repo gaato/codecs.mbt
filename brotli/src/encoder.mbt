@@ -6,7 +6,7 @@
 // there; `Flush` and `Finish` encode whatever is buffered. Compressed bytes
 // wait in the bit writer until the caller's buffer takes them, and no more
 // input is taken while they wait: memory stays bounded whatever the caller
-// passes. The step model follows moonbit-community/flate's `Deflater`.
+// passes.
 
 ///|
 /// The first allocation of the input buffer; it doubles as input grows.

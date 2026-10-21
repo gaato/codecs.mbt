@@ -1,18 +1,19 @@
 // The streaming encoder.
 //
 // A zlib stream is the header (`@header.build`: 2 bytes, and DICTID with a
-// preset dictionary), the raw DEFLATE data of a `@deflate.Encoder`, and the
-// Adler-32 of the input, big-endian. The header and the trailer wait in
+// preset dictionary), the raw DEFLATE data of a `@deflater.Deflater`, the
+// encoder that `@deflate.Encoder` holds too, and the Adler-32 of the input,
+// big-endian. The header and the trailer wait in
 // `framing` until the caller's slices take them; the Adler-32 is updated from
 // the input the inner encoder takes.
 
 ///|
 /// A streaming zlib encoder (RFC 1950). Feed it input in chunks of any size
 /// with `step` and collect output in slices of any size; it holds a raw
-/// DEFLATE encoder (see `@deflate.Encoder`) and the few bytes of the header
-/// and the trailer, never the whole input or output.
+/// DEFLATE encoder (the one `@deflate.Encoder` holds) and the few bytes of
+/// the header and the trailer, never the whole input or output.
 pub struct Encoder {
-  priv inner : @deflate.Encoder
+  priv inner : @deflater.Deflater
   // The header, the same for every stream of this encoder.
   priv header : Bytes
   // The header or the trailer bytes not handed out yet: `framing[sent:]`.
@@ -40,7 +41,7 @@ pub struct Encoder {
 pub fn Encoder::Encoder(level~ : Int32 = 6, dictionary? : BytesView) -> Encoder {
   let header = @header.build(level, dictionary.map(dictionary_id))
   {
-    inner: @deflate.Encoder(level~, dictionary?),
+    inner: @deflater.Deflater::new(level~, dictionary?),
     header,
     framing: header,
     sent: 0,
@@ -68,7 +69,8 @@ pub fn Encoder::reset(self : Encoder) -> Unit {
 
 ///|
 /// Bytes held for the stream: those of the raw DEFLATE encoder (see
-/// `@deflate.Encoder::memory_usage`), 689,394, with a dictionary or without.
+/// `@deflate.Encoder::memory_usage`), 542,516 at the default level, with a
+/// dictionary or without.
 /// A dictionary is the caller's bytes, kept by reference, and not counted;
 /// the header and the trailer, at most 6 bytes, are not counted either.
 pub fn Encoder::memory_usage(self : Encoder) -> Int32 {

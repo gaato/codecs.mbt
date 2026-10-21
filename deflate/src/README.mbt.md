@@ -274,8 +274,8 @@ test "a message split across frames comes out once its flush arrives" {
 - Takes input in chunks of any size, down to one byte, and writes output into buffers of any size, under the rules of `gaato/codec_bytes`. Memory is the window and the decoding tables, 46,592 bytes with a dictionary or without (a dictionary is your bytes, held by reference), plus a gzip header's fields; `memory_usage()` reports it.
 - A step that raises first writes the output that comes before the error, and `last_consumed()` and `last_produced()` say what it took and wrote, so a stream with bytes after it gives all its output, then `TrailingData`, with `last_consumed()` at its end: whether it came in one step or many. A malformed stream gives the same output before the same kind of error however its input and output are split.
 - Every malformed stream raises [`gaato/codec`](https://mooncakes.io/docs/gaato/codec)'s `CodecError(kind, message)`, with the kind `Truncated`, `Corrupt`, `ChecksumMismatch`, `TrailingData`, `DictionaryRequired`, `DictionaryMismatch` or `LimitExceeded` (a gzip header over `max_header_bytes`, with `resource: Memory`; more than `max_output` from `decompress`, with `resource: Output`). An error inside the DEFLATE data of a zlib or gzip stream keeps its kind. It does not abort. In a `catch` on these functions, `CodecError(kind, _)` and the kinds match unqualified, with no import; to name the types elsewhere, import [`gaato/codec_bytes`](https://mooncakes.io/docs/gaato/codec_bytes), which re-exports them.
-- Encodes with zlib's levels, LZ77 with hash chains and fixed or dynamic Huffman codes per 16 KiB block, whichever is smaller, stored when neither is. Its streams decode with zlib and the `gzip` command, whole and cut after every flush (`scripts/crosscheck.mbtx`, run in CI), and the same input gives the same bytes on every target. An encoder never raises.
-- An encoder's memory is fixed: 689,394 bytes for the 64 KiB input ring (the 32 KiB window and a block), the match tables, a block's tokens and its output (`memory_usage()`), with a dictionary or without, and for gzip its header's bytes.
+- Encodes with libdeflate's levels: 0 stores the input; 1 finds matches in a hash table; 2 to 4 take the longest match at each position, and 5 to 9 look one or two positions ahead for a better one, over hash chains. Each block takes the fixed Huffman code, a dynamic one or no code (stored), whichever is smallest, and ends where the data changes (libdeflate's block splitting) or after 64 KiB. Inputs of a few dozen bytes or less are stored, as libdeflate stores them. With the same input, no dictionary and no flush, the streams are the bytes that libdeflate 1.24 writes when its blocks are limited to 64 KiB. They decode with zlib and the `gzip` command, whole and cut after every flush (`scripts/crosscheck.mbtx`, run in CI), and the same input gives the same bytes on every target, however it is split. An encoder never raises.
+- An encoder's memory is fixed by its level: 542,516 bytes at the default level (the 32 KiB window, a 64 KiB block and what the parser looks ahead, the block's output, the match tables and the block's sequences), 361,948 at level 1 and 131,077 at level 0, with a dictionary or without, and for gzip its header's bytes; `memory_usage()` reports it.
 
 ### Compression ratio
 
@@ -283,19 +283,20 @@ Sizes in bytes of raw DEFLATE streams for six files of the [Silesia corpus](http
 
 | File | Size | here -1 | zlib -1 | here -6 | zlib -6 | here -9 | zlib -9 |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| dickens | 10,192,446 | 4,160,315 | 4,585,612 | 3,993,481 | 3,871,628 | 3,879,780 | 3,854,729 |
-| mozilla | 51,220,480 | 19,685,168 | 20,577,220 | 19,049,989 | 19,089,118 | 18,909,921 | 19,044,390 |
-| nci | 33,553,445 | 4,005,261 | 4,624,591 | 3,187,434 | 3,200,182 | 3,057,334 | 2,987,995 |
-| ooffice | 6,152,192 | 3,180,344 | 3,290,526 | 3,104,025 | 3,097,288 | 3,088,080 | 3,092,920 |
-| samba | 21,606,400 | 5,834,347 | 6,329,449 | 5,372,773 | 5,451,399 | 5,400,415 | 5,402,704 |
-| xml | 5,345,280 | 907,744 | 965,242 | 702,233 | 687,991 | 667,554 | 658,899 |
-| total | 128,070,243 | 37,773,179 | 40,372,640 | 35,409,935 | 35,397,606 | 35,003,084 | 35,041,637 |
+| dickens | 10,192,446 | 4,217,525 | 4,585,612 | 3,864,185 | 3,871,628 | 3,816,762 | 3,854,729 |
+| mozilla | 51,220,480 | 20,192,961 | 20,577,220 | 18,807,653 | 19,089,118 | 18,716,681 | 19,044,390 |
+| nci | 33,553,445 | 3,837,577 | 4,624,591 | 3,102,963 | 3,200,182 | 2,935,668 | 2,987,995 |
+| ooffice | 6,152,192 | 3,275,124 | 3,290,526 | 3,073,999 | 3,097,288 | 3,068,726 | 3,092,920 |
+| samba | 21,606,400 | 5,866,517 | 6,329,449 | 5,338,862 | 5,451,399 | 5,272,299 | 5,402,704 |
+| xml | 5,345,280 | 887,708 | 965,242 | 686,486 | 687,991 | 651,148 | 658,899 |
+| total | 128,070,243 | 38,277,412 | 40,372,640 | 34,874,148 | 35,397,606 | 34,461,284 | 35,041,637 |
 
-Level 1 compresses about 6 % more than zlib's level 1, and levels 6 and 9 about as much as zlib's: by file, from 1.4 % smaller to 3.1 % larger at level 6. Random bytes go into stored blocks at every level. Long runs of one byte cost a block every 16 KiB, where zlib's blocks are larger.
+Level 1 compresses about 5 % more than zlib's level 1, and levels 6 and 9 about 1.5 % more than zlib's: every file comes out smaller, at level 6 by 0.2 % (dickens, xml) to 3.0 % (nci). On the [Canterbury corpus](https://corpus.canterbury.ac.nz/) the eleven files come to 722,392 bytes at level 6, against zlib's 730,888. Random bytes go into stored blocks, 5 bytes more for each 65,535; a long run of one byte costs a few bytes for each 64 KiB block. `moon run deflate/scripts/ratio.mbtx -- DIR` measures the sizes and the speed on a directory of files.
 
 ## Known limits
 
-- The DEFLATE data is encoded by [moonbit-community/flate](https://mooncakes.io/docs/moonbit-community/flate)'s deflater, which none of the packages' signatures name. The decoder is this module's own.
+- Levels stop at 9: libdeflate's levels 10 to 12, whose near-optimal parsing comes out about 3 % smaller than level 9 at several times the time, are not here, and higher levels are clamped to 9.
+- A flush is a sync flush: zlib's full flush, which also forgets the window, is not offered.
 
 ## License
 

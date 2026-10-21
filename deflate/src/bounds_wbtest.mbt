@@ -61,13 +61,36 @@ test "only the last 32 KiB of a dictionary are kept, by reference" {
 }
 
 ///|
+/// What `Encoder::memory_usage` reports at `level` (RESOURCE_BOUNDS.md).
+fn encoder_bound(level : Int32) -> Int32 {
+  match level.clamp(min=0, max=9) {
+    0 => 131077
+    1 => 361948
+    2 | 3 | 4 => 542172
+    _ => 542516
+  }
+}
+
+///|
+/// The input buffer and the output buffer at `level`: the window, a block
+/// and the look-ahead (a block and a byte at level 0); a block's stored size.
+fn encoder_buffers(level : Int32) -> (Int32, Int32) {
+  match level.clamp(min=0, max=9) {
+    0 => (65536, 65541)
+    1 | 2 | 3 | 4 => (32768 + 65535 + 6144, 65534 + 258 + 10 + 1)
+    _ => (32768 + 65535 + 6144, 65534 + 602 + 10 + 1)
+  }
+}
+
+///|
 test "the encoder reports its bound after every step" {
-  inspect(ENCODER_BYTES, content="689394")
   let input = @fixtures.sample(10, 150000)
   let dictionary = @fixtures.sample(11, 40000)
   for level in 0..<=9 {
+    let bound = encoder_bound(level)
     for encoder in [Encoder(level~), Encoder(level~, dictionary~)] {
-      assert_eq(encoder.memory_usage(), ENCODER_BYTES)
+      assert_eq(encoder.memory_usage(), bound, msg="level \{level}")
+      assert_eq(encoder.deflater.capacities(), encoder_buffers(level))
       let rng = @fixtures.Rng::new(level.reinterpret_as_uint())
       let _ = @fixtures.encode(
         encoder,
@@ -75,66 +98,79 @@ test "the encoder reports its bound after every step" {
         next_in=() => 1 + rng.below(40000),
         next_out=() => rng.below(3000),
         flush_every=50000,
-        check=(e, _) => assert_eq(e.memory_usage(), ENCODER_BYTES),
+        check=(e, _) => assert_eq(e.memory_usage(), bound),
       )
       encoder.reset()
-      assert_eq(encoder.memory_usage(), ENCODER_BYTES)
+      assert_eq(encoder.memory_usage(), bound)
     }
   }
 }
 
 ///|
-test "the encoder holds at most a block of input and its output" {
-  // With no room, a step takes input until a block and its look-ahead wait,
-  // 16,642 bytes, and stops with that block's output waiting; steps with
-  // room, no input and `Continue` then hand out everything that waits.
-  let input = @fixtures.sample(12, 300000)
-  let random = Bytes::makei(100000, i => ((i * 7919) >> 3).to_byte())
+test "the encoder holds at most its input buffer and a block's output" {
+  // With no room, a step takes input until the buffer is full and stops
+  // with a block's output waiting; steps with room and no input then hand
+  // it out. Random bytes make stored blocks, whose output is the largest.
+  let text = @fixtures.sample(12, 300000)
+  let random = Bytes::makei(300000, i => ((i * 7919) >> 3).to_byte()) +
+    @fixtures.sample(16, 1000)
+  let rng = @fixtures.Rng::new(16)
+  let noise = Bytes::makei(200000, _ => (rng.below(1 << 16) >> 8).to_byte())
+  let dictionary = @fixtures.sample(17, 40000)
   for level in 0..<=9 {
-    for data in [input, random, Bytes::make(100000, b'\x00')] {
-      let encoder = Encoder(level~)
-      let none = FixedArray::make(0, b'\x00')
-      let room = FixedArray::make(1 << 16, b'\x00')
-      let mut pos = 0
-      let mut most_in = 0
-      let mut most_out = 0
-      let mut steps = 0
-      for ;; {
-        steps += 1
-        let action : EncodeAction = if steps % 5 == 0 {
-          Flush
-        } else if pos + 20000 >= data.length() {
-          Finish
+    let (in_size, out_size) = encoder_buffers(level)
+    for data in [text, random, noise, Bytes::make(150000, b'\x00')] {
+      for with_dictionary in [false, true] {
+        let encoder = if with_dictionary {
+          Encoder(level~, dictionary~)
         } else {
-          Continue
+          Encoder(level~)
         }
-        let end = (pos + 20000).min(data.length())
-        let status = encoder.step_into(data[pos:end], none, action~)
-        assert_eq(encoder.last_produced(), 0)
-        most_in = most_in.max(encoder.last_consumed())
-        pos += encoder.last_consumed()
-        let mut waiting = 0
-        let mut drained = status
-        while !(drained is Done) {
-          drained = encoder.step_into(b"", room, action=Continue)
-          waiting += encoder.last_produced()
-          if drained is NeedMoreInput {
+        // The dictionary's last 32 KiB start the window (not at level 0).
+        let preset = if with_dictionary && level > 0 { 32768 } else { 0 }
+        let none = FixedArray::make(0, b'\x00')
+        let room = FixedArray::make(1 << 16, b'\x00')
+        let mut pos = 0
+        let mut most_out = 0
+        let mut steps = 0
+        for ;; {
+          steps += 1
+          let action : EncodeAction = if steps % 5 == 0 {
+            Flush
+          } else if pos + 120000 >= data.length() {
+            Finish
+          } else {
+            Continue
+          }
+          let end = (pos + 120000).min(data.length())
+          let status = encoder.step_into(data[pos:end], none, action~)
+          assert_eq(encoder.last_produced(), 0)
+          if steps == 1 {
+            // The buffer fills up before the first block is written.
+            assert_eq(encoder.last_consumed(), in_size - preset)
+          }
+          pos += encoder.last_consumed()
+          let (held, waiting) = encoder.deflater.waiting()
+          most_out = most_out.max(waiting)
+          assert_true(held <= in_size && waiting <= out_size)
+          // Input not taken waits for the next round, so the steps that
+          // hand out the output take none and say Continue.
+          let mut drained = status
+          while drained is NeedMoreOutput {
+            drained = encoder.step_into(b"", room, action=Continue)
+            let (held, waiting) = encoder.deflater.waiting()
+            assert_true(held <= in_size && waiting <= out_size)
+          }
+          if drained is Done {
             break
           }
         }
-        most_out = most_out.max(waiting)
-        if drained is Done {
-          break
+        assert_eq(pos, data.length())
+        // Noise fills a stored block.
+        if physical_equal(data, noise) {
+          assert_true(most_out >= 65535 + 5, msg="level \{level}: \{most_out}")
         }
       }
-      assert_eq(pos, data.length())
-      assert_true(most_in <= 16384 + 258, msg="level \{level}: \{most_in} in")
-      // A block and a flush's empty stored block, each at most their stored
-      // size: well within the 32 KiB the output's capacity is counted at.
-      assert_true(
-        most_out <= 16384 + 258 + 2 * 6 + 6,
-        msg="level \{level}: \{most_out} out",
-      )
     }
   }
 }
@@ -144,10 +180,12 @@ test "the encoder keeps the last 32 KiB of a dictionary, by reference" {
   for size in [0, 100, 32768, 40000] {
     let dictionary = @fixtures.sample(13, size)
     let encoder = Encoder(dictionary~)
-    let kept = encoder.dictionary.unwrap()
-    assert_true(physical_equal(kept.data(), dictionary))
+    let kept = encoder.deflater.dictionary()
+    if size > 0 {
+      assert_true(physical_equal(kept.data(), dictionary))
+    }
     assert_eq(kept.start_offset() + kept.length(), dictionary.length())
     assert_eq(kept.length(), size.min(32768))
-    assert_eq(encoder.memory_usage(), ENCODER_BYTES)
+    assert_eq(encoder.memory_usage(), encoder_bound(6))
   }
 }

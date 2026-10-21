@@ -6,7 +6,8 @@
 
 ///|
 /// Inputs: empty, one byte, words, random bytes, zeros, long repeats, and a
-/// mix of words and random bytes, past several 16 KiB blocks.
+/// mix of words and random bytes, past several of the encoder's 64 KiB
+/// blocks.
 fn samples() -> Array[(String, Bytes)] {
   // The high bits of an LCG: its low ones repeat soon.
   let rng = @fixtures.Rng::new(1950)
@@ -142,7 +143,7 @@ fn main {
   }
   // Streams flushed as they go, cut after every flush.
   let flushed = text(100000) + @fixtures.sample(7, 60000) + text(40000)
-  for level in [0, 1, 6, 9] {
+  for level in 0..<=9 {
     streamed(
       "raw flushed l\{level}",
       @deflate.Encoder(level~),
@@ -162,7 +163,7 @@ fn main {
       @gzip.Encoder(level~),
       flushed,
       4096,
-      16642,
+      65537,
     )
   }
   streamed(

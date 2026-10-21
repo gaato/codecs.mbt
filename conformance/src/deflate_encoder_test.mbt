@@ -1,12 +1,12 @@
 ///|
 /// What gaato/deflate/RESOURCE_BOUNDS.md gives for a raw DEFLATE encoder's
-/// `memory_usage`, with a dictionary or without.
-let deflate_encoder_memory : Int32 = 689394
+/// `memory_usage` at the default level, with a dictionary or without.
+let deflate_encoder_memory : Int32 = 542516
 
 ///|
 /// Inputs for the encoders: empty, one byte, text, random bytes, a repeated
-/// pattern, and more than four 16 KiB blocks of mixed data, past the
-/// deflater's 64 KiB input ring.
+/// pattern, and more than three 64 KiB blocks of mixed data, past the
+/// encoder's input buffer.
 fn deflate_encoder_inputs() -> Array[(String, Bytes)] {
   let rng = @codec_harness.Rng::new(1951)
   let random = (n : Int32) => {
