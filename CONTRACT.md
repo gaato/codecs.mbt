@@ -160,9 +160,9 @@ here, so that adding one later does not require changing it.
 |---|---|---|
 | Zstandard | implemented | Concatenated frames and skippable frames under `EndOfInput`. Dictionary ids map to `DictionaryRequired`. |
 | Brotli | implemented | No framing: one stream per input, so `EndOfMember` and `EndOfInput` end at the same place. |
-| gzip | fits | Several members under `EndOfInput`; the header of each member is metadata on the concrete type. |
-| zlib | fits | A preset dictionary in the header raises `DictionaryRequired` with its Adler-32. No concatenation. |
-| raw DEFLATE | fits | No header and no checksum. Trailing bytes after the final block must raise `TrailingData`. |
+| gzip | implemented | Several members under `EndOfInput`; the header of each member is metadata on the concrete type. Bytes after a member that do not begin another, zero padding included, raise `TrailingData`. |
+| zlib | implemented | A preset dictionary in the header raises `DictionaryRequired` with its Adler-32. No concatenation. |
+| raw DEFLATE | implemented | No header and no checksum. Trailing bytes after the final block raise `TrailingData`. |
 | LZ4 frame | fits | Concatenated frames and skippable frames. The legacy frame has no end marker and rejects `EndOfMember`. |
 | xz | fits | Several streams with padding. The memory limit is resumable on the concrete type. Filter chains that cannot flush raise `Unsupported`. |
 | .lzma | fits | No magic and no checksum; trailing bytes are `TrailingData`. Cannot flush. |
@@ -178,12 +178,12 @@ here, so that adding one later does not require changing it.
 | RFC 7932, Brotli | Informational, updated by RFC 9841 | The brotli format. |
 | RFC 9841, Shared Brotli | Informational | Extends brotli with shared dictionaries, a large window (up to 62 bits) and a framing format. Not implemented. |
 | RFC 9842, Compression Dictionary Transport | Proposed Standard | The `dcb` and `dcz` HTTP codings: a hash of the dictionary in a fixed header, then Shared Brotli or Zstandard. |
-| RFC 1950, 1951, 1952 | Informational | zlib, DEFLATE and gzip, reached through moonbit-community/flate. |
+| RFC 1950, 1951, 1952 | Informational, neither updated nor obsoleted | zlib, DEFLATE and gzip, in gaato/deflate. Its errata (7764, 8429, 7517) clarify wording and change no decoder's behaviour. |
 | LZ4 Frame Format, .xz File Format 1.2.1 | not RFCs | Used only for the paper check above. |
 
 ### Errata
 
-The technical errata of the two implemented formats, checked against the
+The technical errata of Zstandard and Brotli, checked against the
 decoders with crafted streams and the reference implementations (zstd 1.5.7,
 google/brotli):
 

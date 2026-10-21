@@ -1,0 +1,17 @@
+import {
+  "gaato/codec",
+  "gaato/codec_bytes",
+  "moonbit-community/flate",
+}
+
+import {
+  "gaato/deflate/internal/fixtures",
+} for "wbtest"
+
+import {
+  "gaato/codec",
+  "gaato/deflate/zlib",
+  "gaato/deflate/gzip",
+} for "test"
+
+supported_targets = "js + native + wasm + wasm-gc"

@@ -79,9 +79,13 @@ async fn main {
   // The registry index, for the workspace and the scripts' imports.
   run("moon", ["update"])
   // Generated inputs are current: zstd's vectors and the benchmarks' (the zstd
-  // and brotli commands decompress them to what the generators produce), and
-  // the conformance suite's vectors (an extract of each format's vectors).
+  // and brotli commands decompress them to what the generators produce),
+  // DEFLATE's, zlib's and gzip's (Node's zlib and the gzip command decompress
+  // them, and zlib still answers what they record for the crafted streams and
+  // the corruptions), and the conformance suite's vectors (an extract of each
+  // format's vectors).
   run("moon", ["run", "zstd/scripts/gen_vectors.mbtx", "--", "--check"])
+  run("moon", ["run", "scripts/gen_deflate_vectors.mbtx", "--", "--check"])
   run("moon", ["run", "scripts/gen_conformance_vectors.mbtx", "--", "--check"])
   run("moon", ["run", "scripts/gen_bench_data.mbtx", "--", "--check"])
   // From the workspace root, check and test cover every member.

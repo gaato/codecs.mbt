@@ -1,0 +1,46 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/deflate/gzip"
+
+import {
+  "gaato/codec",
+  "gaato/codec_bytes",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn decompress(BytesView, max_output? : Int) -> Bytes raise @codec.CodecError
+
+// Errors
+
+// Types and methods
+pub struct Decoder {
+  // private fields
+}
+pub fn Decoder::Decoder(until? : @codec_bytes.Until, max_header_bytes? : Int) -> Self
+pub fn Decoder::header(Self) -> Header?
+pub fn Decoder::is_finished(Self) -> Bool
+pub fn Decoder::last_consumed(Self) -> Int
+pub fn Decoder::last_produced(Self) -> Int
+pub fn Decoder::memory_usage(Self) -> Int
+pub fn Decoder::reset(Self) -> Unit
+pub fn Decoder::step(Self, BytesView, MutArrayView[Byte], end~ : Bool) -> @codec_bytes.Status raise @codec.CodecError
+pub fn Decoder::step_into(Self, BytesView, FixedArray[Byte], end~ : Bool) -> @codec_bytes.Status raise @codec.CodecError
+pub impl @codec_bytes.Decode for Decoder
+
+pub(all) struct Header {
+  text : Bool
+  mtime : UInt
+  xfl : Byte
+  os : Byte
+  extra : Bytes?
+  name : Bytes?
+  comment : Bytes?
+} derive(Eq, @debug.Debug)
+pub fn Header::equal(Self, Self) -> Bool
+pub fn Header::not_equal(Self, Self) -> Bool
+pub fn Header::to_repr(Self) -> @debug.Repr
+
+// Type aliases
+pub using @codec_bytes {type Status}
+
+// Traits

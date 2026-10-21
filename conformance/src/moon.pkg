@@ -5,6 +5,9 @@ import {
   "gaato/codec_harness",
   "gaato/zstd",
   "gaato/brotli",
+  "gaato/deflate",
+  "gaato/deflate/zlib",
+  "gaato/deflate/gzip",
   "moonbitlang/core/encoding/base64",
 } for "test"
 

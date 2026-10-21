@@ -12,7 +12,7 @@ and one way of testing.
 consumers     command-line tools, HTTP clients, applications
                 │ depend only on a kind's contract and gaato/codec's errors
 ──────────────┼───────────────────────────────────────────────────────────
-formats       gaato/zstd  gaato/brotli  │  image formats  │  audio formats
+formats       zstd  brotli  deflate     │  image formats  │  audio formats
                 one module per format; a format may embed another codec
 ──────────────┼───────────────────────────────────────────────────────────
 contracts     gaato/codec_bytes          │  an image contract │ an audio contract
@@ -24,9 +24,11 @@ building      bit readers and writers, checksums, prefix-code tables,
 blocks        entropy coders: small, mostly pure functions
 ```
 
-Only the byte-stream contract and the two compression formats exist today. The
-image and audio rows show where such codecs would go; nothing in the layers
-below has to change for them.
+Only the byte-stream contract and the compression formats exist today:
+zstd, brotli, and DEFLATE with its two containers, zlib and gzip, in one
+module of three packages (`gaato/deflate`, `gaato/deflate/zlib`,
+`gaato/deflate/gzip`). The image and audio rows show where such codecs would
+go; nothing in the layers below has to change for them.
 
 **Vocabulary.** `gaato/codec` holds what every kind of codec reports in the
 same terms: the error kinds, and the limits a stream can exceed, in bytes. A
@@ -91,7 +93,9 @@ module of the workspace and never published:
 - memory stays within the limits, checked after every step;
 - corrupted input never crashes, and the kinds of error it causes are
   recorded;
-- output matches the reference implementations (zstd, google/brotli).
+- output matches the reference implementations (zstd, google/brotli, zlib),
+  and so do the refusals of crafted and corrupted streams, where the
+  reference can be asked (zlib, through Node).
 
 Each module also keeps two ledgers that scripts enforce: RESOURCE_BOUNDS.md
 names the tests that hold every bound, and TEST_COVERAGE.md explains every

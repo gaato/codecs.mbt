@@ -1,0 +1,13 @@
+// What the tests of the three packages share: the shapes of the generated
+// vectors (scripts/gen_deflate_vectors.mbtx), the corruptions, a driver for
+// any gaato/codec_bytes decoder, and SHA-256 to name expected outputs.
+// Test-only: no library package imports it.
+
+import {
+  "gaato/codec",
+  "gaato/codec_bytes",
+  "moonbitlang/core/encoding/base64",
+  "moonbitlang/core/string",
+}
+
+supported_targets = "js + native + wasm + wasm-gc"

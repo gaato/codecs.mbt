@@ -1,0 +1,2061 @@
+///|
+// Generates the test vectors of gaato/deflate and its zlib and gzip packages:
+// deflate/src/vectors_wbtest.mbt, deflate/src/zlib/vectors_wbtest.mbt and
+// deflate/src/gzip/vectors_wbtest.mbt.
+//
+// Each file holds, for its format:
+// - `vectors`: streams and the length and SHA-256 of what they decode to,
+//   made from deterministic inputs by the reference encoders: Node's zlib
+//   (zlib C), for raw DEFLATE at every level, strategy, window and memory
+//   level, with sync and full flushes, and for the containers at the levels
+//   and windows their headers record; and the gzip command, at levels 1 to 9,
+//   with and without a file name, members in a row. gzip headers with FEXTRA,
+//   FNAME, FCOMMENT, FHCRC and FTEXT are assembled here around Node's raw
+//   DEFLATE.
+// - `dictionary_vectors` (raw DEFLATE and zlib): streams compressed with a
+//   preset dictionary, and the dictionary.
+// - `flushed_vector` (zlib): a stream as Discord's zlib-stream sends it, one
+//   context for many messages, each ending in a sync flush, never finished.
+// - `crafted`: streams built here bit by bit, one per check of RFC 1950, 1951
+//   and 1952 (every reserved value, every malformed code, every field cut
+//   short, every checksum wrong), with what zlib makes of each.
+// - `oracle`: seeded corruptions of the vectors of at most 40,000 bytes, as
+//   the source's name and the edit, with what zlib makes of each (and, where
+//   it asks for more input, of the corruption followed by zeros): the
+//   differential fuzz.
+//
+// What zlib makes of a stream is Node's answer (zlib.inflateRawSync,
+// inflateSync, gunzipSync): `ok <consumed> <sha256>`, or `err <kind>` with
+// zlib's error mapped to gaato/codec's kinds. The tests hold the decoders to
+// it; where this repository decides otherwise on purpose (what may follow a
+// stream or a member, see CONTRACT.md), the tests say how the answers relate.
+//
+// Usage, from the repository root (needs node, the gzip command and moonfmt,
+// which comes with moon):
+//   moon run scripts/gen_deflate_vectors.mbtx [--check]
+// --check regenerates the inputs and the crafted streams and fails unless the
+// files hold them: every stored vector must decompress, with Node's zlib (and
+// `gzip -d` for gzip), to its regenerated input, zlib must still answer what
+// the files record for every crafted stream and corruption, and the rest of
+// each file must be what this script writes. It does not compress again,
+// because another version of zlib may produce other, equally valid, bytes.
+
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/core/encoding/base64",
+  "moonbitlang/core/env",
+  "moonbitlang/x@0.5.6/crypto",
+}
+
+///|
+let formats : Array[String] = ["deflate", "zlib", "gzip"]
+
+///|
+/// Compresses each line of stdin, `<format> <options as JSON> <base64>`, and
+/// prints the base64 of the stream. Options are zlib's (level, strategy,
+/// windowBits, memLevel, dictionary as base64), and `flushAt`: offsets at
+/// which to flush (`flush`: "sync" or "full"), with `finish: false` for a
+/// stream that is never finished. Flushes go through the streaming API; the
+/// rest through the one-shot functions, as an application compresses a
+/// buffer.
+let node_compress : String =
+  #|const zlib = require("node:zlib");
+  #|const C = zlib.constants;
+  #|const lines = require("node:fs").readFileSync(0, "latin1").split("\n");
+  #|lines.pop();
+  #|const make = { raw: zlib.createDeflateRaw, zlib: zlib.createDeflate, gzip: zlib.createGzip };
+  #|const once = { raw: zlib.deflateRawSync, zlib: zlib.deflateSync, gzip: zlib.gzipSync };
+  #|const tick = () => new Promise(setImmediate);
+  #|(async () => {
+  #|  for (const line of lines) {
+  #|    const [format, json, b64] = line.split(" ");
+  #|    const options = JSON.parse(json);
+  #|    if (options.dictionary !== undefined) options.dictionary = Buffer.from(options.dictionary, "base64");
+  #|    const input = Buffer.from(b64, "base64");
+  #|    if (options.flushAt === undefined) {
+  #|      console.log(once[format](input, options).toString("base64"));
+  #|      continue;
+  #|    }
+  #|    const { flushAt, flush, finish, ...rest } = options;
+  #|    const kind = flush === "full" ? C.Z_FULL_FLUSH : C.Z_SYNC_FLUSH;
+  #|    const stream = make[format](rest);
+  #|    const chunks = [];
+  #|    stream.on("data", chunk => chunks.push(chunk));
+  #|    let pos = 0;
+  #|    for (const at of flushAt) {
+  #|      stream.write(input.subarray(pos, at));
+  #|      await new Promise(done => stream.flush(kind, done));
+  #|      await tick();
+  #|      pos = at;
+  #|    }
+  #|    if (finish === false) {
+  #|      await tick();
+  #|      stream.close();
+  #|    } else {
+  #|      const ended = new Promise(done => stream.on("end", done));
+  #|      stream.end(input.subarray(pos));
+  #|      await ended;
+  #|    }
+  #|    console.log(Buffer.concat(chunks).toString("base64"));
+  #|  }
+  #|})();
+
+///|
+/// Decodes each line of stdin, `<format> <base64> [<dictionary as base64>]`,
+/// and prints what zlib makes of it: `ok <consumed> <sha256>`, or `err` and
+/// the gaato/codec kind of zlib's error. `consumed` is how much of the input
+/// zlib read: it stops after a raw or zlib stream, and after a gzip member
+/// followed by a zero byte. With `sync` after the format, the input is not
+/// the end of the stream (finishFlush Z_SYNC_FLUSH), as for Discord's.
+let node_decode : String =
+  #|const zlib = require("node:zlib");
+  #|const crypto = require("node:crypto");
+  #|const lines = require("node:fs").readFileSync(0, "latin1").split("\n");
+  #|lines.pop();
+  #|const decode = { raw: zlib.inflateRawSync, zlib: zlib.inflateSync, gzip: zlib.gunzipSync };
+  #|const kind = err => {
+  #|  if (err.code === "Z_BUF_ERROR") return "Truncated";
+  #|  if (err.code === "Z_NEED_DICT") return err.message === "Bad dictionary" ? "DictionaryMismatch" : "DictionaryRequired";
+  #|  if (err.code !== "Z_DATA_ERROR") return `unexpected ${err.code}: ${err.message}`;
+  #|  return /^(incorrect (data|length) check|header crc mismatch)$/.test(err.message) ? "ChecksumMismatch" : "Corrupt";
+  #|};
+  #|for (const line of lines) {
+  #|  const [format, b64, dictionary] = line.split(" ");
+  #|  const [name, mode] = format.split(":");
+  #|  const options = { info: true };
+  #|  if (mode === "sync") options.finishFlush = zlib.constants.Z_SYNC_FLUSH;
+  #|  if (dictionary !== undefined && dictionary !== "") options.dictionary = Buffer.from(dictionary, "base64");
+  #|  try {
+  #|    const { buffer, engine } = decode[name](Buffer.from(b64, "base64"), options);
+  #|    const digest = crypto.createHash("sha256").update(buffer).digest("hex");
+  #|    console.log(`ok ${engine.bytesWritten} ${digest}`);
+  #|  } catch (err) {
+  #|    console.log(`err ${kind(err)}`);
+  #|  }
+  #|}
+
+///|
+let words : Array[String] = [
+  "the", "of", "and", "to", "in", "is", "was", "that", "for", "it", "with", "as",
+  "his", "on", "be", "at", "by", "had", "are", "but", "from", "or", "have", "an",
+  "they", "which", "one", "you", "were", "all", "her", "she", "there", "would", "their",
+  "we", "him", "been", "has", "when", "who", "will", "no", "more", "if", "out", "so",
+  "said", "what", "up", "its", "about", "than", "into", "them", "can", "only", "other",
+  "time", "new", "some", "could", "these", "two", "may", "first", "then", "do", "any",
+  "like", "my", "now", "over", "such", "our", "man", "me", "deflate", "inflate",
+  "window", "block", "literal", "length", "distance", "huffman", "stored", "member",
+  "header", "trailer", "checksum",
+]
+
+///|
+/// A seeded 64-bit LCG (Knuth's MMIX constants): the same numbers on every
+/// platform and version. Draws take the high bits, whose period is longest.
+struct Rng {
+  mut state : UInt64
+}
+
+///|
+fn Rng::next(self : Rng) -> UInt32 {
+  self.state = self.state * 6364136223846793005UL + 1442695040888963407UL
+  (self.state >> 32).to_uint()
+}
+
+///|
+fn Rng::below(self : Rng, bound : Int32) -> Int32 {
+  (self.next() >> 1).reinterpret_as_int() % bound
+}
+
+///|
+fn Rng::byte(self : Rng) -> Byte {
+  (self.next() >> 24).to_byte()
+}
+
+///|
+/// Sentences of 4 to 17 words, capitalised, each ending in a punctuation mark.
+fn text(rng : Rng, n : Int32) -> Bytes {
+  let out = Buffer()
+  while out.length() < n {
+    for i in 0..<(4 + rng.below(14)) {
+      let word = words[rng.below(words.length())]
+      if i > 0 {
+        out.write_byte(b' ')
+      }
+      for j in 0..<word.length() {
+        let lower = if i == 0 && j == 0 { 32 } else { 0 }
+        out.write_byte((word.code_unit_at(j).to_int() - lower).to_byte())
+      }
+    }
+    for c in [". ", ", ", ".\n", "; "][rng.below(4)] {
+      out.write_byte(c.to_int().to_byte())
+    }
+  }
+  out.to_bytes()[:n].to_owned()
+}
+
+///|
+fn noise(rng : Rng, n : Int32) -> Bytes {
+  Bytes::makei(n, _ => rng.byte())
+}
+
+///|
+fn concat(parts : Array[Bytes]) -> Bytes {
+  let out = Buffer()
+  for part in parts {
+    out.write_bytes(part)
+  }
+  out.to_bytes()
+}
+
+///|
+fn ascii(s : String) -> Bytes {
+  Bytes::makei(s.length(), i => s.code_unit_at(i).to_int().to_byte())
+}
+
+///|
+fn hex_digest(data : BytesView) -> String {
+  @crypto.bytes_to_hex_string(@crypto.sha256(data))
+}
+
+// ---- checksums, for headers and trailers assembled here ----
+
+///|
+let crc_table : FixedArray[UInt32] = FixedArray::makei(256, n => {
+  let mut c = n.reinterpret_as_uint()
+  for _ in 0..<8 {
+    c = if (c & 1) != 0 { 0xEDB88320U ^ (c >> 1) } else { c >> 1 }
+  }
+  c
+})
+
+///|
+/// The CRC-32 of RFC 1952 section 8.
+fn crc32(data : BytesView) -> UInt32 {
+  let mut c = 0xFFFFFFFFU
+  for b in data {
+    c = crc_table[((c ^ b.to_uint()) & 0xFF).reinterpret_as_int()] ^ (c >> 8)
+  }
+  c ^ 0xFFFFFFFFU
+}
+
+///|
+/// The Adler-32 of RFC 1950 section 9.
+fn adler32(data : BytesView) -> UInt32 {
+  let mut a = 1U
+  let mut b = 0U
+  for byte in data {
+    a = (a + byte.to_uint()) % 65521
+    b = (b + a) % 65521
+  }
+  (b << 16) | a
+}
+
+///|
+fn le32(value : UInt32) -> Bytes {
+  Bytes::makei(4, i => (value >> (8 * i)).to_byte())
+}
+
+///|
+fn be32(value : UInt32) -> Bytes {
+  Bytes::makei(4, i => (value >> (24 - 8 * i)).to_byte())
+}
+
+// ---- the reference encoders ----
+
+///|
+/// A stream to make: the format Node compresses to (`raw`, `zlib`, `gzip`),
+/// zlib's options as a JSON object, and the input; or a gzip command line.
+enum Job {
+  Node(String, String, Bytes)
+  Gzip(Array[String], Bytes, String?)
+}
+
+///|
+/// Runs the jobs, Node's in one process, and returns their streams in order.
+async fn compress(jobs : Array[Job]) -> Array[Bytes] {
+  let lines = StringBuilder()
+  for job in jobs {
+    if job is Node(format, options, input) {
+      lines.write_string("\{format} \{options} \{@base64.encode(input)}\n")
+    }
+  }
+  let node = @shell.Cmd(
+    "node",
+    ["-e", node_compress],
+    stdin=Text(lines.to_string()),
+  ).output(max_output_bytes=1 << 28)
+  if node.exit_code() != 0 {
+    fail("node: \{node.stderr()}")
+  }
+  let streams = node.stdout().split("\n").collect()
+  let out = []
+  let mut next = 0
+  for job in jobs {
+    match job {
+      Node(_, _, _) => {
+        out.push(@base64.decode(streams[next]))
+        next += 1
+      }
+      Gzip(args, input, name) => out.push(gzip(args, input, name))
+    }
+  }
+  out
+}
+
+///|
+/// The gzip command's stream of `input`: from stdin (no name, no time), or
+/// from a file called `name` with a fixed modification time, so that the
+/// header holds both.
+async fn gzip(args : Array[String], input : Bytes, name : String?) -> Bytes {
+  match name {
+    None => {
+      let output = @shell.Cmd("gzip", ["-c", ..args], stdin=Binary(input)).output(
+        max_output_bytes=1 << 26,
+      )
+      output.check()
+      output.stdout_bytes()
+    }
+    Some(name) => {
+      let dir = "_build/gen_deflate_vectors"
+      @fs.mkdir(dir, recursive=true, allow_exist=true)
+      let path = "\{dir}/\{name}"
+      @fs.write_file(path, input)
+      @shell.Cmd("touch", ["-d", "@1700000000", path]).output().check()
+      let output = @shell.Cmd("gzip", ["-c", "-N", ..args, path]).output(
+        max_output_bytes=1 << 26,
+      )
+      output.check()
+      @fs.remove(path)
+      output.stdout_bytes()
+    }
+  }
+}
+
+///|
+/// What zlib makes of each stream: `(format, stream, dictionary)` →
+/// `ok <consumed> <sha256>` or `err <kind>`.
+async fn reference(streams : Array[(String, Bytes, Bytes?)]) -> Array[String] {
+  let lines = StringBuilder()
+  for s in streams {
+    let (format, stream, dictionary) = s
+    let dict = match dictionary {
+      Some(d) => " \{@base64.encode(d)}"
+      None => ""
+    }
+    lines.write_string("\{format} \{@base64.encode(stream)}\{dict}\n")
+  }
+  let node = @shell.Cmd(
+    "node",
+    ["-e", node_decode],
+    stdin=Text(lines.to_string()),
+  ).output(max_output_bytes=1 << 28)
+  if node.exit_code() != 0 {
+    fail("node: \{node.stderr()}")
+  }
+  let answers = node.stdout().split("\n").map(l => l.to_owned()).collect()
+  answers.pop() |> ignore
+  if answers.length() != streams.length() {
+    fail("node answered \{answers.length()} of \{streams.length()} streams")
+  }
+  for answer in answers {
+    if answer.contains("unexpected") {
+      fail("node: \{answer}")
+    }
+  }
+  answers
+}
+
+// ---- the vectors ----
+
+///|
+/// A vector to make: its name, the job that makes it (or the pieces of a
+/// stream assembled here around jobs), and what it decodes to.
+struct Spec {
+  name : String
+  parts : Array[Part]
+  original : Bytes
+  dictionary : Bytes?
+}
+
+///|
+/// A piece of a stream: a job's output, or bytes assembled here. A gzip
+/// member assembled here is a header, a job's raw DEFLATE and a trailer
+/// computed from the original.
+enum Part {
+  Made(Job)
+  Fixed(Bytes)
+}
+
+///|
+fn node_job(format : String, input : Bytes, options : String) -> Part {
+  Made(Node(format, "{\{options}}", input))
+}
+
+///|
+fn one(name : String, part : Part, original : Bytes) -> Spec {
+  { name, parts: [part], original, dictionary: None, }
+}
+
+///|
+/// The inputs shared by every format, drawn once from one generator.
+struct Inputs {
+  prose : Bytes
+  random : Bytes
+  zeros : Bytes
+  runs : Bytes
+  mixed : Bytes
+  far : Bytes
+  small_dictionary : Bytes
+  large_dictionary : Bytes
+  messages : Array[Bytes]
+}
+
+///|
+fn inputs() -> Inputs {
+  let rng = { state: 1951, }
+  let prose = text(rng, 300_000)
+  let random = noise(rng, 12_000)
+  let runs = Buffer()
+  for _ in 0..<2000 {
+    let byte = rng.byte()
+    for _ in 0..<(1 + rng.below(299)) {
+      runs.write_byte(byte)
+    }
+  }
+  let mixed = Buffer()
+  for _ in 0..<40 {
+    match rng.below(3) {
+      0 => mixed.write_bytes(text(rng, 2000))
+      1 => mixed.write_bytes(noise(rng, 500))
+      _ => mixed.write_bytes(Bytes::make(1500, rng.byte()))
+    }
+  }
+  // A block of noise repeated 32,000 bytes later: a distance near the
+  // largest, 32,768.
+  let block = noise(rng, 600)
+  let far = concat([block, text(rng, 32_000 - 600), block, text(rng, 2000)])
+  let small_dictionary = text(rng, 100)
+  let large_dictionary = concat([noise(rng, 1000), text(rng, 32_000)])
+  let messages = []
+  for i in 0..<24 {
+    let body = text(rng, 20 + rng.below(400))
+    messages.push(
+      concat([
+        ascii(
+          "{\"op\":0,\"s\":\{i},\"t\":\"MESSAGE_CREATE\",\"d\":{\"content\":\"",
+        ),
+        body,
+        ascii("\"}}"),
+      ]),
+    )
+  }
+  {
+    prose,
+    random,
+    zeros: Bytes::make(1 << 20, b'\x00'),
+    runs: runs.to_bytes(),
+    mixed: mixed.to_bytes(),
+    far,
+    small_dictionary,
+    large_dictionary,
+    messages,
+  }
+}
+
+///|
+fn prefix(data : Bytes, n : Int32) -> Bytes {
+  data[:n].to_owned()
+}
+
+///|
+/// The vectors made by Node, as `format` makes them. Raw DEFLATE has them
+/// all (`all`): every level, strategy, window and memory level, the inputs
+/// that reach each kind of block and distance. The containers have those that
+/// differ in their headers and trailers, and the small ones.
+fn node_vectors(format : String, inp : Inputs, all~ : Bool) -> Array[Spec] {
+  let out = []
+  let add = (name : String, input : Bytes, options : String) => {
+    out.push(one(name, node_job(format, input, options), input))
+  }
+  add("empty", b"", "")
+  add("one_byte", b"x", "")
+  let text20k = prefix(inp.prose, 20_000)
+  // Level 0 writes stored blocks, of at most 65,535 bytes: two of them.
+  if all {
+    add("text_level0", prefix(inp.prose, 70_000), "\"level\":0")
+  }
+  for level in [1, 6, 9] {
+    add("text_level\{level}", text20k, "\"level\":\{level}")
+  }
+  // Small streams, the sources of most of the seeded corruptions.
+  let text1k = prefix(inp.prose[100_000:].to_owned(), 1500)
+  for level in [0, 1, 6, 9] {
+    add("small_level\{level}", text1k, "\"level\":\{level}")
+  }
+  add("small_fixed", text1k, "\"strategy\":4")
+  add("small_huffman_only", text1k, "\"strategy\":2")
+  add("small_mixed", prefix(inp.mixed, 2500), "")
+  add("small_runs", prefix(inp.runs, 3000), "\"level\":9")
+  add("small_sync_flushed", text1k, "\"flushAt\":[1,2,700]")
+  add("small_full_flushed", text1k, "\"flushAt\":[700,1400],\"flush\":\"full\"")
+  add("random", inp.random, "")
+  // zlib's header names the window (CINFO); Node refuses a window of 8 bits
+  // for gzip, which does not name it.
+  if format != "gzip" {
+    for bits in 8..<=15 {
+      add(
+        "text_window\{bits}",
+        prefix(inp.prose, 10_000),
+        "\"windowBits\":\{bits}",
+      )
+    }
+  }
+  if all {
+    for
+      strategy in [
+        ("filtered", 1),
+        ("huffman_only", 2),
+        ("rle", 3),
+        ("fixed", 4),
+      ] {
+      let (name, value) = strategy
+      add("text_\{name}", text20k, "\"strategy\":\{value}")
+    }
+    add("text_memlevel1", text20k, "\"memLevel\":1")
+    add("text_memlevel9", text20k, "\"memLevel\":9,\"level\":9")
+    add("zeros", inp.zeros, "\"level\":1")
+    add("runs", inp.runs, "\"level\":9")
+    add("mixed", inp.mixed, "")
+    add("far", inp.far, "\"level\":9")
+  }
+  // Sync flushes end a block and add an empty stored block; full flushes also
+  // forget the window.
+  let mixed = inp.mixed
+  let cuts = [1, 2, 5000, 5001, 20000, mixed.length() - 1]
+    .map(n => n.to_string())
+    .join(",")
+  add("mixed_sync_flushed", mixed, "\"flushAt\":[\{cuts}]")
+  if all {
+    add("mixed_full_flushed", mixed, "\"flushAt\":[\{cuts}],\"flush\":\"full\"")
+    // The window wraps three times.
+    add("text_100k", prefix(inp.prose, 100_000), "\"level\":9")
+  }
+  out
+}
+
+///|
+fn dictionary_vectors(format : String, inp : Inputs) -> Array[Spec] {
+  let out = []
+  let input = prefix(inp.prose[50_000:].to_owned(), 20_000)
+  for d in [("small", inp.small_dictionary), ("large", inp.large_dictionary)] {
+    let (name, dictionary) = d
+    out.push({
+      name: "dictionary_\{name}",
+      parts: [
+        node_job(
+          format,
+          input,
+          "\"dictionary\":\"\{@base64.encode(dictionary)}\"",
+        ),
+      ],
+      original: input,
+      dictionary: Some(dictionary),
+    })
+  }
+  out
+}
+
+///|
+/// A gzip header with the given flags and fields, its CRC-16 added when
+/// `hcrc` is set.
+fn gzip_header(
+  text~ : Bool = false,
+  extra? : Bytes,
+  name? : Bytes,
+  comment? : Bytes,
+  hcrc~ : Bool = false,
+  mtime~ : UInt32 = 0,
+  xfl~ : Byte = b'\x00',
+  os~ : Byte = b'\xff',
+  flags_extra~ : Int32 = 0,
+) -> Bytes {
+  let mut flg = flags_extra
+  if text {
+    flg = flg | 1
+  }
+  if hcrc {
+    flg = flg | 2
+  }
+  if extra is Some(_) {
+    flg = flg | 4
+  }
+  if name is Some(_) {
+    flg = flg | 8
+  }
+  if comment is Some(_) {
+    flg = flg | 16
+  }
+  let out = Buffer()
+  out.write_bytes(b"\x1f\x8b\x08")
+  out.write_byte(flg.to_byte())
+  out.write_bytes(le32(mtime))
+  out.write_byte(xfl)
+  out.write_byte(os)
+  if extra is Some(e) {
+    out.write_byte(e.length().to_byte())
+    out.write_byte((e.length() >> 8).to_byte())
+    out.write_bytes(e)
+  }
+  if name is Some(n) {
+    out.write_bytes(n)
+    out.write_byte(b'\x00')
+  }
+  if comment is Some(c) {
+    out.write_bytes(c)
+    out.write_byte(b'\x00')
+  }
+  if hcrc {
+    let crc = crc32(out.to_bytes())
+    out.write_byte(crc.to_byte())
+    out.write_byte((crc >> 8).to_byte())
+  }
+  out.to_bytes()
+}
+
+///|
+fn gzip_trailer(original : Bytes) -> Bytes {
+  concat([le32(crc32(original)), le32(original.length().reinterpret_as_uint())])
+}
+
+///|
+/// A gzip member assembled here: `header`, Node's raw DEFLATE of `input`,
+/// and the trailer.
+fn gzip_member(header : Bytes, input : Bytes) -> Array[Part] {
+  [Fixed(header), node_job("raw", input, ""), Fixed(gzip_trailer(input))]
+}
+
+///|
+fn gzip_vectors(inp : Inputs) -> Array[Spec] {
+  let out = node_vectors("gzip", inp, all=false)
+  let text10k = prefix(inp.prose, 10_000)
+  for level in 1..<=9 {
+    out.push(
+      one(
+        "gzip_level\{level}",
+        Made(Gzip(["-\{level}", "-n"], text10k, None)),
+        text10k,
+      ),
+    )
+  }
+  out.push(
+    one("gzip_named", Made(Gzip(["-6"], text10k, Some("prose.txt"))), text10k),
+  )
+  out.push(one("gzip_empty", Made(Gzip(["-n"], b"", None)), b""))
+  let a = prefix(inp.prose, 5000)
+  let b = inp.prose[5000:9000].to_owned()
+  out.push({
+    name: "gzip_two_members",
+    parts: [Made(Gzip(["-n"], a, None)), Made(Gzip(["-9", "-n"], b, None))],
+    original: concat([a, b]),
+    dictionary: None,
+  })
+  out.push({
+    name: "gzip_empty_member_between",
+    parts: [
+      Made(Gzip(["-n"], a, None)),
+      Made(Gzip(["-n"], b"", None)),
+      Made(Gzip(["-n"], b, None)),
+    ],
+    original: concat([a, b]),
+    dictionary: None,
+  })
+  let small = prefix(inp.prose, 3000)
+  let headers = [
+    ("header_text", gzip_header(text=true)),
+    ("header_extra", gzip_header(extra=ascii("AB\u{04}\u{00}data"))),
+    ("header_empty_extra", gzip_header(extra=b"")),
+    ("header_name", gzip_header(name=ascii("prose.txt"))),
+    ("header_latin1_name", gzip_header(name=b"caf\xe9.txt")),
+    ("header_comment", gzip_header(comment=ascii("a comment"))),
+    ("header_hcrc", gzip_header(hcrc=true)),
+    (
+      "header_all",
+      gzip_header(
+        text=true,
+        extra=ascii("xy\u{02}\u{00}zz"),
+        name=ascii("a.txt"),
+        comment=ascii("all fields"),
+        hcrc=true,
+        mtime=1700000000,
+        xfl=b'\x02',
+        os=b'\x03',
+      ),
+    ),
+  ]
+  for h in headers {
+    let (name, header) = h
+    out.push({
+      name,
+      parts: gzip_member(header, small),
+      original: small,
+      dictionary: None,
+    })
+  }
+  // A large FEXTRA (60,000 bytes, within the default header limit).
+  out.push({
+    name: "header_large_extra",
+    parts: gzip_member(gzip_header(extra=Bytes::make(60_000, b'e')), small),
+    original: small,
+    dictionary: None,
+  })
+  out
+}
+
+///|
+fn specs(format : String, inp : Inputs) -> Array[Spec] {
+  match format {
+    "deflate" => node_vectors("raw", inp, all=true)
+    "zlib" => node_vectors("zlib", inp, all=false)
+    _ => gzip_vectors(inp)
+  }
+}
+
+///|
+/// The format's name for Node.
+fn node_format(format : String) -> String {
+  match format {
+    "deflate" => "raw"
+    f => f
+  }
+}
+
+// ---- crafted streams ----
+
+///|
+/// Bits written LSB first, as DEFLATE packs them.
+struct Bits {
+  out : Buffer
+  mut acc : Int32
+  mut count : Int32
+}
+
+///|
+fn Bits::new() -> Bits {
+  { out: Buffer(), acc: 0, count: 0, }
+}
+
+///|
+/// Writes the low `n` bits of `value`, least significant first.
+fn Bits::put(self : Bits, value : Int32, n : Int32) -> Unit {
+  for i in 0..<n {
+    self.acc = self.acc | (((value >> i) & 1) << self.count)
+    self.count += 1
+    if self.count == 8 {
+      self.out.write_byte(self.acc.to_byte())
+      self.acc = 0
+      self.count = 0
+    }
+  }
+}
+
+///|
+/// Writes a Huffman code, most significant bit first (RFC 1951 3.1.1).
+fn Bits::code(self : Bits, code : Int32, len : Int32) -> Unit {
+  for i = len - 1; i >= 0; i = i - 1 {
+    self.put((code >> i) & 1, 1)
+  }
+}
+
+///|
+/// Pads to a byte with `fill` bits.
+fn Bits::align(self : Bits, fill~ : Int32 = 0) -> Unit {
+  while self.count != 0 {
+    self.put(fill, 1)
+  }
+}
+
+///|
+fn Bits::byte(self : Bits, b : Int32) -> Unit {
+  self.put(b, 8)
+}
+
+///|
+fn Bits::bytes(self : Bits) -> Bytes {
+  self.align()
+  self.out.to_bytes()
+}
+
+///|
+/// The canonical codes of `lengths` (RFC 1951 3.2.2). Over-subscribed
+/// lengths get codes too, which a decoder must refuse anyway.
+fn canonical(lengths : Array[Int32]) -> Array[Int32] {
+  let count = Array::make(17, 0)
+  for l in lengths {
+    if l > 0 {
+      count[l] += 1
+    }
+  }
+  let next = Array::make(17, 0)
+  let mut code = 0
+  for bits in 1..<=16 {
+    code = (code + count[bits - 1]) << 1
+    next[bits] = code
+  }
+  lengths.map(l => {
+    if l == 0 {
+      0
+    } else {
+      let c = next[l]
+      next[l] += 1
+      c
+    }
+  })
+}
+
+///|
+let length_base : Array[Int32] = [
+  3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83,
+  99, 115, 131, 163, 195, 227, 258,
+]
+
+///|
+let length_extra : Array[Int32] = [
+  0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5,
+  5, 0,
+]
+
+///|
+let distance_base : Array[Int32] = [
+  1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769,
+  1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577,
+]
+
+///|
+let distance_extra : Array[Int32] = [
+  0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11,
+  12, 12, 13, 13,
+]
+
+///|
+/// The code that covers `value` in `base`: the last whose base is at most it.
+fn code_for(base : Array[Int32], value : Int32) -> Int32 {
+  let mut i = base.length() - 1
+  while base[i] > value {
+    i -= 1
+  }
+  i
+}
+
+///|
+let fixed_lengths : Array[Int32] = Array::makei(288, s => {
+  if s < 144 {
+    8
+  } else if s < 256 {
+    9
+  } else if s < 280 {
+    7
+  } else {
+    8
+  }
+})
+
+///|
+let fixed_codes : Array[Int32] = canonical(fixed_lengths)
+
+///|
+/// A symbol of a block's body.
+enum Sym {
+  Lit(Int32)
+  Match(Int32, Int32)
+  Eob
+  /// A literal/length symbol written as it is (286, 287), with no extra bits.
+  RawSymbol(Int32)
+  /// A distance code written as it is, after a length of 3.
+  RawDistance(Int32)
+}
+
+///|
+/// Writes `syms` with literal/length codes `lit` and distance codes `dist`
+/// (None: the fixed 5-bit distance codes).
+fn Bits::body(
+  self : Bits,
+  syms : Array[Sym],
+  lit_lengths : Array[Int32],
+  dist_lengths : Array[Int32]?,
+) -> Unit {
+  let lit = canonical(lit_lengths)
+  let dist = dist_lengths.map(canonical)
+  let write_distance = (d : Int32) => {
+    match (dist, dist_lengths) {
+      (Some(codes), Some(lengths)) => self.code(codes[d], lengths[d])
+      _ => self.code(d, 5)
+    }
+  }
+  for sym in syms {
+    match sym {
+      Lit(b) => self.code(lit[b], lit_lengths[b])
+      Eob => self.code(lit[256], lit_lengths[256])
+      RawSymbol(s) => self.code(lit[s], lit_lengths[s])
+      Match(length, distance) => {
+        let l = code_for(length_base, length)
+        self.code(lit[257 + l], lit_lengths[257 + l])
+        self.put(length - length_base[l], length_extra[l])
+        let d = code_for(distance_base, distance)
+        write_distance(d)
+        self.put(distance - distance_base[d], distance_extra[d])
+      }
+      RawDistance(d) => {
+        self.code(lit[257], lit_lengths[257])
+        write_distance(d)
+      }
+    }
+  }
+}
+
+///|
+fn Bits::fixed(self : Bits, final_ : Bool, syms : Array[Sym]) -> Unit {
+  self.put(if final_ { 1 } else { 0 }, 1)
+  self.put(1, 2)
+  self.body(syms, fixed_lengths, None)
+}
+
+///|
+fn Bits::stored(
+  self : Bits,
+  final_ : Bool,
+  data : Bytes,
+  nlen? : Int32,
+) -> Unit {
+  self.put(if final_ { 1 } else { 0 }, 1)
+  self.put(0, 2)
+  self.align()
+  let len = data.length()
+  self.put(len, 16)
+  self.put(nlen.unwrap_or(len ^ 0xFFFF), 16)
+  for b in data {
+    self.byte(b.to_int())
+  }
+}
+
+///|
+let code_order : Array[Int32] = [
+  16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15,
+]
+
+///|
+/// A code-length code for symbols 0 to 15 (5 bits each) and the repeats 16,
+/// 17 and 18 (2, 3 and 3 bits): complete.
+let standard_cl : Array[Int32] = Array::makei(19, s => {
+  match s {
+    16 => 2
+    17 | 18 => 3
+    _ => 5
+  }
+})
+
+///|
+/// The code-length symbols that write `lengths` one by one.
+fn as_ops(lengths : Array[Int32]) -> Array[(Int32, Int32)] {
+  lengths.map(l => (l, 0))
+}
+
+///|
+/// A dynamic block header: `hlit` literal/length and `hdist` distance codes
+/// (counts, written as given), the code-length code `cl` (19 lengths by
+/// symbol) and the code-length symbols `ops` with their extra bits.
+fn Bits::dynamic_header(
+  self : Bits,
+  final_ : Bool,
+  hlit : Int32,
+  hdist : Int32,
+  cl : Array[Int32],
+  ops : Array[(Int32, Int32)],
+) -> Unit {
+  self.put(if final_ { 1 } else { 0 }, 1)
+  self.put(2, 2)
+  self.put(hlit - 257, 5)
+  self.put(hdist - 1, 5)
+  let mut hclen = 4
+  for i, s in code_order {
+    if cl[s] != 0 {
+      hclen = hclen.max(i + 1)
+    }
+  }
+  self.put(hclen - 4, 4)
+  for i in 0..<hclen {
+    self.put(cl[code_order[i]], 3)
+  }
+  let codes = canonical(cl)
+  for op in ops {
+    let (sym, extra) = op
+    self.code(codes[sym], cl[sym])
+    match sym {
+      16 => self.put(extra, 2)
+      17 => self.put(extra, 3)
+      18 => self.put(extra, 7)
+      _ => ()
+    }
+  }
+}
+
+///|
+/// A dynamic block with the given code lengths and body, its header written
+/// with the standard code-length code and no repeats.
+fn Bits::dynamic(
+  self : Bits,
+  final_ : Bool,
+  lit : Array[Int32],
+  dist : Array[Int32],
+  syms : Array[Sym],
+) -> Unit {
+  self.dynamic_header(
+    final_,
+    lit.length(),
+    dist.length(),
+    standard_cl,
+    as_ops([..lit, ..dist]),
+  )
+  self.body(syms, lit, Some(dist))
+}
+
+///|
+/// Literal/length code lengths: `lengths` for the listed symbols, 0 for the
+/// rest of `n` symbols.
+fn lengths(n : Int32, set : Array[(Int32, Int32)]) -> Array[Int32] {
+  let out = Array::make(n, 0)
+  for s in set {
+    let (symbol, length) = s
+    out[symbol] = length
+  }
+  out
+}
+
+///|
+/// A complete literal/length code over all 286 symbols: bytes 0 to 225 in 8
+/// bits (452/512), bytes 226 to 255 and symbols 256 to 285 in 9 bits (60/512).
+fn byte_code() -> Array[Int32] {
+  Array::makei(286, s => if s < 226 { 8 } else { 9 })
+}
+
+///|
+/// A crafted stream: its name, the stream, and the dictionary to decode it
+/// with.
+struct Crafted {
+  name : String
+  input : Bytes
+  dictionary : Bytes?
+}
+
+///|
+fn crafted(name : String, input : Bytes, dictionary? : Bytes) -> Crafted {
+  { name, input, dictionary, }
+}
+
+///|
+fn deflate_crafted() -> Array[Crafted] {
+  let out = []
+  let add = (name : String, build : (Bits) -> Unit) => {
+    let b = Bits::new()
+    build(b)
+    out.push(crafted(name, b.bytes()))
+  }
+  let lit = (s : String) => ascii(s).to_array().map(b => Sym::Lit(b.to_int()))
+  // Stored blocks.
+  add("stored/empty", b => b.stored(true, b""))
+  add("stored/hello", b => b.stored(true, ascii("hello")))
+  add("stored/two blocks", b => {
+    b.stored(false, ascii("abc"))
+    b.stored(true, ascii("def"))
+  })
+  add("stored/LEN and NLEN disagree", b => {
+    b.stored(true, ascii("hello"), nlen=0xFFFB)
+  })
+  add("stored/padding bits set", b => {
+    b.put(1, 1)
+    b.put(0, 2)
+    b.align(fill=1)
+    b.put(2, 16)
+    b.put(2 ^ 0xFFFF, 16)
+    b.byte('o'.to_int())
+    b.byte('k'.to_int())
+  })
+  add("stored/cut inside the data", b => {
+    b.put(1, 1)
+    b.put(0, 2)
+    b.align()
+    b.put(10, 16)
+    b.put(10 ^ 0xFFFF, 16)
+    b.byte('x'.to_int())
+  })
+  add("stored/cut inside LEN", b => {
+    b.put(1, 1)
+    b.put(0, 2)
+    b.align()
+    b.byte(5)
+  })
+  add("block type 3", b => {
+    b.put(1, 1)
+    b.put(3, 2)
+  })
+  add("non-final block type 3 after a block", b => {
+    b.fixed(false, [..lit("a"), Eob])
+    b.put(0, 1)
+    b.put(3, 2)
+  })
+  // Fixed codes.
+  add("fixed/empty", b => b.fixed(true, [Eob]))
+  add("fixed/literals", b => b.fixed(true, [..lit("hello"), Eob]))
+  add("fixed/symbol 286", b => b.fixed(true, [..lit("a"), RawSymbol(286)]))
+  add("fixed/symbol 287", b => b.fixed(true, [..lit("a"), RawSymbol(287)]))
+  add("fixed/distance code 30", b => {
+    b.fixed(true, [..lit("abcd"), RawDistance(30)])
+  })
+  add("fixed/distance code 31", b => {
+    b.fixed(true, [..lit("abcd"), RawDistance(31)])
+  })
+  // 32,768 bytes of history in a few hundred bytes: 251 distinct bytes, then
+  // matches repeating them, so that a distance off by one gives other bytes.
+  let history = (n : Int32) => {
+    let syms = Array::makei(251, i => Sym::Lit(i * 97 % 256))
+    let mut left = n - 251
+    while left > 0 {
+      let length = left.min(258).max(3)
+      syms.push(Match(length, 251))
+      left -= length
+    }
+    syms
+  }
+  add("fixed/distance 29 with every extra bit", b => {
+    b.fixed(true, [..history(32768), Match(258, 32768), Eob])
+  })
+  add("fixed/distance past the start", b => {
+    b.fixed(true, [..lit("a"), Match(3, 2), Eob])
+  })
+  add("fixed/distance at the very start", b => b.fixed(true, [Match(3, 1), Eob]))
+  add("fixed/distance 32768 after 32767 bytes", b => {
+    b.fixed(true, [..history(32767), Match(3, 32768), Eob])
+  })
+  add("fixed/distance 32768 after 32768 bytes", b => {
+    b.fixed(true, [..history(32768), Match(3, 32768), Eob])
+  })
+  add("fixed/overlapping match", b => {
+    b.fixed(true, [..lit("ab"), Match(10, 2), Eob])
+  })
+  add("fixed/length 258 from code 285", b => {
+    b.fixed(true, [..lit("z"), Match(258, 1), Eob])
+  })
+  add("fixed/length 258 from code 284 and extra 31", b => {
+    b.put(1, 1)
+    b.put(1, 2)
+    b.body(lit("z"), fixed_lengths, None)
+    b.code(fixed_codes[284], fixed_lengths[284])
+    b.put(31, 5)
+    b.code(0, 5)
+    b.body([Eob], fixed_lengths, None)
+  })
+  add("fixed/padding bits after the final block set", b => {
+    b.fixed(true, [..lit("ok"), Eob])
+    b.align(fill=1)
+  })
+  add("fixed/cut inside a match", b => {
+    b.fixed(true, lit("abc"))
+    b.code(fixed_codes[265], fixed_lengths[265])
+  })
+  add("fixed/no end of block", b => b.fixed(true, lit("abc")))
+  add("empty input", _ => ())
+  add("non-final block only", b => b.fixed(false, [..lit("a"), Eob]))
+  add("blocks of every type in a row", b => {
+    b.stored(false, ascii("stored "))
+    b.fixed(false, [..lit("fixed "), Match(6, 6), Eob])
+    let code = byte_code()
+    b.dynamic(true, code, [2, 2, 2, 2], [..lit("dynamic"), Match(4, 3), Eob])
+  })
+  // Dynamic headers.
+  let eob_only = lengths(257, [(256, 1)])
+  add("dynamic/HLIT 287", b => b.dynamic_header(true, 287, 1, standard_cl, []))
+  add("dynamic/HLIT 288", b => b.dynamic_header(true, 288, 1, standard_cl, []))
+  add("dynamic/HDIST 31", b => b.dynamic_header(true, 257, 31, standard_cl, []))
+  add("dynamic/HDIST 32", b => b.dynamic_header(true, 257, 32, standard_cl, []))
+  add("dynamic/only the end of block", b => {
+    b.dynamic(true, eob_only, [0], [Eob])
+  })
+  add("dynamic/the first length repeats the previous", b => {
+    b.dynamic_header(true, 257, 1, standard_cl, [(16, 0)])
+  })
+  add("dynamic/a zero repeat past the last length", b => {
+    b.dynamic_header(true, 257, 1, standard_cl, [(18, 127), (18, 127)])
+  })
+  add("dynamic/a repeat past the last length", b => {
+    b.dynamic_header(true, 257, 1, standard_cl, [
+      (18, 127),
+      (18, 106),
+      (5, 0),
+      (16, 3),
+    ])
+  })
+  add("dynamic/a short zero repeat past the last length", b => {
+    b.dynamic_header(true, 257, 1, standard_cl, [(18, 127), (18, 108), (17, 1)])
+  })
+  add("dynamic/code-length code over-subscribed", b => {
+    let cl = Array::make(19, 0)
+    cl[0] = 1
+    cl[1] = 1
+    cl[2] = 1
+    b.dynamic_header(true, 257, 1, cl, [])
+  })
+  add("dynamic/code-length code incomplete", b => {
+    let cl = Array::make(19, 0)
+    cl[0] = 1
+    cl[1] = 2
+    b.dynamic_header(true, 257, 1, cl, [(0, 0)])
+  })
+  add("dynamic/code-length code with one code, zeros only", b => {
+    let cl = Array::make(19, 0)
+    cl[18] = 1
+    b.dynamic_header(true, 257, 1, cl, [(18, 127), (18, 109)])
+    b.put(0, 8)
+  })
+  add("dynamic/code-length code with one code, lengths 9", b => {
+    let cl = Array::make(19, 0)
+    cl[9] = 1
+    b.dynamic_header(true, 257, 1, cl, Array::make(258, (9, 0)))
+    b.put(0, 8)
+  })
+  add("dynamic/code-length code with one code, the other code", b => {
+    let cl = Array::make(19, 0)
+    cl[18] = 1
+    b.dynamic_header(true, 257, 1, cl, [])
+    b.put(1, 1)
+    b.put(0, 7)
+  })
+  // zlib reads a length of 0 from every bit under an empty code-length code,
+  // so it asks for more input until it has all the lengths, then finds no
+  // end-of-block code.
+  add("dynamic/code-length code all zero", b => {
+    b.dynamic_header(true, 257, 1, Array::make(19, 0), [])
+    b.put(0, 16)
+  })
+  add("dynamic/code-length code all zero, with the bits for every length", b => {
+    b.dynamic_header(true, 257, 1, Array::make(19, 0), [])
+    b.put(0, 258)
+  })
+  add("dynamic/literal code over-subscribed", b => {
+    let code = Array::make(257, 8)
+    b.dynamic(true, code, [1], [])
+  })
+  add("dynamic/literal code incomplete", b => {
+    let code = Array::makei(257, s => if s < 128 || s == 256 { 8 } else { 0 })
+    b.dynamic(true, code, [1], [Eob])
+  })
+  add("dynamic/literal code incomplete, one code of 2 bits", b => {
+    b.dynamic(true, lengths(257, [(256, 2)]), [1], [Eob])
+  })
+  add("dynamic/no end-of-block code", b => {
+    let code = Array::makei(257, s => if s < 256 { 8 } else { 0 })
+    b.dynamic(true, code, [1], lit("abc"))
+  })
+  add("dynamic/no end-of-block code, one literal", b => {
+    b.dynamic(true, lengths(257, [(97, 1)]), [1], lit("aaaa"))
+  })
+  let code = byte_code()
+  add("dynamic/distance code over-subscribed", b => {
+    b.dynamic(true, code, [1, 1, 1], [Eob])
+  })
+  add("dynamic/distance code incomplete", b => {
+    b.dynamic(true, code, [1, 2], [Eob])
+  })
+  add("dynamic/one distance code", b => {
+    b.dynamic(true, code, [1], [..lit("a"), Match(5, 1), Eob])
+  })
+  add("dynamic/one distance code, the other code", b => {
+    b.dynamic(true, code, [1], lit("a"))
+    let lit_codes = canonical(code)
+    b.code(lit_codes[257], code[257])
+    b.put(1, 1)
+    b.body([Eob], code, Some([1]))
+  })
+  add("dynamic/no distance codes, literals only", b => {
+    b.dynamic(true, code, [0], [..lit("only literals"), Eob])
+  })
+  add("dynamic/no distance codes, a match", b => {
+    b.dynamic(true, code, [0], lit("ab"))
+    let lit_codes = canonical(code)
+    b.code(lit_codes[257], code[257])
+    b.put(0, 15)
+  })
+  add("dynamic/thirty distance codes", b => {
+    let dist = Array::makei(30, d => if d < 2 { 4 } else { 5 })
+    b.dynamic(
+      true,
+      code,
+      dist,
+      [..lit("abcabc"), Match(3, 3), Match(4, 6), Eob],
+    )
+  })
+  add("dynamic/a repeat across the literal and distance lengths", b => {
+    // Lengths 97 zeros, 2, 2, 157 zeros, 2, 2 for the 258 literal/length
+    // codes, then a repeat of the last one three times and a 2: the repeat
+    // starts in the literal/length code lengths' last and runs into the
+    // distance code lengths.
+    let lit_lengths = lengths(258, [(97, 2), (98, 2), (256, 2), (257, 2)])
+    b.dynamic_header(true, 258, 4, standard_cl, [
+      (18, 97 - 11),
+      (2, 0),
+      (2, 0),
+      (18, 127),
+      (18, 157 - 138 - 11),
+      (2, 0),
+      (2, 0),
+      (16, 0),
+      (2, 0),
+    ])
+    b.body([..lit("ab"), Match(3, 1), Eob], lit_lengths, Some([2, 2, 2, 2]))
+  })
+  add("dynamic/15-bit codes", b => {
+    let deep = lengths(257, [])
+    for s in 0..<15 {
+      deep[s] = s + 1
+    }
+    deep[256] = 15
+    b.dynamic(true, deep, [0], [Lit(14), Lit(13), Lit(0), Lit(14), Eob])
+  })
+  add("dynamic/cut inside the header", b => {
+    b.put(1, 1)
+    b.put(2, 2)
+    b.put(0, 5)
+    b.put(0, 5)
+    b.put(15, 4)
+    b.put(5, 3)
+  })
+  // Preset dictionaries (decoded with and without).
+  let dictionary = ascii("hello, dictionary")
+  let reach = Bits::new()
+  reach.fixed(true, [Match(5, 17), ..lit("!"), Eob])
+  let reach = reach.bytes()
+  out.push(
+    crafted("dictionary/a match into the dictionary", reach, dictionary~),
+  )
+  out.push(crafted("dictionary/a match into a missing dictionary", reach))
+  let big = Bytes::makei(33000, i => (i % 251).to_byte())
+  let back = Bits::new()
+  back.fixed(true, [Match(10, 32768), Eob])
+  out.push(
+    crafted(
+      "dictionary/only the last 32 KiB are the window",
+      back.bytes(),
+      dictionary=big,
+    ),
+  )
+  // What follows the final block.
+  let after = Bits::new()
+  after.fixed(true, [..lit("end"), Eob])
+  let ended = after.bytes()
+  out.push(
+    crafted("after/a byte after the final block", concat([ended, b"\x00"])),
+  )
+  out.push(
+    crafted("after/text after the final block", concat([ended, ascii("more")])),
+  )
+  out
+}
+
+///|
+/// A raw DEFLATE stream of `s`, one fixed block, for the containers.
+fn fixed_stream(s : Bytes) -> Bytes {
+  let b = Bits::new()
+  b.fixed(true, [..s.to_array().map(c => Sym::Lit(c.to_int())), Eob])
+  b.bytes()
+}
+
+///|
+/// A zlib header: CMF and FLG with FCHECK set, and DICTID when given.
+fn zlib_header(
+  cinfo~ : Int32 = 7,
+  cm~ : Int32 = 8,
+  level~ : Int32 = 2,
+  dictid? : UInt32,
+) -> Bytes {
+  let cmf = (cinfo << 4) | cm
+  let mut flg = level << 6
+  if dictid is Some(_) {
+    flg = flg | 0x20
+  }
+  flg = flg + (31 - (cmf * 256 + flg) % 31) % 31
+  let head = Bytes::from_array([cmf.to_byte(), flg.to_byte()])
+  match dictid {
+    Some(id) => concat([head, be32(id)])
+    None => head
+  }
+}
+
+///|
+fn zlib_crafted() -> Array[Crafted] {
+  let out = []
+  let data = ascii("zlib data, zlib data")
+  let body = fixed_stream(data)
+  let adler = be32(adler32(data))
+  let stream = concat([zlib_header(), body, adler])
+  let add = (name : String, input : Bytes) => out.push(crafted(name, input))
+  add("valid", stream)
+  add("CINFO 0", concat([zlib_header(cinfo=0), body, adler]))
+  add("CINFO 8", concat([zlib_header(cinfo=8), body, adler]))
+  add("CINFO 15", concat([zlib_header(cinfo=15), body, adler]))
+  add("CM 7", concat([zlib_header(cm=7), body, adler]))
+  add("CM 15", concat([zlib_header(cm=15), body, adler]))
+  let bad_check = zlib_header().to_array()
+  bad_check[1] = bad_check[1] ^ b'\x01'
+  add("FCHECK wrong", concat([Bytes::from_array(bad_check), body, adler]))
+  for level in 0..<4 {
+    add("FLEVEL \{level}", concat([zlib_header(level~), body, adler]))
+  }
+  let wrong = adler.to_array()
+  wrong[3] = wrong[3] ^ b'\x01'
+  add("Adler-32 wrong", concat([zlib_header(), body, Bytes::from_array(wrong)]))
+  add("empty input", b"")
+  add("cut after CMF", stream[:1].to_owned())
+  add("cut after the header", stream[:2].to_owned())
+  for n in 1..<=3 {
+    add(
+      "cut inside the Adler-32, \{n} bytes",
+      stream[:stream.length() - n].to_owned(),
+    )
+  }
+  add("corrupt DEFLATE inside", concat([zlib_header(), b"\x07", adler]))
+  add("an empty stream", concat([zlib_header(), fixed_stream(b""), be32(1)]))
+  add("a byte after the end", concat([stream, b"\x00"]))
+  add("a stream after the end", concat([stream, stream]))
+  // Preset dictionaries.
+  let dictionary = ascii("a preset dictionary for zlib")
+  let id = adler32(dictionary)
+  let reach = Bits::new()
+  reach.fixed(true, [Match(6, 8), Eob])
+  let reach = reach.bytes()
+  let original = dictionary[dictionary.length() - 8:dictionary.length() - 2].to_owned()
+  let with_dict = concat([
+    zlib_header(dictid=id),
+    reach,
+    be32(adler32(original)),
+  ])
+  out.push(crafted("FDICT with the dictionary", with_dict, dictionary~))
+  out.push(crafted("FDICT without a dictionary", with_dict))
+  out.push(
+    crafted(
+      "FDICT with another dictionary",
+      with_dict,
+      dictionary=ascii("another"),
+    ),
+  )
+  out.push(
+    crafted("a dictionary for a stream without FDICT", stream, dictionary~),
+  )
+  out.push(crafted("FDICT cut inside DICTID", with_dict[:4].to_owned()))
+  out
+}
+
+///|
+fn gzip_crafted() -> Array[Crafted] {
+  let out = []
+  let data = ascii("gzip data, gzip data")
+  let body = fixed_stream(data)
+  let trailer = gzip_trailer(data)
+  let header = gzip_header()
+  let stream = concat([header, body, trailer])
+  let add = (name : String, input : Bytes) => out.push(crafted(name, input))
+  add("valid", stream)
+  let edit = (at : Int32, value : Byte) => {
+    let bytes = stream.to_array()
+    bytes[at] = value
+    Bytes::from_array(bytes)
+  }
+  add("ID1 wrong", edit(0, b'\x1e'))
+  add("ID2 wrong", edit(1, b'\x8c'))
+  add("CM 7", edit(2, b'\x07'))
+  add("CM 0", edit(2, b'\x00'))
+  for bit in [5, 6, 7] {
+    add("reserved FLG bit \{bit}", edit(3, (1 << bit).to_byte()))
+  }
+  add("FTEXT", edit(3, b'\x01'))
+  add(
+    "MTIME, XFL and OS set",
+    concat([
+      gzip_header(mtime=0xFFFFFFFF, xfl=b'\x04', os=b'\x0b'),
+      body,
+      trailer,
+    ]),
+  )
+  let hcrc = gzip_header(hcrc=true)
+  add("FHCRC", concat([hcrc, body, trailer]))
+  let wrong = hcrc.to_array()
+  wrong[wrong.length() - 1] = wrong[wrong.length() - 1] ^ b'\x01'
+  add("FHCRC wrong", concat([Bytes::from_array(wrong), body, trailer]))
+  add("FHCRC set without a CRC", concat([edit(3, b'\x02')]))
+  let all = gzip_header(
+    text=true,
+    extra=ascii("ab\u{01}\u{00}c"),
+    name=ascii("n"),
+    comment=ascii("c"),
+    hcrc=true,
+  )
+  add("every field", concat([all, body, trailer]))
+  // Cut inside every field of a header with all of them.
+  let full = concat([all, body, trailer])
+  for cut in 0..<all.length() {
+    add("cut inside the header at \{cut}", full[:cut].to_owned())
+  }
+  add("cut inside the DEFLATE data", full[:all.length() + 3].to_owned())
+  for n in 1..<=8 {
+    add(
+      "cut inside the trailer, \{n} bytes short",
+      stream[:stream.length() - n].to_owned(),
+    )
+  }
+  let crc = trailer.to_array()
+  crc[0] = crc[0] ^ b'\x01'
+  add("CRC-32 wrong", concat([header, body, Bytes::from_array(crc)]))
+  let isize = trailer.to_array()
+  isize[4] = isize[4] ^ b'\x01'
+  add("ISIZE wrong", concat([header, body, Bytes::from_array(isize)]))
+  add("corrupt DEFLATE inside", concat([header, b"\x07", trailer]))
+  add("empty input", b"")
+  // What follows a member.
+  add("a zero byte after the member", concat([stream, b"\x00"]))
+  add(
+    "zero padding after the member",
+    concat([stream, Bytes::make(16, b'\x00')]),
+  )
+  add(
+    "zero padding between members",
+    concat([stream, Bytes::make(4, b'\x00'), stream]),
+  )
+  add("text after the member", concat([stream, ascii("garbage")]))
+  add("1f after the member", concat([stream, b"\x1f"]))
+  add("1f 8b after the member", concat([stream, b"\x1f\x8b"]))
+  add(
+    "1f 8b and garbage after the member",
+    concat([stream, b"\x1f\x8b\x00\x00"]),
+  )
+  add(
+    "1f 8b 08 and a cut header after the member",
+    concat([stream, b"\x1f\x8b\x08\x00\x00"]),
+  )
+  add("two members", concat([stream, stream]))
+  add("a member and a corrupt member", concat([stream, edit(3, b'\x20')]))
+  out
+}
+
+///|
+fn crafted_for(format : String) -> Array[Crafted] {
+  match format {
+    "deflate" => deflate_crafted()
+    "zlib" => zlib_crafted()
+    _ => gzip_crafted()
+  }
+}
+
+// ---- seeded corruptions ----
+
+///|
+/// A corruption of a vector: flip bit `value` of byte `at` (0), replace it
+/// with `value` (1), insert `value` before it (2), delete it (3), or cut the
+/// stream there (4).
+struct Mutation {
+  source : String
+  op : Int32
+  at : Int32
+  value : Int32
+}
+
+///|
+fn apply(m : Mutation, input : Bytes) -> Bytes {
+  let bytes = input.to_array()
+  match m.op {
+    0 => bytes[m.at] = bytes[m.at] ^ (1 << m.value).to_byte()
+    1 => bytes[m.at] = m.value.to_byte()
+    2 => bytes.insert(m.at, m.value.to_byte())
+    3 => bytes.remove(m.at) |> ignore
+    _ => bytes.truncate(m.at)
+  }
+  Bytes::from_array(bytes)
+}
+
+///|
+/// Corruptions per format, of the vectors of at most `max_source` bytes.
+let mutations_per_format : Int32 = 1000
+
+///|
+let max_source : Int32 = 40_000
+
+///|
+fn mutations(
+  format : String,
+  sources : Array[(String, Bytes)],
+) -> Array[Mutation] {
+  let rng = { state: 1950UL + format.length().to_uint64(), }
+  let usable = sources.filter(s => {
+    s.1.length() >= 16 && s.1.length() <= max_source
+  })
+  let out = []
+  for _ in 0..<mutations_per_format {
+    let (name, input) = usable[rng.below(usable.length())]
+    let op = rng.below(5)
+    // Bytes near the ends hold the headers and trailers: aim a third there.
+    let at = match rng.below(3) {
+      0 => rng.below(input.length().min(12))
+      1 => input.length() - 1 - rng.below(input.length().min(12))
+      _ => rng.below(input.length())
+    }
+    let value = if op == 0 { rng.below(8) } else { rng.below(256) }
+    out.push({ source: name, op, at, value, })
+  }
+  out
+}
+
+// ---- rendering ----
+
+///|
+fn literal(data : Bytes) -> String {
+  let b64 = @base64.encode(data)
+  let out = StringBuilder()
+  out.write_string("(\n")
+  for i = 0; i < b64.length().max(1); i = i + 76 {
+    let line = b64.view(start_offset=i, end_offset=(i + 76).min(b64.length()))
+    out.write_string("      #|\{line}\n")
+  }
+  out.write_string("    )")
+  out.to_string()
+}
+
+///|
+/// A vector as made: its name, stream, dictionary and original.
+struct Made {
+  name : String
+  stream : Bytes
+  dictionary : Bytes?
+  original : Bytes
+}
+
+///|
+/// Renders a format's file. `made` are its vectors and dictionary vectors,
+/// `flushed` the Discord-shaped stream (zlib), and `answers` what zlib makes
+/// of the crafted streams and of the corruptions, in order.
+fn render(
+  format : String,
+  version : String,
+  vectors : Array[Made],
+  dictionaries : Array[Made],
+  flushed : (Bytes, Array[(Int32, Int32, String)])?,
+  crafted : Array[Crafted],
+  corruptions : Array[Mutation],
+  answers : Array[String],
+  padded : Array[String],
+) -> String {
+  let out = StringBuilder()
+  out.write_string(
+    (
+      $|// Generated by scripts/gen_deflate_vectors.mbtx, DON'T EDIT IT.
+      $|// Streams made with Node's zlib \{version}, and the gzip command.
+      $|
+      $|///|
+      $|let vectors : Array[Vector] = [
+      $|
+    ),
+  )
+  for v in vectors {
+    out.write_string(
+      (
+        $|  {
+        $|    name: "\{v.name}",
+        $|    compressed: \{literal(v.stream)},
+        $|    size: \{v.original.length()},
+        $|    sha256: "\{hex_digest(v.original)}",
+        $|  },
+        $|
+      ),
+    )
+  }
+  out.write_string("]\n")
+  if format != "gzip" {
+    out.write_string(
+      (
+        $|
+        $|///|
+        $|/// Streams compressed with a preset dictionary, and the dictionary.
+        $|let dictionary_vectors : Array[(Vector, String)] = [
+        $|
+      ),
+    )
+    for v in dictionaries {
+      out.write_string(
+        (
+          $|  (
+          $|    {
+          $|      name: "\{v.name}",
+          $|      compressed: \{literal(v.stream)},
+          $|      size: \{v.original.length()},
+          $|      sha256: "\{hex_digest(v.original)}",
+          $|    },
+          $|    \{literal(v.dictionary.unwrap())},
+          $|  ),
+          $|
+        ),
+      )
+    }
+    out.write_string("]\n")
+  }
+  if flushed is Some((stream, messages)) {
+    out.write_string(
+      (
+        $|
+        $|///|
+        $|/// A stream as Discord's zlib-stream sends it: messages that each end in
+        $|/// a sync flush, in one stream that never ends; for each message, the
+        $|/// offset where its bytes end, and the length and SHA-256 of its text.
+        $|let flushed_vector : Flushed = {
+        $|  name: "flushed",
+        $|  compressed: \{literal(stream)},
+        $|  messages: [
+        $|
+      ),
+    )
+    for m in messages {
+      let (end, size, sha256) = m
+      out.write_string("    (\{end}, \{size}, \"\{sha256}\"),\n")
+    }
+    out.write_string("  ],\n}\n")
+  }
+  out.write_string(
+    (
+      $|
+      $|///|
+      $|/// Streams built bit by bit, the dictionary to decode them with, and what
+      $|/// zlib makes of them: `ok <consumed> <sha256>` or `err <kind>`.
+      $|let crafted : Array[Crafted] = [
+      $|
+    ),
+  )
+  for i, c in crafted {
+    let dictionary = match c.dictionary {
+      Some(d) => "Some(\{literal(d)})"
+      None => "None"
+    }
+    out.write_string(
+      (
+        $|  {
+        $|    name: "\{c.name}",
+        $|    input: \{literal(c.input)},
+        $|    dictionary: \{dictionary},
+        $|    zlib: "\{answers[i]}",
+        $|  },
+        $|
+      ),
+    )
+  }
+  out.write_string(
+    (
+      $|]
+      $|
+      $|///|
+      $|/// Seeded corruptions of the vectors, and what zlib makes of them; where
+      $|/// zlib asks for more input, also of them followed by 1 KiB of zeros.
+      $|let oracle : Array[Corruption] = [
+      $|
+    ),
+  )
+  let mut next_padded = 0
+  for i, m in corruptions {
+    let answer = answers[crafted.length() + i]
+    let after = if answer == "err Truncated" {
+      next_padded += 1
+      padded[next_padded - 1]
+    } else {
+      ""
+    }
+    out.write_string(
+      "  { source: \"\{m.source}\", op: \{m.op}, at: \{m.at}, value: \{m.value}, zlib: \"\{answer}\", padded: \"\{after}\" },\n",
+    )
+  }
+  out.write_string("]\n")
+  out.to_string()
+}
+
+///|
+/// `text` as `moon fmt` leaves it, so that formatting the workspace does not
+/// make the files stale.
+async fn formatted(text : String) -> String {
+  let output = @shell.Cmd("moonfmt", ["-"], stdin=Text(text)).output(
+    max_output_bytes=1 << 28,
+  )
+  output.check()
+  output.stdout()
+}
+
+///|
+/// The streams of the vectors in a generated file, by name.
+fn stored(file : String) -> Map[String, Bytes] raise {
+  let streams = Map([])
+  let mut name = ""
+  let b64 = StringBuilder()
+  for raw in file.split("\n") {
+    let line = raw.trim()
+    if line.has_prefix("let crafted") {
+      break
+    }
+    if line.strip_prefix("name: \"") is Some(rest) {
+      name = rest.strip_suffix("\",").unwrap_or(rest).to_owned()
+      b64.reset()
+    } else if line.strip_prefix("#|") is Some(rest) {
+      b64.write_view(rest)
+    } else if line == ")," && name != "" {
+      streams[name] = @base64.decode(b64.to_string())
+      name = ""
+    }
+  }
+  streams
+}
+
+///|
+fn stored_version(file : String) -> String? {
+  let lead = "// Streams made with Node's zlib "
+  for line in file.split("\n") {
+    if line.strip_prefix(lead) is Some(rest) {
+      return rest.strip_suffix(", and the gzip command.").map(v => v.to_owned())
+    }
+  }
+  None
+}
+
+///|
+/// What the gzip command makes of each stream: its output, or None when it
+/// refuses it.
+async fn gunzip(stream : Bytes) -> Bytes? {
+  let output = @shell.Cmd("gzip", ["-d", "-c"], stdin=Binary(stream)).output(
+    max_output_bytes=1 << 26,
+  )
+  if output.exit_code() != 0 {
+    None
+  } else {
+    Some(output.stdout_bytes())
+  }
+}
+
+///|
+/// Builds the streams of `specs`, or takes them from `stored` (`--check`).
+async fn make(specs : Array[Spec], stored : Map[String, Bytes]?) -> Array[Made] {
+  let jobs = []
+  for s in specs {
+    for p in s.parts {
+      if p is Made(job) {
+        jobs.push(job)
+      }
+    }
+  }
+  let streams = match stored {
+    Some(_) => []
+    None => compress(jobs)
+  }
+  let mut next = 0
+  let out = []
+  for s in specs {
+    let stream = match stored {
+      Some(map) => {
+        guard map.get(s.name) is Some(data) else { fail("no vector \{s.name}") }
+        data
+      }
+      None => {
+        let buf = Buffer()
+        for p in s.parts {
+          match p {
+            Made(_) => {
+              buf.write_bytes(streams[next])
+              next += 1
+            }
+            Fixed(bytes) => buf.write_bytes(bytes)
+          }
+        }
+        buf.to_bytes()
+      }
+    }
+    out.push({
+      name: s.name,
+      stream,
+      dictionary: s.dictionary,
+      original: s.original,
+    })
+  }
+  out
+}
+
+///|
+/// The Discord-shaped stream: Node's zlib with a sync flush after each
+/// message, and the offset where each message's bytes end.
+async fn discord(
+  inp : Inputs,
+  stored : (Bytes, Array[Int32])?,
+) -> ((Bytes, Array[Int32]), Array[(Int32, Int32, String)]) {
+  let all = concat(inp.messages)
+  let cuts = []
+  let mut pos = 0
+  for m in inp.messages {
+    pos += m.length()
+    cuts.push(pos)
+  }
+  let stream = match stored {
+    Some((s, _)) => s
+    None => {
+      let options = "{\"flushAt\":[\{cuts.map(c => c.to_string()).join(",")}],\"finish\":false}"
+      compress([Node("zlib", options, all)])[0]
+    }
+  }
+  // The end of each message: where zlib, given everything up to a sync flush
+  // marker, has given out exactly that message and those before it.
+  let ends = []
+  for i in 0..<(stream.length() - 3) {
+    if stream[i] == b'\x00' &&
+      stream[i + 1] == b'\x00' &&
+      stream[i + 2] == b'\xff' &&
+      stream[i + 3] == b'\xff' {
+      ends.push(i + 4)
+    }
+  }
+  if ends.length() != inp.messages.length() {
+    fail(
+      "the flushed stream has \{ends.length()} flush markers, not \{inp.messages.length()}",
+    )
+  }
+  let answers = reference(
+    ends.map(e => ("zlib:sync", stream[:e].to_owned(), None)),
+  )
+  let mut so_far = 0
+  let messages = []
+  for i, m in inp.messages {
+    so_far += m.length()
+    let expected = "ok \{ends[i]} \{hex_digest(all[:so_far])}"
+    if answers[i] != expected {
+      fail("the flushed stream up to message \{i}: zlib gives \{answers[i]}")
+    }
+    messages.push((ends[i], m.length(), hex_digest(m)))
+  }
+  ((stream, ends), messages)
+}
+
+///|
+/// Checks that every vector decodes, with the reference decoders, to its
+/// original.
+async fn verify(format : String, vectors : Array[Made]) -> Unit {
+  let answers = reference(
+    vectors.map(v => (node_format(format), v.stream, v.dictionary)),
+  )
+  for i, v in vectors {
+    let expected = "ok \{v.stream.length()} \{hex_digest(v.original)}"
+    if answers[i] != expected {
+      fail("\{format} \{v.name}: zlib gives \{answers[i]}, not \{expected}")
+    }
+    if format == "gzip" {
+      guard gunzip(v.stream) is Some(out) && out == v.original else {
+        fail("gzip \{v.name}: gzip -d does not decode it to its original")
+      }
+    }
+  }
+}
+
+///|
+async fn main {
+  let check = @env.args().contains("--check")
+  let inp = inputs()
+  let stale = []
+  for format in formats {
+    let target = match format {
+      "deflate" => "deflate/src/vectors_wbtest.mbt"
+      f => "deflate/src/\{f}/vectors_wbtest.mbt"
+    }
+    let file = if check {
+      guard @fs.exists(target) else { fail("\{target} is missing") }
+      Some(@fs.read_file(target).text())
+    } else {
+      None
+    }
+    let streams = match file {
+      Some(text) => Some(stored(text))
+      None => None
+    }
+    let version = match file {
+      Some(text) =>
+        match stored_version(text) {
+          Some(v) => v
+          None => fail("\{target} names no zlib version")
+        }
+      None => {
+        let v = @shell.Cmd("node", ["-p", "process.versions.zlib"]).output()
+        v.check()
+        v.stdout().trim().to_owned()
+      }
+    }
+    let vectors = make(specs(format, inp), streams)
+    verify(format, vectors)
+    let dictionaries = if format == "gzip" {
+      []
+    } else {
+      make(dictionary_vectors(node_format(format), inp), streams)
+    }
+    verify(format, dictionaries)
+    let flushed = if format == "zlib" {
+      let previous = match streams {
+        Some(map) => map.get("flushed").map(s => (s, []))
+        None => None
+      }
+      let (stream_ends, messages) = discord(inp, previous)
+      Some((stream_ends.0, messages))
+    } else {
+      None
+    }
+    let crafted = crafted_for(format)
+    let sources = vectors.map(v => (v.name, v.stream))
+    let corruptions = mutations(format, sources)
+    let by_name : Map[String, Bytes] = Map::from_array(sources)
+    let questions = [
+      ..crafted.map(c => (node_format(format), c.input, c.dictionary)),
+      ..corruptions.map(m => {
+        (node_format(format), apply(m, by_name[m.source]), None)
+      }),
+    ]
+    let answers = reference(questions)
+    // Where zlib asks for more input, what it makes of the stream followed by
+    // zero bytes: whether the stream is refused once zlib has read enough.
+    let padded_questions = []
+    for i, m in corruptions {
+      if answers[crafted.length() + i] == "err Truncated" {
+        let input = apply(m, by_name[m.source])
+        padded_questions.push(
+          (
+            node_format(format),
+            concat([input, Bytes::make(1024, b'\x00')]),
+            None,
+          ),
+        )
+      }
+    }
+    let padded = reference(padded_questions)
+    let text = formatted(
+      render(
+        format, version, vectors, dictionaries, flushed, crafted, corruptions, answers,
+        padded,
+      ),
+    )
+    if check {
+      if file != Some(text) {
+        stale.push(target)
+      }
+    } else {
+      @fs.write_file(target, text)
+      println(
+        "\{target}: \{vectors.length()} vectors, \{dictionaries.length()} with a dictionary, \{crafted.length()} crafted, \{corruptions.length()} corruptions",
+      )
+    }
+  }
+  if !stale.is_empty() {
+    fail(
+      "stale: \{stale.join(", ")} (run moon run scripts/gen_deflate_vectors.mbtx)",
+    )
+  }
+}

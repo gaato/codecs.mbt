@@ -20,4 +20,5 @@ import {
   "gaato/codec_harness@0.0.0",
   "gaato/zstd@0.3.0",
   "gaato/brotli@0.4.0",
+  "gaato/deflate@0.1.0",
 }

@@ -6,4 +6,5 @@ members = [
   "bench",
   "zstd",
   "brotli",
+  "deflate",
 ]

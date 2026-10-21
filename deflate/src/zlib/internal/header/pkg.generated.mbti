@@ -1,0 +1,29 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/deflate/zlib/internal/header"
+
+import {
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn be32(BytesView) -> UInt
+
+pub fn check_trailer(UInt, BytesView) -> Result[Unit, String]
+
+pub fn parse(Byte, Byte) -> Result[Header, String]
+
+// Errors
+
+// Types and methods
+pub(all) struct Header {
+  window_bits : Int
+  level : Int
+  dictionary : Bool
+} derive(Eq, @debug.Debug)
+pub fn Header::equal(Self, Self) -> Bool
+pub fn Header::not_equal(Self, Self) -> Bool
+pub fn Header::to_repr(Self) -> @debug.Repr
+
+// Type aliases
+
+// Traits

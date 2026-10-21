@@ -15,3 +15,13 @@ fn Vector::input(self : Vector) -> Bytes {
     _ => abort("bad base64 in vector \{self.name}")
   }
 }
+
+///|
+/// A stream of messages that each end in a sync flush, never finished: for
+/// each message, the offset where its bytes end, and the length and SHA-256
+/// of its text.
+struct Flushed {
+  name : String
+  compressed : String
+  messages : Array[(Int32, Int32, String)]
+}

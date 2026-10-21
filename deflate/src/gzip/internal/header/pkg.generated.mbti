@@ -1,0 +1,54 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/deflate/gzip/internal/header"
+
+import {
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub const FCOMMENT : Int = 16
+
+pub const FEXTRA : Int = 4
+
+pub const FHCRC : Int = 2
+
+pub const FIXED_SIZE : Int = 10
+
+pub const FNAME : Int = 8
+
+pub const FTEXT : Int = 1
+
+pub const START_SIZE : Int = 4
+
+pub fn begins_member(BytesView) -> Bool
+
+pub fn check_crc(UInt, BytesView) -> Result[Unit, String]
+
+pub fn check_header_crc(UInt, BytesView) -> Result[Unit, String]
+
+pub fn check_size(UInt, BytesView) -> Result[Unit, String]
+
+pub fn check_start(BytesView) -> Result[Unit, String]
+
+pub fn le16(BytesView) -> Int
+
+pub fn le32(BytesView) -> UInt
+
+pub fn parse_fixed(BytesView) -> Result[Fixed, String]
+
+// Errors
+
+// Types and methods
+pub(all) struct Fixed {
+  flags : Int
+  mtime : UInt
+  xfl : Byte
+  os : Byte
+} derive(Eq, @debug.Debug)
+pub fn Fixed::equal(Self, Self) -> Bool
+pub fn Fixed::not_equal(Self, Self) -> Bool
+pub fn Fixed::to_repr(Self) -> @debug.Repr
+
+// Type aliases
+
+// Traits

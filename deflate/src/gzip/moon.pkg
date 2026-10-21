@@ -1,0 +1,14 @@
+import {
+  "gaato/codec",
+  "gaato/codec_bytes",
+  "gaato/deflate",
+  "gaato/deflate/gzip/internal/crc32",
+  "gaato/deflate/gzip/internal/header",
+  "moonbitlang/core/debug",
+}
+
+import {
+  "gaato/deflate/internal/fixtures",
+} for "wbtest"
+
+supported_targets = "js + native + wasm + wasm-gc"

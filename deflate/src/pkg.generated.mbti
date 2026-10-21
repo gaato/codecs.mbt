@@ -1,0 +1,31 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/deflate"
+
+import {
+  "gaato/codec",
+  "gaato/codec_bytes",
+}
+
+// Values
+pub fn decompress(BytesView, max_output? : Int) -> Bytes raise @codec.CodecError
+
+// Errors
+
+// Types and methods
+pub struct Decoder {
+  // private fields
+}
+pub fn Decoder::Decoder(dictionary? : BytesView, until? : @codec_bytes.Until) -> Self
+pub fn Decoder::is_finished(Self) -> Bool
+pub fn Decoder::last_consumed(Self) -> Int
+pub fn Decoder::last_produced(Self) -> Int
+pub fn Decoder::memory_usage(Self) -> Int
+pub fn Decoder::reset(Self) -> Unit
+pub fn Decoder::step(Self, BytesView, MutArrayView[Byte], end~ : Bool) -> @codec_bytes.Status raise @codec.CodecError
+pub fn Decoder::step_into(Self, BytesView, FixedArray[Byte], end~ : Bool) -> @codec_bytes.Status raise @codec.CodecError
+pub impl @codec_bytes.Decode for Decoder
+
+// Type aliases
+pub using @codec_bytes {type Status}
+
+// Traits

@@ -10,6 +10,7 @@ stays within limits the caller sets.
 | [`gaato/codec_bytes`](https://mooncakes.io/docs/gaato/codec_bytes) | The contract of byte-stream codecs | [`codec_bytes/`](codec_bytes/) |
 | [`gaato/zstd`](https://mooncakes.io/docs/gaato/zstd) | Zstandard (RFC 8878) decoder | [`zstd/`](zstd/) |
 | [`gaato/brotli`](https://mooncakes.io/docs/gaato/brotli) | Brotli (RFC 7932) decoder and encoder | [`brotli/`](brotli/) |
+| [`gaato/deflate`](https://mooncakes.io/docs/gaato/deflate) | DEFLATE (RFC 1951), zlib (RFC 1950) and gzip (RFC 1952) decoders | [`deflate/`](deflate/) |
 
 Each module has its own README, version and changelog.
 

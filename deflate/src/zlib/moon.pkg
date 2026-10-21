@@ -1,0 +1,13 @@
+import {
+  "gaato/codec",
+  "gaato/codec_bytes",
+  "gaato/deflate",
+  "gaato/deflate/zlib/internal/adler32",
+  "gaato/deflate/zlib/internal/header",
+}
+
+import {
+  "gaato/deflate/internal/fixtures",
+} for "wbtest"
+
+supported_targets = "js + native + wasm + wasm-gc"

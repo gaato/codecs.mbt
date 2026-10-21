@@ -1,0 +1,4 @@
+// Adler-32 (RFC 1950 section 9), the checksum of a zlib stream's data and of
+// its preset dictionary.
+
+supported_targets = "js + native + wasm + wasm-gc"
