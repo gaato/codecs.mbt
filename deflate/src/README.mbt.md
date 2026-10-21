@@ -216,16 +216,19 @@ Discord's `zlib-stream` gateway compression is one zlib stream per connection th
 
 ### Compression ratio
 
-Sizes in bytes of whole gzip streams (zlib's are 12 bytes smaller, raw DEFLATE's 18), against zlib 1.3.2 (Node 26's `zlib.gzipSync`) and GNU gzip 1.15 (`gzip -n`) at the same levels. "text" is 300 kB of words from a list, "mixed" 400 kB of words, random bytes and repeats, "random" 150 kB from an LCG, "zeros" 1 MiB:
+Sizes in bytes of raw DEFLATE streams for six files of the [Silesia corpus](https://sun.aei.polsl.pl/~sdeor/index.php?page=silesia), against zlib 1.3.2.1 at the same levels:
 
-| Input | Size | here -1 | zlib -1 | gzip -1 | here -6 | zlib -6 | gzip -6 | here -9 | zlib -9 | gzip -9 |
-|---|---|---|---|---|---|---|---|---|---|---|
-| text | 300,000 | 60,617 | 63,579 | 65,853 | 53,688 | 47,542 | 47,886 | 46,799 | 46,415 | 46,397 |
-| mixed | 400,000 | 135,880 | 149,653 | 150,813 | 130,813 | 123,527 | 124,555 | 122,967 | 122,079 | 122,961 |
-| random | 150,000 | 150,068 | 150,068 | 150,043 | 150,068 | 150,068 | 150,043 | 150,068 | 150,068 | 150,043 |
-| zeros | 1,048,576 | 1,830 | 4,608 | 4,608 | 1,830 | 1,051 | 1,051 | 1,830 | 1,051 | 1,051 |
+| File | Size | here -1 | zlib -1 | here -6 | zlib -6 | here -9 | zlib -9 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| dickens | 10,192,446 | 4,160,315 | 4,585,612 | 3,993,481 | 3,871,628 | 3,879,780 | 3,854,729 |
+| mozilla | 51,220,480 | 19,685,168 | 20,577,220 | 19,049,989 | 19,089,118 | 18,909,921 | 19,044,390 |
+| nci | 33,553,445 | 4,005,261 | 4,624,591 | 3,187,434 | 3,200,182 | 3,057,334 | 2,987,995 |
+| ooffice | 6,152,192 | 3,180,344 | 3,290,526 | 3,104,025 | 3,097,288 | 3,088,080 | 3,092,920 |
+| samba | 21,606,400 | 5,834,347 | 6,329,449 | 5,372,773 | 5,451,399 | 5,400,415 | 5,402,704 |
+| xml | 5,345,280 | 907,744 | 965,242 | 702,233 | 687,991 | 667,554 | 658,899 |
+| total | 128,070,243 | 37,773,179 | 40,372,640 | 35,409,935 | 35,397,606 | 35,003,084 | 35,041,637 |
 
-On text and mixed data, level 1 compresses more than zlib's and gzip's level 1, level 9 about as much as theirs, and level 6 less than theirs, by 13 % on text and 6 % on mixed data. Random bytes go into stored blocks at every level. Long runs of one byte cost a block every 16 KiB, where zlib's blocks are larger. To reproduce, from the repository root: `moon run deflate/scripts/crosscheck.mbtx -- --compare` prints, for every gzip stream at levels 1, 6 and 9, its size and those of zlib and gzip for the same input.
+Level 1 compresses about 6 % more than zlib's level 1, and levels 6 and 9 about as much as zlib's: by file, from 1.4 % smaller to 3.1 % larger at level 6. Random bytes go into stored blocks at every level. Long runs of one byte cost a block every 16 KiB, where zlib's blocks are larger.
 
 ## Known limits
 
