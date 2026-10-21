@@ -3,12 +3,14 @@
 /// against its CRC-32 and length, their data concatenated. `max_output` caps
 /// the decoded size (unlimited by default) and raises
 /// `LimitExceeded({ resource: Output, .. })` past it; bytes after the last
-/// member that begin no member raise `TrailingData`.
+/// member that begin no member raise `TrailingData`. Headers are skipped
+/// (`keep_header=false`): their extra fields, names and comments are not
+/// kept, so a header of any size decodes, and its CRC is still checked.
 pub fn decompress(
   input : BytesView,
   max_output? : Int32,
 ) -> Bytes raise @codec.CodecError {
-  let decoder = Decoder()
+  let decoder = Decoder(keep_header=false)
   let chunk = FixedArray::make(1 << 16, b'\x00')
   let out = Buffer()
   let mut rest = input

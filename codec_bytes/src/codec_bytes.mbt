@@ -1,4 +1,13 @@
 ///|
+/// The error every codec raises, its kinds, and the limits a stream can
+/// exceed, from `gaato/codec`, so that a caller of a codec can name them with
+/// this package as its only import. A constructor is matched unqualified, as
+/// in `CodecError(Corrupt, _)`, where the type is known (a `catch` on a
+/// codec's step), or qualified by its type, as in
+/// `@codec_bytes.CodecError::CodecError(kind, _)`.
+pub using @codec {type CodecError, type ErrorKind, type Limit, type Resource}
+
+///|
 /// Why a step stopped without an error.
 pub(all) enum Status {
   /// The stream is complete. With `Until::EndOfInput` this needs `end` and

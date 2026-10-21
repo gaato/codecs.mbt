@@ -92,7 +92,7 @@ test "encode a stream part by part" {
 }
 ```
 
-`Decoder` and `Encoder` implement `Decode` and `Encode` from [`gaato/codec_bytes`](https://mooncakes.io/docs/gaato/codec_bytes), the contract the codecs of [codecs.mbt](https://github.com/gaato/codecs.mbt) share, so code written once against it drives them. Errors are `gaato/codec`'s `CodecError(kind, message)`, the same for every codec there.
+`Decoder` and `Encoder` implement `Decode` and `Encode` from [`gaato/codec_bytes`](https://mooncakes.io/docs/gaato/codec_bytes), the contract the codecs of [codecs.mbt](https://github.com/gaato/codecs.mbt) share, so code written once against it drives them. Errors are `gaato/codec`'s `CodecError(kind, message)`, the same for every codec there; `gaato/codec_bytes` re-exports it, so that one import names it.
 
 Brotli has no framing, so an input holds one stream. A decoder made with `until=EndOfMember` stops right after the stream and leaves what follows unread:
 

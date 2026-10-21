@@ -9,7 +9,6 @@ import {
 } for "wbtest"
 
 import {
-  "gaato/codec",
   "gaato/deflate/zlib",
   "gaato/deflate/gzip",
 } for "test"

@@ -6,7 +6,8 @@
 // and length. The fixed part, the extra field's length, the header CRC and
 // the trailer gather in `hdr` and are judged by the pure functions of
 // `@header`; the variable fields gather in buffers, within
-// `max_header_bytes`. The DEFLATE data goes through a `@deflate.Decoder` that
+// `max_header_bytes`, or with `keep_header=false` only pass through the header
+// CRC. The DEFLATE data goes through a `@deflate.Decoder` that
 // stops right after the final block (`EndOfMember`), so the trailer is what it
 // leaves of the input; it writes straight into the caller's slice, and the
 // CRC-32 and the length are updated from what it wrote.
@@ -73,6 +74,7 @@ pub extend Header with @debug.Debug::{to_repr}
 pub struct Decoder {
   priv inner : @deflate.Decoder
   priv until : @codec_bytes.Until
+  priv keep_header : Bool
   priv max_header_bytes : Int32
   // Fixed-size header and trailer bytes gathered so far.
   priv hdr : FixedArray[Byte]
@@ -115,17 +117,23 @@ pub struct Decoder {
 /// `input[last_consumed():]` is what follows, for a caller that decides for
 /// itself what may follow a member.
 ///
-/// `max_header_bytes` bounds the bytes a header's extra field, name and
-/// comment may hold between them, 65,536 by default; a header that holds
-/// more raises `LimitExceeded({ resource: Memory, .. })`.
+/// `keep_header`, true by default, keeps each header's extra field, name and
+/// comment for `header()`. `max_header_bytes` bounds the bytes they may hold
+/// between them, 65,536 by default; a header that holds more raises
+/// `LimitExceeded({ resource: Memory, .. })`. With `keep_header=false` the
+/// decoder skips them whatever their size, holding none of their bytes:
+/// `header()` then has only the fixed fields, `max_header_bytes` does not
+/// apply, and a header CRC is still checked.
 pub fn Decoder::Decoder(
   until~ : @codec_bytes.Until = EndOfInput,
+  keep_header~ : Bool = true,
   max_header_bytes~ : Int32 = 65536,
 ) -> Decoder {
   let empty_out = FixedArray::make(0, b'\x00')
   {
     inner: @deflate.Decoder(until=EndOfMember),
     until,
+    keep_header,
     max_header_bytes: max_header_bytes.max(0),
     hdr: FixedArray::make(HDR_SIZE, b'\x00'),
     hdr_len: 0,
@@ -154,8 +162,8 @@ pub fn Decoder::Decoder(
 }
 
 ///|
-/// Starts a new stream with the same options: the same `until` and
-/// `max_header_bytes`. The header read so far is dropped.
+/// Starts a new stream with the same options: the same `until`,
+/// `keep_header` and `max_header_bytes`. The header read so far is dropped.
 pub fn Decoder::reset(self : Decoder) -> Unit {
   self.release_step()
   self.inner.reset()
@@ -172,7 +180,8 @@ pub fn Decoder::reset(self : Decoder) -> Unit {
 /// The header of the current member: the member being decoded, or after the
 /// end of the stream the last one. None until the first member's header is
 /// complete, and from the moment the next member's header begins until it is
-/// complete.
+/// complete. With `keep_header=false`, its extra field, name and comment are
+/// None whatever the member holds.
 pub fn Decoder::header(self : Decoder) -> Header? {
   self.header
 }
@@ -180,8 +189,8 @@ pub fn Decoder::header(self : Decoder) -> Header? {
 ///|
 /// Bytes held for the stream: those of the raw DEFLATE decoder (see
 /// `@deflate.Decoder::memory_usage`) and the variable fields of the current
-/// header, at most `max_header_bytes`. The fixed-size header and trailer
-/// bytes, at most 10, are not counted.
+/// header, at most `max_header_bytes`, and none with `keep_header=false`. The
+/// fixed-size header and trailer bytes, at most 10, are not counted.
 pub fn Decoder::memory_usage(self : Decoder) -> Int32 {
   self.inner.memory_usage() + self.held
 }
@@ -312,8 +321,10 @@ fn Decoder::run(self : Decoder, end~ : Bool) -> Status raise Stop {
         self.fill(2)
         self.header_crc = @crc32.update(self.header_crc, self.hdr[0:2])
         let length = @header.le16(Bytes::from_array(self.hdr[0:2]))
-        self.reserve(length, known=true)
-        self.extra = Some(Buffer(size_hint=length))
+        if self.keep_header {
+          self.reserve(length, known=true)
+          self.extra = Some(Buffer(size_hint=length))
+        }
         self.extra_left = length
         self.state = Extra
       }
@@ -443,11 +454,11 @@ fn Decoder::next_field(self : Decoder, from : State) -> Unit {
   self.state = match from {
     ExtraLength if (flags & @header.FEXTRA) != 0 => ExtraLength
     ExtraLength | Name if (flags & @header.FNAME) != 0 => {
-      self.name = Some(Buffer())
+      self.name = self.field_buffer()
       Name
     }
     ExtraLength | Name | Comment if (flags & @header.FCOMMENT) != 0 => {
-      self.comment = Some(Buffer())
+      self.comment = self.field_buffer()
       Comment
     }
     ExtraLength | Name | Comment | HeaderCrc if (flags & @header.FHCRC) != 0 =>
@@ -492,6 +503,16 @@ fn Decoder::drop_header(self : Decoder) -> Unit {
 }
 
 ///|
+/// A buffer for a name or a comment, or None to skip it.
+fn Decoder::field_buffer(self : Decoder) -> Buffer? {
+  if self.keep_header {
+    Some(Buffer())
+  } else {
+    None
+  }
+}
+
+///|
 /// Makes room for `n` more bytes of header fields, within `max_header_bytes`.
 /// `known` says whether the field declared its size (the extra field), so
 /// that the error can say what the header needs.
@@ -530,14 +551,17 @@ fn Decoder::keep(self : Decoder, into : Buffer?, n : Int32) -> Unit {
 }
 
 ///|
-/// Takes the input bytes of a zero-terminated field into `into`, and the
-/// zero if it is there: whether the field is complete.
+/// Takes the input bytes of a zero-terminated field into `into`, or past it
+/// when `into` is None, and the zero if it is there: whether the field is
+/// complete.
 fn Decoder::zero_terminated(self : Decoder, into : Buffer?) -> Bool raise Stop {
   let mut n = 0
   while self.in_pos + n < self.view.length() && self.view[self.in_pos + n] != 0 {
     n += 1
   }
-  self.reserve(n, known=false)
+  if into is Some(_) {
+    self.reserve(n, known=false)
+  }
   self.keep(into, n)
   if self.in_pos == self.view.length() {
     return false

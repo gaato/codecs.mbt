@@ -42,6 +42,8 @@ pub(all) suberror CodecError { CodecError(ErrorKind, String) }
 ```moonbit
 // gaato/codec_bytes: byte streams
 
+pub using @codec {type CodecError, type ErrorKind, type Limit, type Resource}
+
 pub(all) enum Status {
   Done            // the stream is complete (see "Ending a stream")
   NeedMoreInput   // all input was consumed; call again with more
@@ -136,11 +138,46 @@ in buffers whose size depends on the stream (windows, blocks, tables sized by
 a header). It never exceeds what the codec's limits allow, and it may drop
 between members, when a codec releases what the next member does not need.
 
+## Streams that do not end
+
+Some streams are meant never to end. Discord's gateway compresses a whole
+connection as one zlib stream (`zlib-stream`) and ends each message with a
+sync flush, `00 00 ff ff`; `zstd-stream` is one zstd frame per connection,
+each message flushed to a block boundary. A consumer keeps one decoder for
+the connection and passes every piece of input with `end=false`, since the
+input has no last piece:
+
+- **`NeedMoreInput`**, with the input consumed, is the normal answer to every
+  piece. By rule 1 everything the input determines has been written, so once
+  a piece that ends on a flush has been consumed, the whole message is out.
+  The decoder does not know where messages end: a message that arrives in
+  several pieces answers `NeedMoreInput` after each, and the consumer finds
+  the end from its own framing (for `zlib-stream`, the flush suffix).
+- **`NeedMoreOutput`**: the slice is full. Call again with what is left of the
+  piece (`input[last_consumed():]`) and more room.
+- **`Done`**: the stream ended, which such a stream must not do. Make the
+  decoder with `until=EndOfMember`, so that an end is reported at once and
+  nothing after it is consumed. Under the default `EndOfInput` and
+  `end=false`, a decoder after the end of a stream waits to see what follows,
+  answering `NeedMoreInput`; the next bytes then raise `TrailingData`, or
+  for gzip and zstd are read as another member.
+
+When the connection closes, the stream has been cut, not ended: drop the
+decoder, or `reset` it for the next connection. Passing `end=true` instead
+raises `Truncated`, which is right only for a consumer that wants to know the
+stream was cut. Memory stays what `memory_usage` reports however long the
+stream runs: a decoder keeps its window, never the output so far.
+
 ## Errors
 
 Every codec raises `gaato/codec`'s `CodecError`, from its own methods as well
 as through the traits, so that callers handle every format's failures with
-one type. What is particular to a format goes in the message. A kind of
+one type. `gaato/codec_bytes` re-exports `CodecError`, `ErrorKind`, `Limit`
+and `Resource`, so a consumer of byte-stream codecs names them with that one
+import. In a `catch` on a codec's step, where the error's type is known,
+`CodecError(kind, message)` and the kinds match unqualified and need no
+import at all; elsewhere, qualify a constructor by its type, as in
+`@codec_bytes.CodecError::CodecError(kind, _)`. What is particular to a format goes in the message. A kind of
 failure that no existing kind describes is added to `gaato/codec`; the enum
 is `#non_exhaustive`, so adding one breaks no one.
 

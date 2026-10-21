@@ -1,0 +1,9 @@
+// A consumer of a codec's errors that imports gaato/codec_bytes and the codec,
+// and not gaato/codec: what codec_bytes re-exports must be enough.
+
+import {
+  "gaato/codec_bytes",
+  "gaato/deflate/gzip",
+} for "test"
+
+supported_targets = "js + native + wasm + wasm-gc"

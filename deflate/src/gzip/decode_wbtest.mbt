@@ -1,4 +1,5 @@
 ///|
+/// A member whose header has every field|
 test "every vector decodes to its original" {
   for v in vectors {
     let got = decompress(v.input())
@@ -297,6 +298,130 @@ test "max_header_bytes bounds the extra field, the name and the comment together
     limit(endless, 65536),
     content="{ resource: Memory, needed: None, limit: 65536 }",
   )
+}
+
+///|
+
+///|
+/// A member whose header has every field: an extra field of 65,535 bytes, a
+/// name and a comment of over 1 MiB each, and a header CRC, `crc_delta` off
+/// from the right one.
+fn huge_header(crc_delta~ : UInt32 = 0) -> Bytes {
+  let header = Bytes::from_array(
+    [
+      ..b"\x1f\x8b\x08\x1e\x00\xf1\x53\x65\x02\x03\xff\xff",
+      ..Bytes::make(65535, b'e'),
+      ..Bytes::make((1 << 20) + 1, b'n'),
+      0,
+      ..Bytes::make(1 << 20, b'c'),
+      0,
+    ],
+  )
+  let crc = (@crc32.update_bytes(@crc32.INITIAL, header) + crc_delta) & 0xFFFF
+  with_header(
+    Bytes::from_array([..header, crc.to_byte(), (crc >> 8).to_byte()]),
+  )
+}
+
+///|
+test "keep_header=false skips fields of any size, holding none of them" {
+  // Kept, the name passes the limit.
+  let kept = try
+    @fixtures.drive(Decoder(), huge_header(), next_in=() => 997, next_out=() => {
+      100
+    })
+  catch {
+    @codec.CodecError(kind, _) => Repr(kind).to_string()
+    _ => "other"
+  } noraise {
+    _ => "decoded"
+  }
+  inspect(
+    kept,
+    content="LimitExceeded({ resource: Memory, needed: None, limit: 65536 })",
+  )
+  // Skipped, in small chunks: memory stays that of the raw decoder.
+  for max in [0, 65536] {
+    let decoder = Decoder(keep_header=false, max_header_bytes=max)
+    let (got, consumed) = @fixtures.drive(
+      decoder,
+      huge_header(),
+      next_in=() => 997,
+      next_out=() => 100,
+      check=(d, room) => {
+        check_bounds(d, room)
+        assert_eq(d.held, 0)
+        assert_true(d.extra is None && d.name is None && d.comment is None)
+        assert_eq(d.memory_usage(), d.inner.memory_usage())
+        assert_eq(d.memory_usage(), Decoder().memory_usage())
+      },
+    )
+    assert_eq(got, b"x")
+    assert_eq(consumed, huge_header().length())
+    debug_inspect(
+      decoder.header(),
+      content=(
+        #|Some(
+        #|  {
+        #|    text: false,
+        #|    mtime: 1700000000,
+        #|    xfl: 0x02,
+        #|    os: 0x03,
+        #|    extra: None,
+        #|    name: None,
+        #|    comment: None,
+        #|  },
+        #|)
+      ),
+    )
+  }
+  // The header CRC is still checked.
+  let error = try
+    @fixtures.drive(
+      Decoder(keep_header=false),
+      huge_header(crc_delta=1),
+      next_in=() => 4096,
+      next_out=() => 100,
+    )
+  catch {
+    @codec.CodecError(kind, message) => "\{Repr(kind)}: \{message}"
+    _ => "other"
+  } noraise {
+    _ => "decoded"
+  }
+  inspect(
+    error,
+    content="ChecksumMismatch: the header's CRC-16 (FHCRC) does not match the header",
+  )
+  // decompress skips headers, so it decodes this one.
+  assert_eq(decompress(huge_header()), b"x")
+}
+
+///|
+test "keep_header=false: the same output, the fixed fields of every header" {
+  for v in vectors {
+    let full = Decoder()
+    let skip = Decoder(keep_header=false)
+    let a = @fixtures.outcome(full, v.input())
+    let b = @fixtures.outcome(skip, v.input())
+    assert_eq(a, b, msg=v.name)
+    if full.header() is Some(h) {
+      assert_eq(
+        skip.header(),
+        Some({ ..h, extra: None, name: None, comment: None, }),
+        msg=v.name,
+      )
+    } else {
+      assert_true(skip.header() is None, msg=v.name)
+    }
+  }
+  // reset keeps the option.
+  let decoder = Decoder(keep_header=false)
+  let input = vector("header_all").input()
+  let _ = @fixtures.outcome(decoder, input)
+  decoder.reset()
+  let _ = @fixtures.outcome(decoder, input)
+  assert_true(decoder.header() is Some({ name: None, os: 0x03, .. }))
 }
 
 ///|

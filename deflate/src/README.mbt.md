@@ -137,6 +137,22 @@ test "one member, then what follows it" {
 
 A header's extra field, name and comment may hold at most `max_header_bytes` between them, 65,536 by default; a header that holds more raises `LimitExceeded({ resource: Memory, .. })`, rather than being kept whole or cut short.
 
+A decoder that has no use for them, as an HTTP client usually has none, passes `keep_header=false`: it skips the extra field, the name and the comment whatever their size, holds none of their bytes, and still checks the header CRC. `header()` then gives the time, flags and OS, with the other fields None, and `max_header_bytes` does not apply. `@gzip.decompress` skips them this way, so a large header never stops it.
+
+```mbt check
+///|
+test "skip the header's fields" {
+  // A member named "a.txt" (FNAME).
+  let gz = b"\x1f\x8b\x08\x08\x00\x00\x00\x00\x00\x03a.txt\x00\xcb\x48\xcd\xc9\xc9\x07\x00\x86\xa6\x10\x36\x05\x00\x00\x00"
+  let decoder = @gzip.Decoder(keep_header=false)
+  let out = FixedArray::make(64, b'\x00')
+  assert_true(decoder.step_into(gz, out, end=true) is Done)
+  assert_eq(Bytes::from_array(out[:decoder.last_produced()]), b"hello")
+  assert_true(decoder.header() is Some({ name: None, os: b'\x03', .. }))
+  assert_eq(@gzip.decompress(gz), b"hello")
+}
+```
+
 `@gzip.Encoder` and `@gzip.compress` write one member. Without a `header`, it has no name, comment or extra field, MTIME 0 and OS 255 (both unknown), so that the same input gives the same bytes on every target and every day, and XFL as zlib sets it: 4 at levels 0 and 1, 2 at level 9, 0 otherwise. A `Header` you give is written as it is, but it must be writable (`Header::is_writable`): an extra field of at most 65,535 bytes, and no zero byte in the name or the comment, which a zero ends. Passing one that is not is a programming error, and aborts.
 
 ```mbt check
@@ -176,7 +192,7 @@ test "a stream that needs a dictionary" {
   // zlib.deflateSync("hello", { dictionary }) in Node.
   let stream = b"\x78\xbb\x39\x4e\x06\x97\xcb\x00\x09\x00\x00\x06\x2c\x02\x15"
   let needed = try @zlib.decompress(stream) catch {
-    @codec.CodecError(DictionaryRequired(id), _) => id
+    CodecError(DictionaryRequired(id), _) => id
     _ => None
   } noraise {
     _ => None
@@ -199,9 +215,56 @@ test "compress with a dictionary" {
 }
 ```
 
-Discord's `zlib-stream` gateway compression is one zlib stream per connection that never ends; each message ends in a sync flush (`00 00 ff ff`). Keep one decoder for the connection and pass each message with `end=false`: when it answers `NeedMoreInput` with the message consumed, everything the message holds has been written.
-
 `@zlib.is_header(cmf, flg)` tells a zlib header from the start of raw DEFLATE, for HTTP's `deflate` coding, which is zlib but which some servers send raw. It is a heuristic, though a strong one.
+
+### A stream that does not end
+
+Discord's `zlib-stream` gateway compression is one zlib stream per connection that never ends; each message ends in a sync flush (`00 00 ff ff`), and a message may come in several WebSocket frames. Keep one decoder for the connection, made with `until=EndOfMember`, and pass every frame with `end=false`, since no frame is the last:
+
+- `NeedMoreInput`, with the frame consumed, is the answer to every frame. Everything the frame determines has been written, so after a frame that ends in `00 00 ff ff` the whole message is out. The decoder does not know where messages end; the suffix does.
+- `NeedMoreOutput`: the slice is full. Call again with the rest of the frame, `frame[last_consumed():]`.
+- `Done`: the stream ended, which a gateway stream never does. `until=EndOfMember` makes the decoder report this at once; under the default, it would wait for what follows and raise `TrailingData` on the next frame.
+
+When the connection closes, drop the decoder or `reset` it for the next one, rather than passing `end=true`, which raises `Truncated`: the stream was cut, not ended. However long the connection, the decoder holds its window and tables, never the messages so far.
+
+```mbt check
+///|
+/// Inflates the frames of one connection, and returns its messages.
+fn inflate_messages(frames : Array[Bytes]) -> Array[Bytes] raise {
+  let decoder = @zlib.Decoder(until=EndOfMember)
+  let out = FixedArray::make(64 * 1024, b'\x00')
+  let message = Buffer()
+  let messages = []
+  for frame in frames {
+    let mut input = frame[:]
+    for ;; {
+      let status = decoder.step_into(input, out, end=false)
+      input = input[decoder.last_consumed():]
+      message.write_bytes(Bytes::from_array(out[:decoder.last_produced()]))
+      match status {
+        NeedMoreInput => break
+        NeedMoreOutput => ()
+        Done => fail("the stream ended")
+      }
+    }
+    if frame is [.., 0x00, 0x00, 0xff, 0xff] {
+      messages.push(message.to_bytes())
+      message.reset()
+    }
+  }
+  messages
+}
+
+///|
+test "a message split across frames comes out once its flush arrives" {
+  let messages = [b"{\"op\":10}", b"{\"op\":0,\"t\":\"READY\"}"]
+  let parts = compress_messages(messages)
+  // The second message in two frames.
+  let second = parts[1]
+  let frames = [parts[0], second[:3].to_owned(), second[3:].to_owned()]
+  assert_eq(inflate_messages(frames), messages)
+}
+```
 
 ## What it does
 
@@ -210,7 +273,7 @@ Discord's `zlib-stream` gateway compression is one zlib stream per connection th
 - Never reads past the end of a stream: after `Done` under `until=EndOfMember`, what follows is `input[last_consumed():]`, whatever the input splits. Raw DEFLATE and zlib streams cannot be concatenated, so under the default `until=EndOfInput` anything after one raises `TrailingData`.
 - Takes input in chunks of any size, down to one byte, and writes output into buffers of any size, under the rules of `gaato/codec_bytes`. Memory is the window and the decoding tables, 74,240 bytes with a dictionary or without (a dictionary is your bytes, held by reference), plus a gzip header's fields; `memory_usage()` reports it.
 - A step that raises first writes the output that comes before the error, and `last_consumed()` and `last_produced()` say what it took and wrote, so a stream with bytes after it gives all its output, then `TrailingData`, with `last_consumed()` at its end: whether it came in one step or many. The one exception is below.
-- Every malformed stream raises [`gaato/codec`](https://mooncakes.io/docs/gaato/codec)'s `CodecError(kind, message)`, with the kind `Truncated`, `Corrupt`, `ChecksumMismatch`, `TrailingData`, `DictionaryRequired`, `DictionaryMismatch` or `LimitExceeded` (a gzip header over `max_header_bytes`, with `resource: Memory`; more than `max_output` from `decompress`, with `resource: Output`). An error inside the DEFLATE data of a zlib or gzip stream keeps its kind. It does not abort. To match on the error, add `gaato/codec` to your package's imports.
+- Every malformed stream raises [`gaato/codec`](https://mooncakes.io/docs/gaato/codec)'s `CodecError(kind, message)`, with the kind `Truncated`, `Corrupt`, `ChecksumMismatch`, `TrailingData`, `DictionaryRequired`, `DictionaryMismatch` or `LimitExceeded` (a gzip header over `max_header_bytes`, with `resource: Memory`; more than `max_output` from `decompress`, with `resource: Output`). An error inside the DEFLATE data of a zlib or gzip stream keeps its kind. It does not abort. In a `catch` on these functions, `CodecError(kind, _)` and the kinds match unqualified, with no import; to name the types elsewhere, import [`gaato/codec_bytes`](https://mooncakes.io/docs/gaato/codec_bytes), which re-exports them.
 - Encodes with zlib's levels, LZ77 with hash chains and fixed or dynamic Huffman codes per 16 KiB block, whichever is smaller, stored when neither is. Its streams decode with zlib and the `gzip` command, whole and cut after every flush (`scripts/crosscheck.mbtx`, run in CI), and the same input gives the same bytes on every target. An encoder never raises.
 - An encoder's memory is fixed: 689,394 bytes for the 64 KiB input ring (the 32 KiB window and a block), the match tables, a block's tokens and its output (`memory_usage()`), with a dictionary or without, and for gzip its header's bytes.
 
