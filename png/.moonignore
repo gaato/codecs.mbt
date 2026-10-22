@@ -1,0 +1,6 @@
+# Packaging rules for gaato/png. This file replaces .gitignore for this
+# directory; the repository root's .gitignore still applies.
+_build/
+.mooncakes/
+# Background for contributors, linked from the README on GitHub.
+docs/

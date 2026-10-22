@@ -1,0 +1,10 @@
+gaato/codec_bench is licensed under the Apache License 2.0 (../LICENSE).
+
+src/png_corpus/damage.mbt is a copy, changed as its header says, of
+`png_damage` and its helpers in codecs/png_damage_test.mbt of typst.mbt
+(https://github.com/moonbitlang/typst.mbt, revision fce88c6f), used under the
+Apache License 2.0. typst.mbt's NOTICE says:
+
+  typst.mbt is a MoonBit port of Typst (https://github.com/typst/typst,
+  Apache-2.0), revision pinned in UPSTREAM_REV, and is distributed under the
+  Apache License 2.0 (see LICENSE).

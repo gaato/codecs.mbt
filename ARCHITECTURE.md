@@ -12,7 +12,7 @@ and one way of testing.
 consumers     command-line tools, HTTP clients, applications
                 │ depend only on a kind's contract and gaato/codec's errors
 ──────────────┼───────────────────────────────────────────────────────────
-formats       zstd  brotli  deflate     │  image formats  │  audio formats
+formats       zstd  brotli  deflate     │  png            │  audio formats
                 one module per format; a format may embed another codec
 ──────────────┼───────────────────────────────────────────────────────────
 contracts     gaato/codec_bytes          │  gaato/codec_image │ an audio contract
@@ -27,9 +27,9 @@ blocks        entropy coders: small, mostly pure functions
 The byte-stream contract and the compression formats exist today: zstd,
 brotli, and DEFLATE with its two containers, zlib and gzip, in one module of
 three packages (`gaato/deflate`, `gaato/deflate/zlib`, `gaato/deflate/gzip`).
-The image contract, `gaato/codec_image`, is written, and its first format,
-PNG (`gaato/png`), is being built on it. The audio row shows where such
-codecs would go; nothing in the layers below has to change for them.
+So do the image contract, `gaato/codec_image`, and its first format, PNG with
+APNG (`gaato/png`). The audio row shows where such codecs would go; nothing in
+the layers below has to change for them.
 
 **Vocabulary.** `gaato/codec` holds what every kind of codec reports in the
 same terms: the error kinds, and the limits a stream can exceed, in bytes. A
@@ -106,9 +106,9 @@ module of the workspace and never published:
 - memory stays within the limits, checked after every step;
 - corrupted input never crashes, and the kinds of error it causes are
   recorded;
-- output matches the reference implementations (zstd, google/brotli, zlib),
-  and so do the refusals of crafted and corrupted streams, where the
-  reference can be asked (zlib, through Node).
+- output matches the reference implementations (zstd, google/brotli, zlib;
+  for PNG, pypng and the png crate), and so do the refusals of crafted and
+  corrupted streams, where the reference can be asked (zlib, through Node).
 
 Each module also keeps two ledgers that scripts enforce: RESOURCE_BOUNDS.md
 names the tests that hold every bound, and TEST_COVERAGE.md explains every

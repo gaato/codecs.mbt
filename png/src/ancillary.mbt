@@ -246,8 +246,8 @@ fn u32(data : FixedArray[Byte], at : Int32) -> UInt32 {
 /// palette entries. Returns false, changing nothing, when the chunk's
 /// length or values are not what the specification allows; the rules are
 /// libpng's, but for tRNS's samples, whose bits above the bit depth are
-/// left out (as image-rs does, and as browsers show such images) where
-/// libpng keeps them and warns.
+/// left out where libpng keeps them and warns: libpng drops them too when
+/// it expands rows, and WPT's trns-high-bits-set.png expects browsers to.
 fn Fields::read(
   self : Fields,
   index : Int32,

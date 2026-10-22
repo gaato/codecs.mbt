@@ -39,7 +39,7 @@ ledger OK, 1 = an unexplained or over-budget file, 2 = the run itself failed
 The pitfalls the script pins (stale counters, `-f summary` skewing totals,
 tcc on openSUSE) are described in zstd's ledger, `zstd/TEST_COVERAGE.md`.
 
-Snapshot at the last full measurement (2026-10-22): **99.7 %** (628/630
+Snapshot at the last full measurement (2026-10-23): **99.8 %** (918/920
 lines), the two uncovered lines ledgered below.
 
 ## Policy
@@ -65,7 +65,9 @@ zlib, and against typst's `decode_png`, under the harness's checks of
 splits, truncation, trailing bytes, `until=EndOfMember`, `reset` and corruption, and the broken images
 against the kinds of error their names describe; and over animated PNGs
 (the Web Platform Tests' png/apng, Wuffs' and image-png's animations),
-every frame against the png crate's.
+every frame against the png crate's. Outside the gates,
+[`docs/robustness.md`](https://github.com/gaato/codecs.mbt/blob/main/png/docs/robustness.md) records a run over corpora of
+broken files from typst, image-png and libspng.
 
 ## Accepted uncovered
 

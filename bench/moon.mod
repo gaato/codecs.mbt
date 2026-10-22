@@ -15,6 +15,7 @@ source = "src"
 preferred_target = "native"
 
 import {
+  "gaato/codec@0.1.0",
   "gaato/zstd@0.3.1",
   "gaato/brotli@0.4.1",
   "gaato/deflate@0.1.0",

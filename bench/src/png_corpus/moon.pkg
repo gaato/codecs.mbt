@@ -1,0 +1,18 @@
+// Decodes broken PNG files with gaato/png and with typst's decode_png, and
+// prints what each makes of them, for png/docs/robustness.md. Not a
+// benchmark of the suite: its inputs are the caller's files.
+
+import {
+  "gaato/codec",
+  "gaato/png",
+  "moonbitlang/typst/codecs",
+  "moonbitlang/core/debug",
+  "moonbitlang/core/encoding/base64",
+  "moonbitlang/core/encoding/utf8",
+  "moonbitlang/core/env",
+  "moonbitlang/x/fs",
+}
+
+pkgtype(kind: "executable")
+
+supported_targets = "native"

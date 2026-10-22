@@ -9,7 +9,7 @@ share; each format's module carries copies of the files it uses.
 | `crc32` | CRC-32 (ISO 3309, the reflected polynomial 0xEDB88320), eight bytes at a time (slice-by-8) from tables computed at start-up, 9 KiB | deflate (gzip), png |
 | `bits` | `BitPacker`, an encoder's least-significant-bit-first bit writer and output buffer | brotli |
 | `lz77` | The hash and match length of LZ77 match finders; `Matcher`, a greedy one with bucketed hash chains; `HcMatchfinder` and `HtMatchfinder`, libdeflate's hash-chain and hash-table finders | brotli (`Matcher`), deflate (the other two) |
-| `proof_bits` | The trusted bridges of `moon prove`: shifts and masks behind contracts that state their arithmetic, with the tests that back them | zstd, brotli, deflate |
+| `proof_bits` | The trusted bridges of `moon prove`: shifts and masks behind contracts that state their arithmetic, with the tests that back them | zstd, brotli, deflate, png |
 | `proof_fields` | A lemma for proofs of header parsers: a bit field read with division and remainder is the field (apart from `proof_bits`, so that solvers prove it with nothing else in their context) | zstd |
 | `proof_codes` | The arithmetic of prefix codes for `moon prove`: counts of code lengths, Kraft's sum, canonical codes and codes in reverse bit order, with proof steps (functions whose contracts are facts about them) in place of lemmas, which would slow the solvers down in every package that imports it | zstd, brotli, deflate |
 | `proof_reverse` | A theorem: reversing a code's bits twice gives the code back. `scripts/gen_proof_reverse.mbtx` writes it (`-- --check` is part of the gates) | none |

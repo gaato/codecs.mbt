@@ -2,7 +2,7 @@
 
 A streaming PNG decoder in pure MoonBit, for Native, JS, Wasm and Wasm GC. It takes input in chunks of any size, writes whole rows into output slices you provide, checks every CRC and the zlib stream's Adler-32, and holds two rows and a zlib decoder, whatever the image's height.
 
-The module is being written. The decoder reads every color type and bit depth, interlaced or not, with the ancillary chunks of the specification's third edition and APNG's frames, and converts rows to RGBA; putting an animation's frames together comes later.
+It reads every color type and bit depth, interlaced or not, the ancillary chunks of the specification's third edition and APNG's frames, and converts rows to RGBA. Putting an animation's frames together on a canvas is left to the caller.
 
 ## Install
 
@@ -145,7 +145,9 @@ A step raises [`gaato/codec`](https://mooncakes.io/docs/gaato/codec)'s `CodecErr
 - An error inside the zlib stream keeps its kind, with `IDAT` in the message: `Corrupt` for malformed data, and `DictionaryRequired` for a stream that names a preset dictionary.
 - In an APNG, `Corrupt` too for a sequence number out of order, an fdAT without its fcTL, a frame without data, an fcTL outside the canvas or with an operation the specification does not define, a second acTL, and a count of frames other than acTL's; and `ChecksumMismatch` for the CRC of fcTL and fdAT, which an APNG needs as it needs IDAT. An acTL after IDAT or of no frames leaves the image still, as one without acTL is.
 
-An ancillary chunk out of the place the specification gives it, a second copy of one that may come once, one whose CRC does not match, or one whose values the specification does not allow (a gAMA of 0, a cICP with matrix coefficients, a tRNS longer than the palette, a zTXt whose keyword is empty or whose zlib stream is broken, and so on, as libpng judges them) is left out, and `ignored_chunks()` counts it; a later valid copy is still read. The bits of tRNS's samples above the bit depth are dropped, as browsers and image-rs show such images, where libpng keeps them and warns. So is a PLTE that a grayscale image cannot use, a PLTE out of place in a truecolor image, and the data of an IEND that has some. Entries of a palette beyond what the bit depth can index are dropped. Inflated data past the last row, and bytes after the zlib stream, are dropped.
+An ancillary chunk out of the place the specification gives it, a second copy of one that may come once, one whose CRC does not match, or one whose values the specification does not allow (a gAMA of 0, a cICP with matrix coefficients, a tRNS longer than the palette, a zTXt whose keyword is empty or whose zlib stream is broken, and so on, as libpng judges them) is left out, and `ignored_chunks()` counts it; a later valid copy is still read. The bits of tRNS's samples above the bit depth are dropped, as libpng drops them when it expands rows and as WPT expects of browsers. So is a PLTE that a grayscale image cannot use, a PLTE out of place in a truecolor image, and the data of an IEND that has some. Entries of a palette beyond what the bit depth can index are dropped. Inflated data past the last row, and bytes after the zlib stream, are dropped.
+
+[Broken input](https://github.com/gaato/codecs.mbt/blob/main/png/docs/robustness.md) shows what these rules make of corpora of broken files, and where they part from the png crate's.
 
 Rows come out as soon as they are decoded, before the CRCs and the Adler-32 that cover them, so `ChecksumMismatch` can follow rows you already have; `FrameEnd` comes once they have passed. A step that raises writes nothing: the rows before the error came out in the steps before it. Errors stick until `reset`.
 
@@ -158,6 +160,7 @@ The Paeth predictor, Adam7's pass sizes, a row's bytes, an fcTL's rectangle and 
 - [The image contract](https://github.com/gaato/codecs.mbt/blob/main/CONTRACT.md#images) that `Decoder` keeps
 - [Resource bounds](https://github.com/gaato/codecs.mbt/blob/main/png/RESOURCE_BOUNDS.md): every limit and the tests that hold it
 - [Proofs](https://github.com/gaato/codecs.mbt/blob/main/png/PROOFS.md) and [test coverage](https://github.com/gaato/codecs.mbt/blob/main/png/TEST_COVERAGE.md)
+- [Broken input](https://github.com/gaato/codecs.mbt/blob/main/png/docs/robustness.md): corpora of broken files, and where the decoder and the png crate differ
 
 ## License
 
