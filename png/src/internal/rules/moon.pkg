@@ -1,0 +1,11 @@
+// The pure decisions of PNG (W3C PNG Third Edition): chunk types and the
+// order chunks may come in (table 7), the fields of IHDR (tables 11 and 12),
+// the size of a row, and the passes of Adam7 (8.2). The decoder's state
+// machine asks them; they hold no state.
+
+import {
+  "gaato/codec",
+  "moonbitlang/core/debug",
+}
+
+supported_targets = "js + native + wasm + wasm-gc"

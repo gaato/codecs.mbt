@@ -1,1 +1,11 @@
+import {
+  "gaato/codec",
+  "gaato/codec_image",
+  "gaato/deflate/zlib",
+  "gaato/png/internal/crc32",
+  "gaato/png/internal/filter",
+  "gaato/png/internal/rules",
+  "moonbitlang/core/debug",
+}
+
 supported_targets = "js + native + wasm + wasm-gc"

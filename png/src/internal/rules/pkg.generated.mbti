@@ -1,0 +1,81 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/png/internal/rules"
+
+import {
+  "gaato/codec",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub const IDAT : Int32 = 2
+
+pub const IEND : Int32 = 3
+
+pub const IHDR : Int32 = 0
+
+pub const PLTE : Int32 = 1
+
+pub fn after(Position, UInt32, Verdict) -> Position
+
+pub fn channels(Int32) -> Int32
+
+pub fn check_header(UInt32, UInt32, Int32, Int32, Int32, Int32, Int32) -> String?
+
+pub fn chunk_type(Byte, Byte, Byte, Byte) -> UInt32
+
+pub fn is_allowed(Int32, Int32) -> Bool
+
+pub fn is_critical(UInt32) -> Bool
+
+pub fn is_valid_type(UInt32) -> Bool
+
+pub fn known(UInt32) -> Int32
+
+pub fn pass_columns(Bool, Int32, Int32) -> Int32
+
+pub fn pass_dx(Bool, Int32) -> Int32
+
+pub fn pass_dy(Bool, Int32) -> Int32
+
+pub fn pass_row_bytes(Int32, Int32) -> Int32
+
+pub fn pass_rows(Bool, Int32, Int32) -> Int32
+
+pub fn pass_x(Bool, Int32) -> Int32
+
+pub fn pass_y(Bool, Int32) -> Int32
+
+pub fn passes(Bool) -> Int32
+
+pub fn place(Position, UInt32, UInt32, Int32) -> Verdict
+
+pub fn row_bytes(UInt32, Int32, Int32) -> Int32 raise @codec.CodecError
+
+pub fn type_name(UInt32) -> String
+
+// Errors
+
+// Types and methods
+pub(all) enum Position {
+  BeforeHeader
+  AfterHeader
+  AfterPalette
+  InData
+  AfterData
+} derive(Eq, @debug.Debug)
+pub fn Position::equal(Self, Self) -> Bool
+pub fn Position::not_equal(Self, Self) -> Bool
+pub fn Position::to_repr(Self) -> @debug.Repr
+
+pub(all) enum Verdict {
+  Accept
+  Ignore
+  Refuse(@codec.ErrorKind, String)
+} derive(Eq, @debug.Debug)
+pub fn Verdict::equal(Self, Self) -> Bool
+pub fn Verdict::not_equal(Self, Self) -> Bool
+pub fn Verdict::to_repr(Self) -> @debug.Repr
+
+// Type aliases
+
+// Traits

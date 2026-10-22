@@ -23,8 +23,11 @@ ledger OK, 1 = an unexplained or over-budget file, 2 = the run itself failed
 
 ### What is measured
 
-- Sources: every non-test `.mbt` of the package `src/`, and of the copy of
-  the shared part `src/internal/crc32/` (generated from `parts/`, with its
+- Sources: every non-test `.mbt` of the package `src/` (the decoder's state
+  machine), of its internal packages `src/internal/rules/` (chunk types and
+  their order, IHDR's fields, row sizes, Adam7's passes) and
+  `src/internal/filter/` (the filters' reverse), and of the copy of the
+  shared part `src/internal/crc32/` (generated from `parts/`, with its
   tests).
 - Counts are Coveralls lines: lines with at least one instrumented point,
   covered when any point on them ran.
@@ -32,8 +35,21 @@ ledger OK, 1 = an unexplained or over-budget file, 2 = the run itself failed
 The pitfalls the script pins (stale counters, `-f summary` skewing totals,
 tcc on openSUSE) are described in zstd's ledger, `zstd/TEST_COVERAGE.md`.
 
-The decoder is not written yet; every line measured so far, those of the
-CRC-32, is covered.
+Snapshot at the last full measurement (2026-10-22): **100.0 %** (372/372
+lines).
+
+## Policy
+
+Must be covered by tests:
+
+- every refusal: each malformed signature, IHDR field, chunk frame, chunk
+  order, PLTE, CRC, zlib stream and filter type, built chunk by chunk in
+  `src/fixtures_wbtest.mbt`;
+- every placement of table 7, checked against the table written out again
+  (`src/internal/rules/rules_test.mbt`), and every pass of Adam7 against
+  counting its lattice;
+- every color type and bit depth, interlaced or not, at every size up to
+  8 x 8, under several splits of input and output.
 
 ## Accepted uncovered
 

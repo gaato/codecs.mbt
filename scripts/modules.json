@@ -44,7 +44,7 @@
       "src/internal/proof_bits",
       "src/internal/proof_codes"
     ],
-    "png": ["src", "src/internal/crc32"]
+    "png": ["src", "src/internal/crc32", "src/internal/filter", "src/internal/rules"]
   },
   "copies": {
     "brotli": {

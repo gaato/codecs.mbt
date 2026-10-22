@@ -1,0 +1,15 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/png/internal/filter"
+
+// Values
+pub fn paeth(Int32, Int32, Int32) -> Int32
+
+pub fn unfilter(Byte, FixedArray[Byte], FixedArray[Byte], Int32, Int32) -> Bool
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+
+// Traits
