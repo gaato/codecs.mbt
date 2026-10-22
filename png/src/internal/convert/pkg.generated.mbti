@@ -1,0 +1,17 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/png/internal/convert"
+
+// Values
+pub fn narrow(Int32) -> Int32
+
+pub fn packed_sample(Int32, Int32, Int32) -> Int32
+
+pub fn widen(Int32, Int32) -> Int32
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+
+// Traits

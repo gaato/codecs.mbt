@@ -15,6 +15,7 @@
     "deflate/src/internal/lz77",
     "deflate/src/internal/proof_bits",
     "deflate/src/internal/proof_codes",
-    "png/src/internal/crc32"
+    "png/src/internal/crc32",
+    "png/src/internal/proof_bits"
   ]
 }

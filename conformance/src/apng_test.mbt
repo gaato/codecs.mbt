@@ -89,11 +89,9 @@ fn describe_frames(
       bit_depth: decoder.bit_depth(),
       color_type: decoder.color_type(),
       interlaced: decoder.interlaced(),
-      palette: Bytes::from_array(decoder.palette()),
       fields: [],
       blocks: [],
       output: rows,
-      transparency: None,
     }
     parts.push("\{fields} \{@codec_harness.sha256(pypng_shape(d, samples(d)))}")
   }

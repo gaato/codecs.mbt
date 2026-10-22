@@ -2,7 +2,7 @@
 
 A streaming PNG decoder in pure MoonBit, for Native, JS, Wasm and Wasm GC. It takes input in chunks of any size, writes whole rows into output slices you provide, checks every CRC and the zlib stream's Adler-32, and holds two rows and a zlib decoder, whatever the image's height.
 
-The module is being written. The decoder reads every color type and bit depth, interlaced or not, with the ancillary chunks of the specification's third edition and APNG's frames; functions that convert rows to RGBA, and that put frames together, come later.
+The module is being written. The decoder reads every color type and bit depth, interlaced or not, with the ancillary chunks of the specification's third edition and APNG's frames, and converts rows to RGBA; putting an animation's frames together comes later.
 
 ## Install
 
@@ -60,7 +60,28 @@ Rows come out in PNG's own layout, without the filter type byte: samples packed 
 
 An interlaced image comes out in Adam7's seven passes, each a lattice of the image: row `r` of the pass is row `pass_y() + r * pass_dy()` of the image, and its pixel `i` is column `pass_x() + i * pass_dx()`. A pass with no pixels is skipped. An image that is not interlaced is the one pass 0, with a lattice of 0, 0, 1, 1.
 
-An index past the end of the palette is left in the row as it is; the specification shows such a pixel as opaque black.
+An index past the end of the palette is left in the row as it is; the specification shows such a pixel as opaque black, and so does `Converter`.
+
+To put a pass's rows in your image, `scatter(row, pixels, bits, pass_x, pass_dx, image_row)` places a row of a pass into a row of the image, in the same layout, bit by bit below 8 bits; `adam7_x`, `adam7_y`, `adam7_dx`, `adam7_dy`, `adam7_columns` and `adam7_rows` give the passes' lattices for planning ahead.
+
+## Whole images and RGBA
+
+`decode` reads a whole image held in memory and returns it deinterlaced, in PNG's own layout, once every check has passed; `max_output` bounds its bytes before anything is allocated for them. An APNG gives its default image. `is_signature` tells a PNG from its first eight bytes.
+
+A `Converter` turns rows of PNG's layout into other layouts, the palette and tRNS applied: `rgba8` (samples below 8 bits widened by repeating their bits, 16-bit ones rounded to 8), `rgba16` (big-endian), and `expanded`, the shape of the png crate's and libpng's EXPAND (palette to RGB or RGBA, gray widened to 8 bits, tRNS as an alpha channel, 16 bits kept). `Decoder::converter()` makes one for a streaming decoder, and `decode`'s image carries one.
+
+```mbt check
+///|
+test "decode a whole image and read it as RGBA" {
+  // 2 x 1, indexed-color, 2 bits a pixel: red at half alpha, then blue.
+  let png = b"\x89\x50\x4e\x47\x0d\x0a\x1a\x0a\x00\x00\x00\x0d\x49\x48\x44\x52\x00\x00\x00\x02\x00\x00\x00\x01\x02\x03\x00\x00\x00\x89\x4c\x97\x19\x00\x00\x00\x06\x50\x4c\x54\x45\xff\x00\x00\x00\x00\xff\x6c\xa1\xfd\x8e\x00\x00\x00\x01\x74\x52\x4e\x53\x80\xad\x5e\x5b\x46\x00\x00\x00\x0a\x49\x44\x41\x54\x78\xda\x63\x10\x00\x00\x00\x12\x00\x11\x08\xde\xbd\xc3\x00\x00\x00\x00\x49\x45\x4e\x44\xae\x42\x60\x82"
+  assert_true(@png.is_signature(png))
+  let image = @png.decode(png, max_output=1 << 20)
+  let rgba = FixedArray::make(image.width * 4, b'\x00')
+  image.converter.rgba8(image.row(0), image.width, rgba.mut_view())
+  assert_eq(Bytes::from_array(rgba[:]), b"\xff\x00\x00\x80\x00\x00\xff\xff")
+}
+```
 
 ## Ancillary chunks
 
@@ -107,6 +128,8 @@ The default image (IDAT) is the first `Frame`; `in_animation()` says whether it 
 `Decoder(max_row_bytes=...)` bounds a row's bytes: 8,000,000 by default (a million pixels of 16-bit RGBA), at most 1,000,000,000. An image with longer rows raises `LimitExceeded` with `resource: Memory` and the row's bytes, at the step after `Header`, before anything is allocated for it, so you can look at the size first. The height is not bounded: rows are handed out as they come.
 
 `memory_usage()` is 47,360 bytes (the zlib decoder and the palette) until the step after `Header`, then 47,360 + 2 × (1 + row bytes).
+
+`decode` holds the whole image: `max_output` bounds its bytes, and an image larger than an array holds (2^31 − 1 bytes) raises `LimitExceeded` with `resource: Output` either way.
 
 A reported chunk is held until its CRC has passed, so `Decoder(max_chunk_bytes=...)` bounds it: 1 MiB by default, at most 100,000,000. A reported chunk longer than that raises `LimitExceeded` with `resource: Memory` and the chunk's length, and one that inflates to more raises it with no length. Asking for iCCP, zTXt or iTXt adds a second zlib decoder, 46,592 bytes, which the decoder holds only then: APNG allows text between the image data chunks of one frame, in the middle of their zlib stream. Chunks that are not asked for are only read through their CRC, whatever their size.
 

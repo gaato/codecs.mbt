@@ -44,7 +44,14 @@
       "src/internal/proof_bits",
       "src/internal/proof_codes"
     ],
-    "png": ["src", "src/internal/crc32", "src/internal/filter", "src/internal/rules"]
+    "png": [
+      "src",
+      "src/internal/convert",
+      "src/internal/crc32",
+      "src/internal/filter",
+      "src/internal/proof_bits",
+      "src/internal/rules"
+    ]
   },
   "copies": {
     "brotli": {
@@ -96,7 +103,8 @@
       "proof_fields": ["fields.mbt", "fields.mbtp"]
     },
     "png": {
-      "crc32": ["crc32.mbt", "crc32_test.mbt"]
+      "crc32": ["crc32.mbt", "crc32_test.mbt"],
+      "proof_bits": ["shifts.mbt", "shifts.mbtp", "shifts_test.mbt"]
     }
   },
   "proved": {

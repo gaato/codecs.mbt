@@ -8,6 +8,23 @@ import {
 }
 
 // Values
+pub fn adam7_columns(Int32, Int32) -> Int32
+
+pub fn adam7_dx(Int32) -> Int32
+
+pub fn adam7_dy(Int32) -> Int32
+
+pub fn adam7_rows(Int32, Int32) -> Int32
+
+pub fn adam7_x(Int32) -> Int32
+
+pub fn adam7_y(Int32) -> Int32
+
+pub fn decode(BytesView, max_output? : Int32) -> Image raise @codec.CodecError
+
+pub fn is_signature(BytesView) -> Bool
+
+pub fn scatter(ArrayView[Byte], Int32, Int32, Int32, Int32, MutArrayView[Byte]) -> Unit
 
 // Errors
 
@@ -64,6 +81,16 @@ pub fn ColorType::equal(Self, Self) -> Bool
 pub fn ColorType::not_equal(Self, Self) -> Bool
 pub fn ColorType::to_repr(Self) -> @debug.Repr
 
+pub struct Converter {
+  // private fields
+}
+pub fn Converter::Converter(ColorType, Int32, palette? : ArrayView[Byte], transparency? : Transparency) -> Self
+pub fn Converter::expanded(Self, ArrayView[Byte], Int32, MutArrayView[Byte]) -> Unit
+pub fn Converter::expanded_channels(Self) -> Int32
+pub fn Converter::expanded_depth(Self) -> Int32
+pub fn Converter::rgba16(Self, ArrayView[Byte], Int32, MutArrayView[Byte]) -> Unit
+pub fn Converter::rgba8(Self, ArrayView[Byte], Int32, MutArrayView[Byte]) -> Unit
+
 pub struct Decoder {
   // private fields
 }
@@ -75,6 +102,7 @@ pub fn Decoder::blend(Self) -> Blend
 pub fn Decoder::chromaticities(Self) -> Chromaticities?
 pub fn Decoder::coding_points(Self) -> CodingPoints?
 pub fn Decoder::color_type(Self) -> ColorType
+pub fn Decoder::converter(Self) -> Converter
 pub fn Decoder::delay_denominator(Self) -> Int32
 pub fn Decoder::delay_numerator(Self) -> Int32
 pub fn Decoder::dispose(Self) -> Dispose
@@ -123,6 +151,17 @@ pub(all) enum Dispose {
 pub fn Dispose::equal(Self, Self) -> Bool
 pub fn Dispose::not_equal(Self, Self) -> Bool
 pub fn Dispose::to_repr(Self) -> @debug.Repr
+
+pub struct Image {
+  width : Int32
+  height : Int32
+  color_type : ColorType
+  bit_depth : Int32
+  row_bytes : Int32
+  pixels : FixedArray[Byte]
+  converter : Converter
+}
+pub fn Image::row(Self, Int32) -> ArrayView[Byte]
 
 pub struct LightLevel {
   max_content : UInt32

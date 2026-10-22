@@ -2,6 +2,7 @@ import {
   "gaato/codec",
   "gaato/codec_image",
   "gaato/deflate/zlib",
+  "gaato/png/internal/convert",
   "gaato/png/internal/crc32",
   "gaato/png/internal/filter",
   "gaato/png/internal/rules",

@@ -1,0 +1,11 @@
+// The arithmetic of converting PNG's samples: reading a packed sample,
+// widening a sample of 1, 2 or 4 bits to 8 by repeating its bits, and
+// narrowing 16 bits to 8 with rounding. Functions of integers only, so that
+// `moon prove` can state what each computes; the conversions of whole rows,
+// with their tables, are the package above's.
+
+import {
+  "gaato/png/internal/proof_bits",
+}
+
+supported_targets = "js + native + wasm + wasm-gc"

@@ -51,7 +51,6 @@ struct Decoded {
   bit_depth : Int32
   color_type : @png.ColorType
   interlaced : Bool
-  palette : Bytes
   /// What the decoder read of the fixed-length chunks pypng also reads, as
   /// the reference writes it.
   fields : Array[String]
@@ -59,7 +58,6 @@ struct Decoded {
   blocks : Array[(String, Bytes)]
   /// The rows and the blocks, in the order the decoder wrote them.
   output : Bytes
-  transparency : @png.Transparency?
 }
 
 ///|
@@ -120,11 +118,9 @@ fn decode_png(input : Bytes) -> Decoded raise {
     bit_depth: decoder.bit_depth(),
     color_type: decoder.color_type(),
     interlaced: decoder.interlaced(),
-    palette: Bytes::from_array(decoder.palette()),
     fields: fields_of(decoder),
     blocks,
     output: output.to_bytes(),
-    transparency: decoder.transparency(),
   }
 }
 
@@ -262,103 +258,46 @@ fn pypng_shape(d : Decoded, image : FixedArray[Int32]) -> Bytes {
 }
 
 ///|
-/// The image as typst's `decode_png` gives it, the shape of the `png`
-/// crate's `EXPAND`: a palette applied (with the decoder's tRNS as alpha),
-/// gray of fewer than 8 bits scaled to 8, tRNS turned into an alpha channel,
-/// and 16-bit samples little-endian when `swap16`, as typst gives them. The
-/// one place the comparison converts.
-fn expand(d : Decoded, swap16~ : Bool = true) -> (@codecs.ColorType, Bytes) {
-  let trns = d.transparency
-  let image = samples(d)
-  let n = channels(d.color_type)
-  let out = Buffer()
-  let sample16 = (v : Int32) => {
-    if swap16 {
-      out.write_byte(v.to_byte())
-      out.write_byte((v >> 8).to_byte())
-    } else {
-      out.write_byte((v >> 8).to_byte())
-      out.write_byte(v.to_byte())
+/// The image as typst's `decode_png` gives it: gaato/png's one-shot
+/// `decode`, each row through its converter's `expanded` (the png crate's
+/// EXPAND, which typst ports), and 16-bit samples swapped to little-endian
+/// when `swap16`, as typst gives them. The swap is the one conversion the
+/// comparison makes itself.
+fn expand(
+  input : Bytes,
+  swap16~ : Bool = true,
+) -> (@codecs.ColorType, Bytes) raise {
+  let image = @png.decode(input)
+  let converter = image.converter
+  let channels = converter.expanded_channels()
+  let depth = converter.expanded_depth()
+  let per_row = image.width * channels * depth / 8
+  let out = FixedArray::make(per_row * image.height, b'\x00')
+  for y in 0..<image.height {
+    converter.expanded(
+      image.row(y),
+      image.width,
+      out.mut_view(start=y * per_row, end=(y + 1) * per_row),
+    )
+  }
+  if swap16 && depth == 16 {
+    for i = 0; i + 1 < out.length(); i = i + 2 {
+      let high = out[i]
+      out[i] = out[i + 1]
+      out[i + 1] = high
     }
   }
-  let scale = (v : Int32) => {
-    match d.bit_depth {
-      1 => v * 255
-      2 => v * 85
-      4 => v * 17
-      _ => v
-    }
+  let color : @codecs.ColorType = match (channels, depth) {
+    (1, 8) => L8
+    (1, _) => L16
+    (2, 8) => La8
+    (2, _) => La16
+    (3, 8) => Rgb8
+    (3, _) => Rgb16
+    (_, 8) => Rgba8
+    _ => Rgba16
   }
-  let pixels = d.width * d.height
-  match d.color_type {
-    IndexedColor => {
-      let entries = d.palette.length() / 3
-      for p in 0..<pixels {
-        let index = image[p]
-        for c in 0..<3 {
-          out.write_byte(
-            if index < entries {
-              d.palette[index * 3 + c]
-            } else {
-              b'\x00'
-            },
-          )
-        }
-        if trns is Some(Alpha(alpha)) {
-          out.write_byte(
-            if index < alpha.length() {
-              alpha[index]
-            } else {
-              b'\xff'
-            },
-          )
-        }
-      }
-      (if trns is Some(Alpha(_)) { Rgba8 } else { Rgb8 }, out.to_bytes())
-    }
-    _ => {
-      // tRNS for gray and truecolor: the one gray level or color that is
-      // transparent.
-      let key = match trns {
-        Some(Gray(v)) => Some([v])
-        Some(Rgb(r, g, b)) => Some([r, g, b])
-        _ => None
-      }
-      for p in 0..<pixels {
-        let pixel = image[p * n:(p + 1) * n]
-        for v in pixel {
-          if d.bit_depth == 16 {
-            sample16(v)
-          } else {
-            out.write_byte(scale(v).to_byte())
-          }
-        }
-        if key is Some(key) {
-          let mut transparent = true
-          for c in 0..<n {
-            transparent = transparent && pixel[c] == key[c]
-          }
-          if d.bit_depth == 16 {
-            sample16(if transparent { 0 } else { 0xFFFF })
-          } else {
-            out.write_byte(if transparent { b'\x00' } else { b'\xff' })
-          }
-        }
-      }
-      let alpha = n == 2 || n == 4 || key is Some(_)
-      let color : @codecs.ColorType = match (n, alpha, d.bit_depth == 16) {
-        (1, false, false) => L8
-        (1, false, true) => L16
-        (1 | 2, true, false) => La8
-        (1 | 2, true, true) => La16
-        (3, false, false) => Rgb8
-        (3, false, true) => Rgb16
-        (_, _, false) => Rgba8
-        _ => Rgba16
-      }
-      (color, out.to_bytes())
-    }
-  }
+  (color, Bytes::from_array(out[:]))
 }
 
 ///|
@@ -537,7 +476,7 @@ test "PngSuite: typst's decode_png agrees, after EXPAND" {
       fail("\{v.name}: typst refuses it")
     }
     let d = decode_png(input)
-    let (color, ours) = expand(d)
+    let (color, ours) = expand(input)
     if info.width != d.width.reinterpret_as_uint() ||
       info.height != d.height.reinterpret_as_uint() ||
       info.color != color ||
@@ -561,8 +500,8 @@ test "PngSuite: without swapping 16-bit samples, no 16-bit image agrees with typ
     let d = decode_png(input)
     guard d.bit_depth == 16 else { continue }
     let (_, pixels) = @codecs.decode_png(input)
-    let (_, swapped) = expand(d)
-    let (_, unswapped) = expand(d, swap16=false)
+    let (_, swapped) = expand(input)
+    let (_, unswapped) = expand(input, swap16=false)
     // An image whose every sample has two equal bytes (8-bit levels times
     // 257) reads the same either way, and tells nothing.
     if swapped == unswapped {
