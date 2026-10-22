@@ -1,11 +1,22 @@
 ///|
-/// The error every codec raises, its kinds, and the limits a stream can
-/// exceed, from `gaato/codec`, so that a caller of a codec can name them with
-/// this package as its only import. A constructor is matched unqualified, as
-/// in `CodecError(Corrupt, _)`, where the type is known (a `catch` on a
-/// codec's step), or qualified by its type, as in
+/// The error every codec raises: `gaato/codec`'s, re-exported so that a caller
+/// of a codec names it with this package as its only import. Its constructor
+/// matches unqualified where the type is known, as in `CodecError(Corrupt, _)`
+/// in a `catch` on a codec's step, or qualified by its type, as in
 /// `@codec_bytes.CodecError::CodecError(kind, _)`.
-pub using @codec {type CodecError, type ErrorKind, type Limit, type Resource}
+pub using @codec {type CodecError}
+
+///|
+/// Why a codec stopped with an error: `gaato/codec`'s, re-exported.
+pub using @codec {type ErrorKind}
+
+///|
+/// A limit a stream would exceed: `gaato/codec`'s, re-exported.
+pub using @codec {type Limit}
+
+///|
+/// What a limit is about: `gaato/codec`'s, re-exported.
+pub using @codec {type Resource}
 
 ///|
 /// Why a step stopped without an error.
@@ -21,9 +32,11 @@ pub(all) enum Status {
 } derive(Eq, @debug.Debug)
 
 ///|
+/// `Status::equal` and `Status::not_equal`, the derived comparison.
 pub extend Status with Eq::{equal, not_equal}
 
 ///|
+/// `Status::to_repr`, the derived debug representation.
 pub extend Status with @debug.Debug::{to_repr}
 
 ///|
@@ -37,9 +50,11 @@ pub(all) enum Until {
 } derive(Eq, @debug.Debug)
 
 ///|
+/// `Until::equal` and `Until::not_equal`, the derived comparison.
 pub extend Until with Eq::{equal, not_equal}
 
 ///|
+/// `Until::to_repr`, the derived debug representation.
 pub extend Until with @debug.Debug::{to_repr}
 
 ///|
@@ -54,9 +69,11 @@ pub(all) enum EncodeAction {
 } derive(Eq, @debug.Debug)
 
 ///|
+/// `EncodeAction::equal` and `EncodeAction::not_equal`, the derived comparison.
 pub extend EncodeAction with Eq::{equal, not_equal}
 
 ///|
+/// `EncodeAction::to_repr`, the derived debug representation.
 pub extend EncodeAction with @debug.Debug::{to_repr}
 
 ///|

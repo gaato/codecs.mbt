@@ -8,6 +8,10 @@ note.
 
 ## [Unreleased]
 
+### Changed
+
+- **The README has sections and a compile-checked example.** It has Install, Usage (a loop that drives any `Decode`, run on a small identity decoder), Errors, and Links, and lives in `src/overview.mbt.md`, linked as `README.md`, so its examples are compiled by `moon test`. The re-exports of `gaato/codec`'s types are one `pub using` each, with its own doc comment, and the derived methods have doc comments; the interface is unchanged.
+
 ## [0.1.1] - 2026-10-22
 
 ### Added

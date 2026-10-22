@@ -10,7 +10,7 @@ version = "0.4.1"
 
 license = "Apache-2.0"
 
-readme = "src/README.mbt.md"
+readme = "README.md"
 
 repository = "https://github.com/gaato/codecs.mbt"
 

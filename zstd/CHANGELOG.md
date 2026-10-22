@@ -7,6 +7,14 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+### Changed
+
+- **The README has sections.** Install, Usage, What it decodes, Memory, Errors and Links; links are absolute, so they work on mooncakes.io. How the proofs are run is left to PROOFS.md. The `gaato/codec_bytes` trait methods have doc comments, and the repository-only `scripts/` is no longer packaged.
+
+### Fixed
+
+- **mooncakes.io shows the README once.** The README was both the module README and the root package's `README.mbt.md`, so the module page showed it twice; it is now `src/overview.mbt.md`, with `README.md` linked to it and named in `moon.mod`.
+
 ## [0.3.1] - 2026-10-22
 
 ### Changed

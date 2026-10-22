@@ -1,0 +1,19 @@
+{
+  "modules": ["codec", "codec_bytes", "zstd", "brotli", "deflate"],
+  "generated": [
+    "zstd/src/internal/proof_bits",
+    "zstd/src/internal/proof_codes",
+    "zstd/src/internal/proof_fields",
+    "brotli/src/internal/bits",
+    "brotli/src/internal/huffman",
+    "brotli/src/internal/lz77",
+    "brotli/src/internal/proof_bits",
+    "brotli/src/internal/proof_codes",
+    "brotli/src/static_data.mbt",
+    "deflate/src/internal/crc32",
+    "deflate/src/internal/huffman",
+    "deflate/src/internal/lz77",
+    "deflate/src/internal/proof_bits",
+    "deflate/src/internal/proof_codes"
+  ]
+}

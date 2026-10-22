@@ -260,26 +260,31 @@ fn[T] Decoder::fail(
 }
 
 ///|
+/// Decodes through `Decoder::step`.
 pub impl @codec_bytes.Decode for Decoder with fn step(self, input, output, end~) {
   Decoder::step(self, input, output, end~)
 }
 
 ///|
+/// Same as `Decoder::last_consumed`: input bytes the last step consumed.
 pub impl @codec_bytes.Decode for Decoder with fn last_consumed(self) {
   Decoder::last_consumed(self)
 }
 
 ///|
+/// Same as `Decoder::last_produced`: output bytes the last step wrote.
 pub impl @codec_bytes.Decode for Decoder with fn last_produced(self) {
   Decoder::last_produced(self)
 }
 
 ///|
+/// Same as `Decoder::reset`: back to the state of a new decoder with the same options.
 pub impl @codec_bytes.Decode for Decoder with fn reset(self) {
   Decoder::reset(self)
 }
 
 ///|
+/// Same as `Decoder::memory_usage`: bytes allocated for the current stream.
 pub impl @codec_bytes.Decode for Decoder with fn memory_usage(self) {
   Decoder::memory_usage(self)
 }

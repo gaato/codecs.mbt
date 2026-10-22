@@ -80,6 +80,9 @@ async fn main {
   }
   // Every module's CHANGELOG opens with [Unreleased] and has a heading for its version.
   run("moon", ["run", "scripts/release.mbtx", "--", "check"])
+  // The module READMEs, links and doc comments keep the documentation rules
+  // shared by every gaato MoonBit repository (scripts/docs_audit.mbtx).
+  run("moon", ["run", "scripts/docs_audit.mbtx", "--self-test"])
   for dir in ledgered() {
     // Every enforced limit in RESOURCE_BOUNDS.md names tests that exist.
     run("moon", ["run", "scripts/bounds_check.mbtx", "--", dir])

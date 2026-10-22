@@ -246,21 +246,25 @@ pub impl @codec_bytes.Encode for Encoder with fn step(
 }
 
 ///|
+/// Same as `Encoder::last_consumed`: input bytes the last step consumed.
 pub impl @codec_bytes.Encode for Encoder with fn last_consumed(self) {
   Encoder::last_consumed(self)
 }
 
 ///|
+/// Same as `Encoder::last_produced`: output bytes the last step wrote.
 pub impl @codec_bytes.Encode for Encoder with fn last_produced(self) {
   Encoder::last_produced(self)
 }
 
 ///|
+/// Same as `Encoder::reset`: back to the state of a new encoder with the same options.
 pub impl @codec_bytes.Encode for Encoder with fn reset(self) {
   Encoder::reset(self)
 }
 
 ///|
+/// Same as `Encoder::memory_usage`: bytes allocated for the current stream.
 pub impl @codec_bytes.Encode for Encoder with fn memory_usage(self) {
   Encoder::memory_usage(self)
 }

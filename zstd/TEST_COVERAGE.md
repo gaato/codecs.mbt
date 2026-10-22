@@ -12,7 +12,7 @@ ledger:
 
 ## Running it
 
-```fish
+```sh
 moon run scripts/coverage_report.mbtx -- zstd   # measure, print tables, check the ledger
 moon run scripts/coverage_report.mbtx -- zstd --from-json _build/coverage_report.zstd.json   # recheck only
 ```

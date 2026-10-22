@@ -12,7 +12,7 @@ Coveralls-JSON mode. The rule is a closed ledger:
 
 ## Running it
 
-```fish
+```sh
 moon run scripts/coverage_report.mbtx -- deflate   # measure, print tables, check the ledger
 moon run scripts/coverage_report.mbtx -- deflate --from-json _build/coverage_report.deflate.json   # recheck only
 ```

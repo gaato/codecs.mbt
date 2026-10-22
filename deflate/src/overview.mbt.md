@@ -1,18 +1,16 @@
 # gaato/deflate
 
-Streaming decoders and encoders for DEFLATE (RFC 1951) and the two formats around it, zlib (RFC 1950) and gzip (RFC 1952), in MoonBit. Native, JS, Wasm and Wasm GC.
+Streaming decoders and encoders for DEFLATE (RFC 1951) and the two formats around it, zlib (RFC 1950) and gzip (RFC 1952), in pure MoonBit, for Native, JS, Wasm and Wasm GC. They take input in chunks of any size, write output into slices of any size, verify every checksum, and keep their memory fixed, so they fit HTTP's `gzip` and `deflate` codings, `.gz` files, PNG and WebSocket compression alike.
 
-```fish
+## Install
+
+```sh
 moon add gaato/deflate
 ```
 
-Three packages, one per format; import those you need in your `moon.pkg`:
+## Usage
 
-| Package | Format | Use it for |
-|---|---|---|
-| `gaato/deflate` | raw DEFLATE | ZIP entries, WebSocket `permessage-deflate`, formats that frame DEFLATE themselves |
-| `gaato/deflate/zlib` | zlib | HTTP's `deflate` coding, PNG, Discord's `zlib-stream` |
-| `gaato/deflate/gzip` | gzip | `.gz` files, HTTP's `gzip` coding |
+Each format is its own package; import those you need in your `moon.pkg` (see [Packages](#packages)).
 
 One shot:
 
@@ -109,9 +107,17 @@ test "each message decodes on its own, without the end of the stream" {
 }
 ```
 
-`level` goes from 0 to 9, as zlib's and the `gzip` command's do: 0 stores the input in stored blocks, 1 is the fastest, 9 the smallest, and 6, the default, a balance; levels outside are clamped. `Flush` is zlib's sync flush (`Z_SYNC_FLUSH`): it ends with an empty stored block, `00 00 ff ff`, and a flush with nothing new since the last adds nothing. A flush ends the current block and costs at least the 5 bytes of the empty one, so flush where a reader needs the data, not after every write; matches still reach back across it. The output does not depend on how the input and the output are split, only on the input, the options and where the flushes fall.
+`level` goes from 0 to 9, as zlib's and the `gzip` command's do: 0 stores the input in stored blocks, 1 is the fastest, 9 the smallest, and 6, the default, a balance; levels outside are clamped. `Flush` is zlib's sync flush (`Z_SYNC_FLUSH`): it ends with an empty stored block, `00 00 ff ff`, and a flush with nothing new since the last adds nothing. A flush ends the current block and costs at least the 5 bytes of the empty one, so flush where a reader needs the data, not after every write; matches still reach back across it. The output does not depend on how the input and the output are split, only on the input, the options and where the flushes fall. The levels follow libdeflate's; how they compare with zlib's is in [Compression levels and ratio](https://github.com/gaato/codecs.mbt/blob/main/deflate/docs/compression.md). An encoder never raises.
 
 Each `Decoder` implements `gaato/codec_bytes`'s `Decode`, and each `Encoder` its `Encode`, so code written against that contract (an HTTP client, a command-line tool) takes any of them as it takes the other codecs of [codecs.mbt](https://github.com/gaato/codecs.mbt).
+
+## Packages
+
+| Package | Format | Use it for |
+|---|---|---|
+| `gaato/deflate` | raw DEFLATE | ZIP entries, WebSocket `permessage-deflate`, formats that frame DEFLATE themselves |
+| `gaato/deflate/zlib` | zlib | HTTP's `deflate` coding, PNG, Discord's `zlib-stream` |
+| `gaato/deflate/gzip` | gzip | `.gz` files, HTTP's `gzip` coding |
 
 ## gzip
 
@@ -216,8 +222,7 @@ test "compress with a dictionary" {
 ```
 
 `@zlib.is_header(cmf, flg)` tells a zlib header from the start of raw DEFLATE, for HTTP's `deflate` coding, which is zlib but which some servers send raw. It is a heuristic, though a strong one.
-
-### A stream that does not end
+## Streams that do not end
 
 Discord's `zlib-stream` gateway compression is one zlib stream per connection that never ends; each message ends in a sync flush (`00 00 ff ff`), and a message may come in several WebSocket frames. Keep one decoder for the connection, made with `until=EndOfMember`, and pass every frame with `end=false`, since no frame is the last:
 
@@ -266,38 +271,43 @@ test "a message split across frames comes out once its flush arrives" {
 }
 ```
 
-## What it does
+## Limits
 
-- Decodes every DEFLATE block (stored, fixed and dynamic Huffman codes) with a 32 KiB window, and preset dictionaries for raw DEFLATE and zlib. It refuses what zlib refuses, with zlib's kind of error: reserved block types and codes, over-subscribed and incomplete codes, distances before the start of the output, and the reserved header fields and values of zlib and gzip. Crafted streams and thousands of corrupted ones are checked against zlib's answers.
-- Checks every checksum: zlib's Adler-32, gzip's CRC-32 and length, and the header CRC when a gzip header has one. Output comes out as soon as it is decoded, before the checksum that covers it, so `ChecksumMismatch` can follow output you already have; `decompress` returns only checked output.
-- Never reads past the end of a stream: after `Done` under `until=EndOfMember`, what follows is `input[last_consumed():]`, whatever the input splits. Raw DEFLATE and zlib streams cannot be concatenated, so under the default `until=EndOfInput` anything after one raises `TrailingData`.
-- Takes input in chunks of any size, down to one byte, and writes output into buffers of any size, under the rules of `gaato/codec_bytes`. Memory is the window and the decoding tables, 46,592 bytes with a dictionary or without (a dictionary is your bytes, held by reference), plus a gzip header's fields; `memory_usage()` reports it.
-- A step that raises first writes the output that comes before the error, and `last_consumed()` and `last_produced()` say what it took and wrote, so a stream with bytes after it gives all its output, then `TrailingData`, with `last_consumed()` at its end: whether it came in one step or many. A malformed stream gives the same output before the same kind of error however its input and output are split.
-- Every malformed stream raises [`gaato/codec`](https://mooncakes.io/docs/gaato/codec)'s `CodecError(kind, message)`, with the kind `Truncated`, `Corrupt`, `ChecksumMismatch`, `TrailingData`, `DictionaryRequired`, `DictionaryMismatch` or `LimitExceeded` (a gzip header over `max_header_bytes`, with `resource: Memory`; more than `max_output` from `decompress`, with `resource: Output`). An error inside the DEFLATE data of a zlib or gzip stream keeps its kind. It does not abort. In a `catch` on these functions, `CodecError(kind, _)` and the kinds match unqualified, with no import; to name the types elsewhere, import [`gaato/codec_bytes`](https://mooncakes.io/docs/gaato/codec_bytes), which re-exports them.
-- Encodes with libdeflate's levels: 0 stores the input; 1 finds matches in a hash table; 2 to 4 take the longest match at each position, and 5 to 9 look one or two positions ahead for a better one, over hash chains. Each block takes the fixed Huffman code, a dynamic one or no code (stored), whichever is smallest, and ends where the data changes (libdeflate's block splitting) or after 64 KiB. Inputs of a few dozen bytes or less are stored, as libdeflate stores them. With the same input, no dictionary and no flush, the streams are the bytes that libdeflate 1.24 writes when its blocks are limited to 64 KiB. They decode with zlib and the `gzip` command, whole and cut after every flush (`scripts/crosscheck.mbtx`, run in CI), and the same input gives the same bytes on every target, however it is split. An encoder never raises.
-- An encoder's memory is fixed by its level: 542,516 bytes at the default level (the 32 KiB window, a 64 KiB block and what the parser looks ahead, the block's output, the match tables and the block's sequences), 361,948 at level 1 and 131,077 at level 0, with a dictionary or without, and for gzip its header's bytes; `memory_usage()` reports it.
-- The zlib and gzip header checks, Adler-32's sums (which never overflow), the decoder's verdict on a code's lengths, and the canonical codes the encoder writes are proved against RFC 1950, RFC 1951 and RFC 1952 with `moon prove`; [PROOFS.md](PROOFS.md) lists what is proved and what is trusted.
-
-### Compression ratio
-
-Sizes in bytes of raw DEFLATE streams for six files of the [Silesia corpus](https://sun.aei.polsl.pl/~sdeor/index.php?page=silesia), against zlib 1.3.2.1 at the same levels:
-
-| File | Size | here -1 | zlib -1 | here -6 | zlib -6 | here -9 | zlib -9 |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| dickens | 10,192,446 | 4,217,525 | 4,585,612 | 3,864,185 | 3,871,628 | 3,816,762 | 3,854,729 |
-| mozilla | 51,220,480 | 20,192,961 | 20,577,220 | 18,807,653 | 19,089,118 | 18,716,681 | 19,044,390 |
-| nci | 33,553,445 | 3,837,577 | 4,624,591 | 3,102,963 | 3,200,182 | 2,935,668 | 2,987,995 |
-| ooffice | 6,152,192 | 3,275,124 | 3,290,526 | 3,073,999 | 3,097,288 | 3,068,726 | 3,092,920 |
-| samba | 21,606,400 | 5,866,517 | 6,329,449 | 5,338,862 | 5,451,399 | 5,272,299 | 5,402,704 |
-| xml | 5,345,280 | 887,708 | 965,242 | 686,486 | 687,991 | 651,148 | 658,899 |
-| total | 128,070,243 | 38,277,412 | 40,372,640 | 34,874,148 | 35,397,606 | 34,461,284 | 35,041,637 |
-
-Level 1 compresses about 5 % more than zlib's level 1, and levels 6 and 9 about 1.5 % more than zlib's: every file comes out smaller, at level 6 by 0.2 % (dickens, xml) to 3.0 % (nci). On the [Canterbury corpus](https://corpus.canterbury.ac.nz/) the eleven files come to 722,392 bytes at level 6, against zlib's 730,888. Random bytes go into stored blocks, 5 bytes more for each 65,535; a long run of one byte costs a few bytes for each 64 KiB block. `moon run deflate/scripts/ratio.mbtx -- DIR` measures the sizes and the speed on a directory of files.
-
-## Known limits
-
-- Levels stop at 9: libdeflate's levels 10 to 12, whose near-optimal parsing comes out about 3 % smaller than level 9 at several times the time, are not here, and higher levels are clamped to 9.
+- A decoder's memory is the 32 KiB window and its decoding tables, about 46 KiB from its first step to its last, with a dictionary or without (a dictionary is your bytes, held by reference), plus a gzip header's fields up to `max_header_bytes`.
+- An encoder's memory is fixed by its level: about 530 KiB at the default level, less at levels 0 and 1, and for gzip its header's bytes.
+- `memory_usage()` reports both; [RESOURCE_BOUNDS.md](https://github.com/gaato/codecs.mbt/blob/main/deflate/RESOURCE_BOUNDS.md) gives every bound exactly.
+- Levels stop at 9: libdeflate's levels 10 to 12, near-optimal parsing at several times the time, are not here, and higher levels are clamped to 9.
 - A flush is a sync flush: zlib's full flush, which also forgets the window, is not offered.
+
+## Errors
+
+A decoder refuses what zlib refuses, with zlib's kind of error: reserved block types and codes, over-subscribed and incomplete codes, distances before the start of the output, and the reserved header fields and values of zlib and gzip. Every malformed stream raises [`gaato/codec`](https://mooncakes.io/docs/gaato/codec)'s `CodecError(kind, message)`; a decoder does not abort. The kinds:
+
+- `Truncated`: the input ends inside a stream.
+- `Corrupt`: the input is not a valid stream.
+- `ChecksumMismatch`: a checksum or a gzip length does not match.
+- `TrailingData`: bytes after the stream (after a gzip member, bytes that start no other member).
+- `DictionaryRequired`, `DictionaryMismatch`: a zlib stream names a preset dictionary that was not given, or another one was.
+- `LimitExceeded`: a gzip header over `max_header_bytes`, with `resource: Memory`; more than `max_output` from `decompress`, with `resource: Output`.
+
+An error inside the DEFLATE data of a zlib or gzip stream keeps its kind. In a `catch` on these functions, `CodecError(kind, _)` and the kinds match unqualified, with no import; to name the types elsewhere, import [`gaato/codec_bytes`](https://mooncakes.io/docs/gaato/codec_bytes), which re-exports them.
+
+Every checksum is checked: zlib's Adler-32, gzip's CRC-32 and length, and the header CRC when a gzip header has one. Output comes out as soon as it is decoded, before the checksum that covers it, so `ChecksumMismatch` can follow output you already have; `decompress` returns only checked output.
+
+A decoder never reads past the end of a stream: after `Done` under `until=EndOfMember`, what follows is `input[last_consumed():]`, whatever the input splits. Raw DEFLATE and zlib streams cannot be concatenated, so under the default `until=EndOfInput` anything after one raises `TrailingData`.
+
+A step that raises first writes the output that comes before the error, and `last_consumed()` and `last_produced()` say what it took and wrote, so a stream with bytes after it gives all its output, then `TrailingData`, with `last_consumed()` at its end, whether it came in one step or many. A malformed stream gives the same output before the same kind of error however its input and output are split.
+
+The header checks, the decoder's verdict on a code's lengths and the canonical codes the encoder writes are proved against RFC 1950, 1951 and 1952; [PROOFS.md](https://github.com/gaato/codecs.mbt/blob/main/deflate/PROOFS.md) lists what is proved and what is trusted.
+
+## Links
+
+- [Changelog](https://github.com/gaato/codecs.mbt/blob/main/deflate/CHANGELOG.md)
+- [Repository](https://github.com/gaato/codecs.mbt)
+- [The byte-stream codec contract](https://github.com/gaato/codecs.mbt/blob/main/CONTRACT.md) that every `Decoder` and `Encoder` keeps
+- [Compression levels and ratio](https://github.com/gaato/codecs.mbt/blob/main/deflate/docs/compression.md): how the levels work, and sizes against zlib
+- [Resource bounds](https://github.com/gaato/codecs.mbt/blob/main/deflate/RESOURCE_BOUNDS.md): every limit and the tests that hold it
+- [Proofs](https://github.com/gaato/codecs.mbt/blob/main/deflate/PROOFS.md) and [test coverage](https://github.com/gaato/codecs.mbt/blob/main/deflate/TEST_COVERAGE.md)
 
 ## License
 

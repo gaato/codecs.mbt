@@ -12,7 +12,7 @@ ledger:
 
 ## Running it
 
-```fish
+```sh
 moon run scripts/coverage_report.mbtx -- brotli   # measure, print tables, check the ledger
 moon run scripts/coverage_report.mbtx -- brotli --from-json _build/coverage_report.brotli.json   # recheck only
 ```
@@ -69,7 +69,8 @@ Must be covered by tests:
 - every encoder path: simple prefix codes of one to four symbols, complex
   codes (including a code length code of one symbol), the uncompressed
   fallback, flushes, the input buffer sliding, and suspension on output
-  through byte-sized and random splits.
+  through byte-sized and random splits. The encoder's streams are held to
+  google/brotli's decoder by `scripts/crosscheck.mbtx`, which CI runs.
 
 Accepted as uncovered (needs a row):
 

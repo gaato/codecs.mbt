@@ -60,6 +60,11 @@ jobs:
         # The scripts are .mbtx files; moon resolves their imports from it.
         run: moon update
 
+      - name: Docs audit
+        # Also run by the gates; here first, so that a documentation failure
+        # shows before the long build and test steps.
+        run: moon run scripts/docs_audit.mbtx --self-test
+
       - name: Gates
         run: moon run scripts/gates.mbtx
 

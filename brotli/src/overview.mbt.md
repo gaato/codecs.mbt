@@ -1,10 +1,14 @@
 # gaato/brotli
 
-A streaming Brotli (RFC 7932) decoder and encoder in pure MoonBit. Native, JS, Wasm and Wasm GC.
+A streaming Brotli (RFC 7932) decoder and encoder in pure MoonBit, for Native, JS, Wasm and Wasm GC. Both take input in chunks of any size, write output into slices of any size, and keep their memory within a window you set, so they fit an HTTP client's or server's `br` content coding as well as a whole file.
 
-```fish
+## Install
+
+```sh
 moon add gaato/brotli
 ```
+
+## Usage
 
 One shot:
 
@@ -109,17 +113,35 @@ test "stop at the end of the stream" {
 }
 ```
 
-## What it does
+## What it decodes
 
-- Decodes every RFC 7932 stream, including the static dictionary and its 121 transforms.
-- Takes input in chunks of any size, down to one byte, and writes output into buffers of any size, under the rules of [`gaato/codec_bytes`](https://mooncakes.io/docs/gaato/codec_bytes).
-- Memory is the window (at most 16 MiB, and no more than the output so far) plus tables of at most 1.3 MiB; `memory_usage()` reports it. `Decoder(max_window_bits=n)` refuses streams that need a window over `2^n - 16` bytes with `LimitExceeded`, saying how much the stream needs.
-- Every malformed stream raises `CodecError(kind, message)` with `Truncated`, `Corrupt` or `TrailingData` (bytes after the stream); `decompress(max_output=n)` raises `LimitExceeded` past `n` bytes. It does not abort. A step that raises first hands out the output that comes before the error (answering `NeedMoreOutput` while it does not fit), and `last_consumed()` and `last_produced()` count what that step took and wrote: a corrupt stream gives the same output, then the same error, however it is split. On `TrailingData`, `last_consumed()` stops at the end of the stream.
-- Encodes with greedy LZ77 (lazy by one byte) and one prefix code per meta-block: about google/brotli's quality 4, and close to gzip -6. Its streams decode with google/brotli's decoder (`scripts/crosscheck.mbtx`).
-- The encoder's memory is its window (`Encoder(window_bits=n)`, 22 by default: 4 MiB, growing with the input to at most twice what it has taken, and up to a quarter more before it slides) plus a 64 KiB meta-block, its output and about 1 MiB of fixed tables.
-- The rules the decoder applies to what it reads (the window, the meta-block lengths, block switches, distances and the inverse move-to-front), where dictionary words are written, and the canonical codes the encoder writes are proved against RFC 7932 with `moon prove`; [PROOFS.md](PROOFS.md) lists what is proved and what is trusted.
+Every RFC 7932 stream, including the static dictionary and its 121 transforms. Input comes in chunks of any size, down to one byte, and output goes into slices of any size, under the rules of [`gaato/codec_bytes`](https://mooncakes.io/docs/gaato/codec_bytes). The rules the decoder applies to what it reads and the canonical codes the encoder writes are proved against RFC 7932; [PROOFS.md](https://github.com/gaato/codecs.mbt/blob/main/brotli/PROOFS.md) lists what is proved and what is trusted.
 
-Not included: higher-quality encoding (context modeling, block splitting, static dictionary references), and Shared Brotli (RFC 9841): its shared dictionaries, its large window and its framing format. A large-window stream raises `Corrupt`.
+Not included: Shared Brotli (RFC 9841), with its shared dictionaries, its large window and its framing format. A large-window stream raises `Corrupt`.
+
+## Encoding
+
+The encoder uses greedy LZ77 (lazy by one byte) and one prefix code per meta-block: about google/brotli's quality 4, and close to gzip -6. Higher-quality encoding (context modeling, block splitting, static dictionary references) is not included. The encoder never raises.
+
+## Memory
+
+The decoder's memory is the window (at most 16 MiB, and no more than the output so far) plus tables of at most 1.3 MiB; `memory_usage()` reports it. `Decoder(max_window_bits=n)` refuses streams that need a window over `2^n - 16` bytes with `LimitExceeded`, saying how much the stream needs.
+
+The encoder's memory is its window (`Encoder(window_bits=n)`, 22 by default: 4 MiB, growing with the input to at most twice what it has taken, and up to a quarter more before it slides) plus a 64 KiB meta-block, its output and about 1 MiB of fixed tables.
+
+## Errors
+
+Every malformed stream raises `CodecError(kind, message)` with `Truncated`, `Corrupt` or `TrailingData` (bytes after the stream); `decompress(max_output=n)` raises `LimitExceeded` past `n` bytes. The decoder does not abort.
+
+A step that raises first hands out the output that comes before the error (answering `NeedMoreOutput` while it does not fit), and `last_consumed()` and `last_produced()` count what that step took and wrote: a corrupt stream gives the same output, then the same error, however it is split. On `TrailingData`, `last_consumed()` stops at the end of the stream.
+
+## Links
+
+- [Changelog](https://github.com/gaato/codecs.mbt/blob/main/brotli/CHANGELOG.md)
+- [Repository](https://github.com/gaato/codecs.mbt)
+- [The byte-stream codec contract](https://github.com/gaato/codecs.mbt/blob/main/CONTRACT.md) that `Decoder` and `Encoder` keep
+- [Resource bounds](https://github.com/gaato/codecs.mbt/blob/main/brotli/RESOURCE_BOUNDS.md): every limit and the tests that hold it
+- [Proofs](https://github.com/gaato/codecs.mbt/blob/main/brotli/PROOFS.md) and [test coverage](https://github.com/gaato/codecs.mbt/blob/main/brotli/TEST_COVERAGE.md)
 
 ## License
 

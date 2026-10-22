@@ -1,0 +1,8 @@
+# Packaging rules for gaato/deflate. This file replaces .gitignore for this
+# directory; the repository root's .gitignore still applies.
+_build/
+.mooncakes/
+# Repository-only scripts (generators, cross-checks), run from the repository root.
+scripts/
+# Background for contributors, linked from the README on GitHub.
+docs/

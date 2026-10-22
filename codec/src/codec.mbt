@@ -24,9 +24,11 @@ pub(all) enum ErrorKind {
 } derive(Eq, @debug.Debug)
 
 ///|
+/// `ErrorKind::equal` and `ErrorKind::not_equal`, the derived comparison.
 pub extend ErrorKind with Eq::{equal, not_equal}
 
 ///|
+/// `ErrorKind::to_repr`, the derived debug representation.
 pub extend ErrorKind with @debug.Debug::{to_repr}
 
 ///|
@@ -40,9 +42,11 @@ pub(all) struct Limit {
 } derive(Eq, @debug.Debug)
 
 ///|
+/// `Limit::equal` and `Limit::not_equal`, the derived comparison.
 pub extend Limit with Eq::{equal, not_equal}
 
 ///|
+/// `Limit::to_repr`, the derived debug representation.
 pub extend Limit with @debug.Debug::{to_repr}
 
 ///|
@@ -56,9 +60,11 @@ pub(all) enum Resource {
 } derive(Eq, @debug.Debug)
 
 ///|
+/// `Resource::equal` and `Resource::not_equal`, the derived comparison.
 pub extend Resource with Eq::{equal, not_equal}
 
 ///|
+/// `Resource::to_repr`, the derived debug representation.
 pub extend Resource with @debug.Debug::{to_repr}
 
 ///|
@@ -69,6 +75,7 @@ pub(all) suberror CodecError {
 } derive(@debug.Debug)
 
 ///|
+/// `CodecError::to_repr`, the derived debug representation.
 pub extend CodecError with @debug.Debug::{to_repr}
 
 ///|

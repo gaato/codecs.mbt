@@ -12,7 +12,7 @@ ledger:
 
 ## Running it
 
-```fish
+```sh
 moon run scripts/coverage_report.mbtx -- png   # measure, print tables, check the ledger
 moon run scripts/coverage_report.mbtx -- png --from-json _build/coverage_report.png.json   # recheck only
 ```
