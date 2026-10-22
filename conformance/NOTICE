@@ -48,3 +48,22 @@ and src/png_vectors_test.mbt holds its images as base64. Its licence:
   purpose and without fee is hereby granted.
 
   (c) Willem van Schaik, 1996, 2011
+
+apng/ holds animated PNGs, and src/apng_vectors_test.mbt holds them as
+base64:
+
+- apng/wpt/: the support images of the Web Platform Tests' png/apng
+  (web-platform-tests/wpt at commit a699fb1; a port of Philip Taylor's APNG
+  tests), used under the 3-Clause BSD License above.
+- apng/wuffs/animated-red-blue.apng and apng/wuffs/muybridge.apng: from
+  Wuffs' test/data (google/wuffs at commit 4be865d), distributed under the
+  MIT and the Apache 2.0 licenses (Copyright The Wuffs Authors).
+  animated-red-blue is an original animation by Nigel Tao; muybridge is
+  derived from a public-domain animation on Wikipedia
+  (File:Muybridge_race_horse_animated.gif).
+- apng/image-png/basic_f20.png: from image-png's tests/animated
+  (image-rs/image-png at commit b2f10c6), under the MIT or Apache 2.0
+  licenses (Copyright The image-rs Developers).
+
+apng/reference/ is this module's own: a program that reads the frames with
+the png crate (image-rs/image-png, MIT or Apache 2.0), which cargo fetches.

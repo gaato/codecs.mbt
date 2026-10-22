@@ -2,7 +2,7 @@
 
 A streaming PNG decoder in pure MoonBit, for Native, JS, Wasm and Wasm GC. It takes input in chunks of any size, writes whole rows into output slices you provide, checks every CRC and the zlib stream's Adler-32, and holds two rows and a zlib decoder, whatever the image's height.
 
-The module is being written. The decoder reads every color type and bit depth, interlaced or not, with the ancillary chunks of the specification's third edition; APNG, and functions that convert rows to RGBA, come later.
+The module is being written. The decoder reads every color type and bit depth, interlaced or not, with the ancillary chunks of the specification's third edition and APNG's frames; functions that convert rows to RGBA, and that put frames together, come later.
 
 ## Install
 
@@ -96,6 +96,12 @@ test "report the text chunks" {
 }
 ```
 
+## APNG
+
+An animated image's frames come one after another, each a `Frame`, its rows, and `FrameEnd`. `frame_x()`, `frame_y()`, `frame_width()` and `frame_height()` place the frame on the canvas, and its rows are as wide as the frame; `delay_numerator()` and `delay_denominator()` say how long it is shown, `dispose()` what to do with its rectangle afterwards, `blend()` how its pixels go on the canvas. These are the values to apply: a delay's denominator of 0 comes as 100, and the first frame's dispose op of PREVIOUS as `Background`, as the specification says. Putting frames together is the caller's: the decoder holds no canvas.
+
+The default image (IDAT) is the first `Frame`; `in_animation()` says whether it is part of the animation (an fcTL comes before it) or only what a reader without APNG shows. `animated()`, `frame_count()` and `plays()` give what acTL says. With `Decoder(animation=false)` the decoder reads APNG's chunks as unknown ones and gives the default image only.
+
 ## Limits
 
 `Decoder(max_row_bytes=...)` bounds a row's bytes: 8,000,000 by default (a million pixels of 16-bit RGBA), at most 1,000,000,000. An image with longer rows raises `LimitExceeded` with `resource: Memory` and the row's bytes, at the step after `Header`, before anything is allocated for it, so you can look at the size first. The height is not bounded: rows are handed out as they come.
@@ -114,6 +120,7 @@ A step raises [`gaato/codec`](https://mooncakes.io/docs/gaato/codec)'s `CodecErr
 - `Unsupported`: a critical chunk the decoder does not know.
 - `TrailingData`: bytes after IEND. With `until=EndOfMember` the decoder stops right after IEND instead, and what follows is `input[last_consumed():]`.
 - An error inside the zlib stream keeps its kind, with `IDAT` in the message: `Corrupt` for malformed data, and `DictionaryRequired` for a stream that names a preset dictionary.
+- In an APNG, `Corrupt` too for a sequence number out of order, an fdAT without its fcTL, a frame without data, an fcTL outside the canvas or with an operation the specification does not define, a second acTL, and a count of frames other than acTL's; and `ChecksumMismatch` for the CRC of fcTL and fdAT, which an APNG needs as it needs IDAT. An acTL after IDAT or of no frames leaves the image still, as one without acTL is.
 
 An ancillary chunk out of the place the specification gives it, a second copy of one that may come once, one whose CRC does not match, or one whose values the specification does not allow (a gAMA of 0, a cICP with matrix coefficients, a tRNS longer than the palette, a zTXt whose keyword is empty or whose zlib stream is broken, and so on, as libpng judges them) is left out, and `ignored_chunks()` counts it; a later valid copy is still read. The bits of tRNS's samples above the bit depth are dropped, as browsers and image-rs show such images, where libpng keeps them and warns. So is a PLTE that a grayscale image cannot use, a PLTE out of place in a truecolor image, and the data of an IEND that has some. Entries of a palette beyond what the bit depth can index are dropped. Inflated data past the last row, and bytes after the zlib stream, are dropped.
 

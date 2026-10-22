@@ -310,3 +310,24 @@ test "Adam7: each pass's columns and rows are those of its lattice, for every si
   debug_inspect(@rules.passes(true), content="7")
   debug_inspect(@rules.passes(false), content="1")
 }
+
+///|
+test "check_frame: inside the image, without wrapping, whole for the default image" {
+  assert_true(@rules.check_frame(10, 8, 10, 8, 0, 0, 2, 1, first=true) is None)
+  assert_true(@rules.check_frame(10, 8, 3, 2, 7, 6, 0, 0, first=false) is None)
+  for
+    bad in [
+      @rules.check_frame(10, 8, 0, 2, 0, 0, 0, 0, first=false),
+      @rules.check_frame(10, 8, 2, 0, 0, 0, 0, 0, first=false),
+      @rules.check_frame(10, 8, 4, 2, 7, 0, 0, 0, first=false),
+      @rules.check_frame(10, 8, 4, 3, 0, 6, 0, 0, first=false),
+      // x + width wraps in 32 bits.
+      @rules.check_frame(10, 8, 0xFFFFFFF8, 1, 9, 0, 0, 0, first=false),
+      @rules.check_frame(10, 8, 1, 0xFFFFFFFF, 0, 1, 0, 0, first=false),
+      @rules.check_frame(10, 8, 9, 8, 1, 0, 0, 0, first=true),
+      @rules.check_frame(10, 8, 10, 8, 0, 0, 3, 0, first=false),
+      @rules.check_frame(10, 8, 10, 8, 0, 0, 0, 2, first=false),
+    ] {
+    assert_true(bad is Some(_))
+  }
+}

@@ -61,6 +61,8 @@ pub fn after(Position, UInt32, Verdict) -> Position
 
 pub fn channels(Int32) -> Int32
 
+pub fn check_frame(UInt32, UInt32, UInt32, UInt32, UInt32, UInt32, Int32, Int32, first~ : Bool) -> String?
+
 pub fn check_header(UInt32, UInt32, Int32, Int32, Int32, Int32, Int32) -> String?
 
 pub fn chunk_type(Byte, Byte, Byte, Byte) -> UInt32

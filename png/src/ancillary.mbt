@@ -30,7 +30,7 @@ pub extend Transparency with @debug.Debug::{to_repr}
 ///|
 /// cHRM (11.3.2.1): the chromaticities of the white point and the primaries,
 /// CIE 1931 x and y, each times 100,000.
-pub(all) struct Chromaticities {
+pub struct Chromaticities {
   white_x : UInt32
   white_y : UInt32
   red_x : UInt32
@@ -52,7 +52,7 @@ pub extend Chromaticities with @debug.Debug::{to_repr}
 
 ///|
 /// cICP (11.3.2.6): the image's color space as code points of ITU-T H.273.
-pub(all) struct CodingPoints {
+pub struct CodingPoints {
   /// Color primaries (1 is BT.709 and sRGB, 9 BT.2020, 12 Display P3).
   color_primaries : Int32
   /// Transfer characteristics (13 is sRGB's, 16 PQ, 18 HLG).
@@ -76,7 +76,7 @@ pub extend CodingPoints with @debug.Debug::{to_repr}
 /// mDCV (11.3.2.7): the display the content was mastered on (SMPTE ST
 /// 2086). Chromaticities are CIE 1931 x and y in units of 0.00002,
 /// luminances in units of 0.0001 cd/m².
-pub(all) struct MasteringDisplay {
+pub struct MasteringDisplay {
   red_x : Int32
   red_y : Int32
   green_x : Int32
@@ -100,7 +100,7 @@ pub extend MasteringDisplay with @debug.Debug::{to_repr}
 
 ///|
 /// cLLI (11.3.2.8): the content's light levels, in units of 0.0001 cd/m².
-pub(all) struct LightLevel {
+pub struct LightLevel {
   /// The brightest pixel (MaxCLL).
   max_content : UInt32
   /// The brightest frame's average (MaxFALL).
@@ -117,7 +117,7 @@ pub extend LightLevel with @debug.Debug::{to_repr}
 
 ///|
 /// pHYs (11.3.4.1): the pixels' size, or their aspect ratio.
-pub(all) struct PhysicalSize {
+pub struct PhysicalSize {
   /// Pixels per unit, across.
   x : UInt32
   /// Pixels per unit, down.

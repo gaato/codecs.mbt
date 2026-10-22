@@ -1,0 +1,13 @@
+# The reference the APNG vectors are checked against: the png crate (image-rs)
+# reading each frame raw. Run by scripts/gen_apng_vectors.mbtx; not part of
+# any MoonBit module.
+
+[package]
+name = "apng-reference"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+png = "=0.18.1"
+sha2 = "=0.10.9"

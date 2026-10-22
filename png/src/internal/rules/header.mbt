@@ -174,3 +174,39 @@ pub fn pass_rows(interlaced : Bool, pass : Int32, height : Int32) -> Int32 {
     (height - y0 - 1) / pass_dy(interlaced, pass) + 1
   }
 }
+
+///|
+/// Why an fcTL's rectangle and operations do not describe a frame of an
+/// image `width` x `height` (11.3.6.2), or `None` when they do: a width and
+/// a height of at least 1, the rectangle inside the image, the sums taken in
+/// 64 bits so that none wraps, a dispose op of 0 to 2 and a blend op of 0
+/// or 1; and for the fcTL before IDAT (`first`), the whole image.
+pub fn check_frame(
+  width : UInt32,
+  height : UInt32,
+  frame_width : UInt32,
+  frame_height : UInt32,
+  x : UInt32,
+  y : UInt32,
+  dispose : Int32,
+  blend : Int32,
+  first~ : Bool,
+) -> String? {
+  if frame_width == 0 || frame_height == 0 {
+    Some("a frame of \{frame_width}x\{frame_height} pixels")
+  } else if x.to_uint64() + frame_width.to_uint64() > width.to_uint64() ||
+    y.to_uint64() + frame_height.to_uint64() > height.to_uint64() {
+    Some(
+      "a frame of \{frame_width}x\{frame_height} at \{x},\{y} outside the image's \{width}x\{height}",
+    )
+  } else if first &&
+    (x != 0 || y != 0 || frame_width != width || frame_height != height) {
+    Some("the default image's frame is not the whole image")
+  } else if dispose > 2 {
+    Some("dispose op \{dispose}")
+  } else if blend > 1 {
+    Some("blend op \{blend}")
+  } else {
+    None
+  }
+}

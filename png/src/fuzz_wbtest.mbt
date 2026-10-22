@@ -92,6 +92,22 @@ test "corrupted images raise errors or decode, the same under every split, withi
       ],
     ),
   ]
+  // An APNG with a frame of two fdAT chunks and text between them.
+  let (z0, _) = frame_data(8, 6, seed=1)
+  let (z1, _) = frame_data(3, 2, seed=2)
+  sources.push(
+    apng_of(
+      [
+        actl(2),
+        fctl(0, 8, 6),
+        ..idat_chunks(z0, 60),
+        fctl(1, 3, 2, x=5, y=4, blend=1),
+        ..fdats(2, z1[:10].to_owned()),
+        chunk("tEXt", b"k\x00v"),
+        ..fdats(3, z1[10:].to_owned()),
+      ],
+    ),
+  )
   // Reporting the variable-length chunks, with a block of at most 4 KiB.
   let make = () => {
     Decoder(report=["iCCP", "tEXt", "zTXt", "iTXt"], max_chunk_bytes=4096)

@@ -42,7 +42,9 @@ priv enum State {
   HeaderData
   /// PLTE's bytes.
   PaletteData
-  /// An IDAT's bytes, through the zlib decoder.
+  /// An fdAT's sequence number.
+  Sequence
+  /// An IDAT's or an fdAT's frame data, through the zlib decoder.
   ImageData
   /// The bytes of a chunk that is read only through its CRC.
   Skip
@@ -184,6 +186,23 @@ pub struct Decoder {
   priv block : Block
   priv mut reporting : Bool
   priv mut metadata_chunk : UInt32
+  // APNG: whether to read it, whether the image is one, what acTL says, the
+  // fcTL chunks read and the sequence number the next must have, the fcTL
+  // whose frame has not begun, and the current frame.
+  priv animation : Bool
+  priv mut animated : Bool
+  priv mut frames : UInt32
+  priv mut plays : UInt32
+  priv mut controls : UInt32
+  priv mut sequence : UInt32
+  priv mut pending : Bool
+  priv next : Control
+  priv control : Control
+  priv mut fdat_frame : Bool
+  priv mut in_animation : Bool
+  // An fcTL that came before acTL, kept for IDAT.
+  priv early_control : FixedArray[Byte]
+  priv mut early : Bool
   // The caller's array, during a `step_into`.
   priv mut fixed_out : FixedArray[Byte]?
 }
@@ -208,6 +227,11 @@ pub struct Decoder {
 /// inflated, through a second zlib decoder, which the decoder holds only
 /// when one of them is asked for.
 ///
+/// `animation` says whether to read APNG's chunks (acTL, fcTL, fdAT): each
+/// frame of an animation is then a `Frame` with its rows. With
+/// `animation=false` they are skipped as unknown chunks, and an animated
+/// image gives its default image only.
+///
 /// `until` says where the image ends. `EndOfInput`, the default, decodes the
 /// image up to the end of the input, and bytes after IEND raise
 /// `TrailingData`. `EndOfMember` stops right after IEND and consumes nothing
@@ -216,6 +240,7 @@ pub fn Decoder::Decoder(
   max_row_bytes~ : Int32 = 8_000_000,
   report~ : Array[String] = [],
   max_chunk_bytes~ : Int32 = 1 << 20,
+  animation~ : Bool = true,
   until~ : @codec_image.Until = EndOfInput,
 ) -> Decoder {
   let none = FixedArray::make(0, b'\x00')
@@ -301,6 +326,19 @@ pub fn Decoder::Decoder(
     ),
     reporting: false,
     metadata_chunk: 0,
+    animation,
+    animated: false,
+    frames: 0,
+    plays: 0,
+    controls: 0,
+    sequence: 0,
+    pending: false,
+    next: Control::new(),
+    control: Control::new(),
+    fdat_frame: false,
+    in_animation: false,
+    early_control: FixedArray::make(26, b'\x00'),
+    early: false,
   }
 }
 
@@ -350,6 +388,15 @@ pub fn Decoder::reset(self : Decoder) -> Unit {
   self.field = false
   self.block.release()
   self.reporting = false
+  self.animated = false
+  self.frames = 0
+  self.plays = 0
+  self.controls = 0
+  self.sequence = 0
+  self.pending = false
+  self.fdat_frame = false
+  self.in_animation = false
+  self.early = false
 }
 
 ///|
@@ -462,28 +509,31 @@ pub fn Decoder::ignored_chunks(self : Decoder) -> Int32 {
 }
 
 ///|
-/// The left edge of the frame: an image is one frame, so 0. Valid from
-/// `Frame` until `Done`.
-pub fn Decoder::frame_x(_ : Decoder) -> Int32 {
-  0
+/// The left edge of the current frame: its fcTL's x offset, and 0 for a
+/// default image. Valid from `Frame` until the next `Frame` or `Done`.
+pub fn Decoder::frame_x(self : Decoder) -> Int32 {
+  self.control.x
 }
 
 ///|
-/// The top edge of the frame: 0.
-pub fn Decoder::frame_y(_ : Decoder) -> Int32 {
-  0
+/// The top edge of the current frame. Valid from `Frame` until the next
+/// `Frame` or `Done`.
+pub fn Decoder::frame_y(self : Decoder) -> Int32 {
+  self.control.y
 }
 
 ///|
-/// The frame's width: the image's.
+/// The current frame's width: the image's for a default image. Valid from
+/// `Frame` until the next `Frame` or `Done`.
 pub fn Decoder::frame_width(self : Decoder) -> Int32 {
-  self.width
+  self.control.width
 }
 
 ///|
-/// The frame's height: the image's.
+/// The current frame's height. Valid from `Frame` until the next `Frame` or
+/// `Done`.
 pub fn Decoder::frame_height(self : Decoder) -> Int32 {
-  self.height
+  self.control.height
 }
 
 ///|
@@ -701,6 +751,22 @@ fn Decoder::run(
         }
         self.state = Crc
       }
+      Sequence => {
+        self.gather(input, 4)
+        let h = self.held
+        self.crc = @crc32.update(self.crc, h[0:4])
+        self.held_len = 0
+        self.left -= 4
+        self.check_sequence(@rules.chunk_type(h[0], h[1], h[2], h[3]))
+        self.state = ImageData
+        if !self.in_frame {
+          self.control.copy(self.next)
+          self.pending = false
+          self.in_animation = true
+          self.begin_frame(fdat=true)
+          return Frame
+        }
+      }
       ImageData => {
         let status = self.image_data(input, output)
         if status is Some(status) {
@@ -827,8 +893,24 @@ fn Decoder::dispatch(self : Decoder) -> Status? raise Stop {
   if !@rules.is_valid_type(t) {
     raise Fail(Corrupt, "a chunk type that is not four letters")
   }
-  let index = @rules.known(t)
-  if self.in_frame && index != @rules.IDAT {
+  let mut index = @rules.known(t)
+  let apng = index is (@rules.ACTL | @rules.FCTL | @rules.FDAT)
+  // Outside an APNG, its chunks are unknown ones; but an fcTL before IDAT
+  // may come before acTL, and is kept until IDAT says which it was.
+  let read_apng = index == @rules.ACTL ||
+    self.animated ||
+    (index == @rules.FCTL && !self.framed)
+  if apng && !(self.animation && read_apng) {
+    index = -1
+  }
+  // A frame of IDAT ends at the first other chunk; one of fdAT at the next
+  // fcTL or IEND, since other chunks may come between its fdAT chunks.
+  let ends = if self.fdat_frame {
+    index is (@rules.FCTL | @rules.IEND)
+  } else {
+    index != @rules.IDAT
+  }
+  if self.in_frame && ends {
     if self.produced > 0 {
       return Some(Rows)
     }
@@ -841,9 +923,23 @@ fn Decoder::dispatch(self : Decoder) -> Status? raise Stop {
     self.in_frame = false
     return Some(FrameEnd)
   }
-  let verdict = @rules.place(self.position, t, self.seen, self.color_type)
+  let verdict = if index == -1 && apng && !(self.position is BeforeHeader) {
+    @rules.Verdict::Accept
+  } else {
+    @rules.place(self.position, t, self.seen, self.color_type)
+  }
   if verdict is Refuse(kind, message) {
     raise Fail(kind, message)
+  }
+  // In an APNG, a second fcTL before IDAT or an fdAT before it is out of
+  // the order of its sequence.
+  if index is (@rules.FCTL | @rules.FDAT) && verdict is Ignore && self.animated {
+    raise Fail(Corrupt, "\{@rules.type_name(t)} out of order")
+  }
+  // Nor can an APNG have a second acTL; one after IDAT, before which the
+  // image was not animated, is left out like any misplaced chunk.
+  if index == @rules.ACTL && verdict is Ignore && self.animated {
+    raise Fail(Corrupt, "a second acTL")
   }
   self.position = @rules.after(self.position, t, verdict)
   self.index = index
@@ -873,13 +969,54 @@ fn Decoder::dispatch(self : Decoder) -> Status? raise Stop {
     @rules.IDAT => {
       self.state = ImageData
       if !self.framed {
+        // The default image: the frame of the fcTL before it, if any, and
+        // if acTL came before it too.
+        if self.animated && self.early {
+          self.early_control.blit_to(self.scratch, len=26)
+          self.read_fctl()
+        }
         self.framed = true
-        self.in_frame = true
-        self.start_pass(0)
+        self.in_animation = self.pending
+        if self.pending {
+          self.control.copy(self.next)
+          self.pending = false
+        } else {
+          self.control.whole(self.width, self.height)
+        }
+        self.begin_frame(fdat=false)
         return Some(Frame)
       }
     }
-    @rules.IEND => self.ignoring = self.left > 0
+    @rules.FDAT => {
+      if !self.in_frame && !self.pending {
+        raise Fail(Corrupt, "fdAT without an fcTL before it")
+      }
+      if self.left < 4 {
+        raise Fail(Corrupt, "an fdAT of \{self.left} bytes")
+      }
+      self.state = Sequence
+    }
+    @rules.FCTL if verdict is Accept => {
+      if self.pending {
+        raise Fail(Corrupt, "an fcTL whose frame has no data")
+      }
+      if self.left != 26 {
+        raise Fail(Corrupt, "an fcTL of \{self.left} bytes")
+      }
+      self.begin_ancillary(t, index)
+    }
+    @rules.IEND => {
+      if self.animated && self.pending {
+        raise Fail(Corrupt, "an fcTL whose frame has no data")
+      }
+      if self.animated && self.controls != self.frames {
+        raise Fail(
+          Corrupt,
+          "acTL says \{self.frames} frames, and there are \{self.controls}",
+        )
+      }
+      self.ignoring = self.left > 0
+    }
     _ => if !self.ignoring { self.begin_ancillary(t, index) }
   }
   None
@@ -894,8 +1031,9 @@ fn Decoder::begin_ancillary(
   t : UInt32,
   index : Int32,
 ) -> Unit raise Stop {
-  self.field = is_field(index) && self.left <= FIELD_BYTES
-  if is_field(index) && !self.field {
+  let fields = is_field(index) || index is (@rules.ACTL | @rules.FCTL)
+  self.field = fields && self.left <= FIELD_BYTES
+  if fields && !self.field {
     self.ignoring = true
     return
   }
@@ -924,9 +1062,13 @@ fn Decoder::begin_ancillary(
 /// A critical chunk's mismatch is refused, an ancillary one's leaves the
 /// chunk out; PLTE is ancillary in an image that is not indexed-color.
 fn Decoder::close_chunk(self : Decoder, checked : Bool) -> Status? raise Stop {
-  let critical = self.index >= 0 &&
-    self.index <= @rules.IEND &&
-    (self.index != @rules.PLTE || self.color_type == 3)
+  // In an APNG, fcTL and fdAT are as needed as IDAT.
+  let critical = (
+      self.index >= 0 &&
+      self.index <= @rules.IEND &&
+      (self.index != @rules.PLTE || self.color_type == 3)
+    ) ||
+    (self.animated && self.index is (@rules.FCTL | @rules.FDAT))
   if !checked && critical {
     raise Fail(
       ChecksumMismatch,
@@ -935,14 +1077,28 @@ fn Decoder::close_chunk(self : Decoder, checked : Bool) -> Status? raise Stop {
   }
   let mut used = checked && !self.ignoring
   if used && self.field {
-    used = self.fields.read(
-      self.index,
-      self.scratch,
-      self.scratch_len,
-      self.color_type,
-      self.bit_depth,
-      self.entries,
-    )
+    used = match self.index {
+      @rules.ACTL => self.read_actl()
+      @rules.FCTL if self.animated => {
+        self.read_fctl()
+        true
+      }
+      @rules.FCTL => {
+        // Before acTL: kept for IDAT.
+        self.scratch.blit_to(self.early_control, len=26)
+        self.early = true
+        true
+      }
+      _ =>
+        self.fields.read(
+          self.index,
+          self.scratch,
+          self.scratch_len,
+          self.color_type,
+          self.bit_depth,
+          self.entries,
+        )
+    }
   }
   if used && self.reporting {
     used = self.block.finish()
@@ -1010,12 +1166,68 @@ fn Decoder::read_header(self : Decoder) -> Unit raise Stop {
 }
 
 ///|
+/// Begins a frame's data: its zlib stream from the start, its rows from the
+/// first pass that has pixels. The only place the zlib decoder is reset
+/// within an image, so that no frame inherits another's stream.
+fn Decoder::begin_frame(self : Decoder, fdat~ : Bool) -> Unit {
+  self.inflater.reset()
+  self.fdat_frame = fdat
+  self.in_frame = true
+  self.rows_done = false
+  self.inflated = false
+  self.inflate_error = None
+  self.ready = false
+  self.start_pass(0)
+}
+
+///|
+/// Reads acTL: an animation of at least one frame, and how many times to
+/// play it. One of no frames is left out, and the image is not animated.
+fn Decoder::read_actl(self : Decoder) -> Bool {
+  guard self.scratch_len == 8 else { return false }
+  let frames = u32(self.scratch, 0)
+  guard frames > 0 && frames <= 0x7FFFFFFF else { return false }
+  self.frames = frames
+  self.plays = u32(self.scratch, 4)
+  self.animated = self.animation
+  true
+}
+
+///|
+/// Reads an fcTL, whose sequence number must be the next: the frame it
+/// describes waits for its first data chunk.
+fn Decoder::read_fctl(self : Decoder) -> Unit raise Stop {
+  self.check_sequence(u32(self.scratch, 0))
+  self.next.read(
+    self.scratch,
+    self.width,
+    self.height,
+    default_image=!self.framed,
+    first=self.controls == 0,
+  )
+  self.controls += 1
+  self.pending = true
+}
+
+///|
+/// Checks a sequence number of fcTL or fdAT against the next one expected.
+fn Decoder::check_sequence(self : Decoder, number : UInt32) -> Unit raise Stop {
+  if number != self.sequence {
+    raise Fail(
+      Corrupt,
+      "sequence number \{number} where \{self.sequence} was due",
+    )
+  }
+  self.sequence += 1
+}
+
+///|
 /// Starts the first pass from `pass` on that has pixels, with a previous row
 /// of zeros, or ends the rows when none is left.
 fn Decoder::start_pass(self : Decoder, pass : Int32) -> Unit {
   for p in pass..<@rules.passes(self.interlaced) {
-    let columns = @rules.pass_columns(self.interlaced, p, self.width)
-    let rows = @rules.pass_rows(self.interlaced, p, self.height)
+    let columns = @rules.pass_columns(self.interlaced, p, self.control.width)
+    let rows = @rules.pass_rows(self.interlaced, p, self.control.height)
     if columns > 0 && rows > 0 {
       self.pass = p
       self.pass_rows = rows

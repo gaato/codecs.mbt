@@ -58,9 +58,11 @@ Must be covered by tests:
 Beyond this module's tests, the private conformance module runs the decoder
 over PngSuite: every valid image against pypng's samples and what pypng
 reads of gAMA, tRNS, bKGD, pHYs and sBIT, its text chunks against Python's
-zlib, and against typst's `decode_png`, under the harness's checks of splits, truncation, trailing
-bytes, `until=EndOfMember`, `reset` and corruption, and the broken images
-against the kinds of error their names describe.
+zlib, and against typst's `decode_png`, under the harness's checks of
+splits, truncation, trailing bytes, `until=EndOfMember`, `reset` and corruption, and the broken images
+against the kinds of error their names describe; and over animated PNGs
+(the Web Platform Tests' png/apng, Wuffs' and image-png's animations),
+every frame against the png crate's.
 
 ## Accepted uncovered
 

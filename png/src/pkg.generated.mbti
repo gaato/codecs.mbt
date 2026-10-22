@@ -21,7 +21,15 @@ pub fn Background::equal(Self, Self) -> Bool
 pub fn Background::not_equal(Self, Self) -> Bool
 pub fn Background::to_repr(Self) -> @debug.Repr
 
-pub(all) struct Chromaticities {
+pub(all) enum Blend {
+  Source
+  Over
+} derive(Eq, @debug.Debug)
+pub fn Blend::equal(Self, Self) -> Bool
+pub fn Blend::not_equal(Self, Self) -> Bool
+pub fn Blend::to_repr(Self) -> @debug.Repr
+
+pub struct Chromaticities {
   white_x : UInt32
   white_y : UInt32
   red_x : UInt32
@@ -35,7 +43,7 @@ pub fn Chromaticities::equal(Self, Self) -> Bool
 pub fn Chromaticities::not_equal(Self, Self) -> Bool
 pub fn Chromaticities::to_repr(Self) -> @debug.Repr
 
-pub(all) struct CodingPoints {
+pub struct CodingPoints {
   color_primaries : Int32
   transfer_function : Int32
   matrix_coefficients : Int32
@@ -59,12 +67,18 @@ pub fn ColorType::to_repr(Self) -> @debug.Repr
 pub struct Decoder {
   // private fields
 }
-pub fn Decoder::Decoder(max_row_bytes? : Int32, report? : Array[String], max_chunk_bytes? : Int32, until? : @codec_image.Until) -> Self
+pub fn Decoder::Decoder(max_row_bytes? : Int32, report? : Array[String], max_chunk_bytes? : Int32, animation? : Bool, until? : @codec_image.Until) -> Self
+pub fn Decoder::animated(Self) -> Bool
 pub fn Decoder::background(Self) -> Background?
 pub fn Decoder::bit_depth(Self) -> Int32
+pub fn Decoder::blend(Self) -> Blend
 pub fn Decoder::chromaticities(Self) -> Chromaticities?
 pub fn Decoder::coding_points(Self) -> CodingPoints?
 pub fn Decoder::color_type(Self) -> ColorType
+pub fn Decoder::delay_denominator(Self) -> Int32
+pub fn Decoder::delay_numerator(Self) -> Int32
+pub fn Decoder::dispose(Self) -> Dispose
+pub fn Decoder::frame_count(Self) -> UInt32
 pub fn Decoder::frame_height(Self) -> Int32
 pub fn Decoder::frame_width(Self) -> Int32
 pub fn Decoder::frame_x(Self) -> Int32
@@ -72,6 +86,7 @@ pub fn Decoder::frame_y(Self) -> Int32
 pub fn Decoder::gamma(Self) -> UInt32?
 pub fn Decoder::height(Self) -> Int32
 pub fn Decoder::ignored_chunks(Self) -> Int32
+pub fn Decoder::in_animation(Self) -> Bool
 pub fn Decoder::interlaced(Self) -> Bool
 pub fn Decoder::last_consumed(Self) -> Int32
 pub fn Decoder::last_produced(Self) -> Int32
@@ -86,6 +101,7 @@ pub fn Decoder::pass_dy(Self) -> Int32
 pub fn Decoder::pass_x(Self) -> Int32
 pub fn Decoder::pass_y(Self) -> Int32
 pub fn Decoder::physical_size(Self) -> PhysicalSize?
+pub fn Decoder::plays(Self) -> UInt32
 pub fn Decoder::reset(Self) -> Unit
 pub fn Decoder::room_needed(Self) -> Int32
 pub fn Decoder::row_bytes(Self) -> Int32
@@ -99,7 +115,16 @@ pub fn Decoder::transparency(Self) -> Transparency?
 pub fn Decoder::width(Self) -> Int32
 pub impl @codec_image.Decode for Decoder
 
-pub(all) struct LightLevel {
+pub(all) enum Dispose {
+  Keep
+  Background
+  Previous
+} derive(Eq, @debug.Debug)
+pub fn Dispose::equal(Self, Self) -> Bool
+pub fn Dispose::not_equal(Self, Self) -> Bool
+pub fn Dispose::to_repr(Self) -> @debug.Repr
+
+pub struct LightLevel {
   max_content : UInt32
   max_frame_average : UInt32
 } derive(Eq, @debug.Debug)
@@ -107,7 +132,7 @@ pub fn LightLevel::equal(Self, Self) -> Bool
 pub fn LightLevel::not_equal(Self, Self) -> Bool
 pub fn LightLevel::to_repr(Self) -> @debug.Repr
 
-pub(all) struct MasteringDisplay {
+pub struct MasteringDisplay {
   red_x : Int32
   red_y : Int32
   green_x : Int32
@@ -123,7 +148,7 @@ pub fn MasteringDisplay::equal(Self, Self) -> Bool
 pub fn MasteringDisplay::not_equal(Self, Self) -> Bool
 pub fn MasteringDisplay::to_repr(Self) -> @debug.Repr
 
-pub(all) struct PhysicalSize {
+pub struct PhysicalSize {
   x : UInt32
   y : UInt32
   per_meter : Bool
