@@ -1,0 +1,19 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/codec_bench/png_data"
+
+// Values
+pub let height : Int32
+
+pub let interlaced : String
+
+pub let plain : String
+
+pub let width : Int32
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+
+// Traits

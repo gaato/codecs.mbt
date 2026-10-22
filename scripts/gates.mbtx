@@ -111,6 +111,8 @@ async fn main {
   run("moon", ["run", "scripts/gen_deflate_vectors.mbtx", "--", "--check"])
   run("moon", ["run", "scripts/gen_conformance_vectors.mbtx", "--", "--check"])
   run("moon", ["run", "scripts/gen_bench_data.mbtx", "--", "--check"])
+  // PngSuite's images, with pypng's answer for each.
+  run("moon", ["run", "scripts/gen_png_vectors.mbtx", "--", "--check"])
   // From the workspace root, check and test cover every member.
   let cc = match @env.get_env_var("MOON_CC") {
     Some(cc) if cc != "" => cc

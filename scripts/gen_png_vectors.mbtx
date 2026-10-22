@@ -1,0 +1,519 @@
+// Generates conformance/src/png_vectors_test.mbt, PngSuite's images and what
+// the reference decoder makes of each, and bench/src/png_data/png_data.mbt,
+// the images the PNG benchmarks decode.
+//
+// The images are those of PngSuite (Willem van Schaik's test images for PNG
+// decoders, release of 2017-07-19), kept as the release's tarball in
+// conformance/pngsuite/ and checked against its SHA-256. The reference is
+// pypng, a pure-Python decoder: for each image, `ok <width>x<height>
+// <sha256>`, the digest of the image's samples row by row as pypng's `read`
+// gives them (the image deinterlaced, one byte a sample up to 8 bits, palette
+// indices as they are, 16-bit samples big-endian), or `error <exception>`,
+// a warning counting as an error.
+// The conformance tests hold gaato/png to it; the file names pypng's version,
+// so that --check notices another one.
+//
+// The benchmarks' images are drawn here (gradients, discs and noise, from a
+// seeded generator), filtered row by row as libpng chooses by default and
+// compressed by Python's zlib at its default level, once interlaced and once
+// not.
+//
+// Usage, from the repository root (needs tar, moonfmt, which comes with moon,
+// and pypng: python3 with the `png` module, as Debian's python3-png gives
+// it, or uv, which then runs that release of pypng, 0.20231004.0):
+//   moon run scripts/gen_png_vectors.mbtx [--check]
+// --check regenerates the vectors in memory and fails unless they are what
+// the file holds; for the benchmarks' images, which another zlib may
+// compress to other bytes, it fails unless pypng decodes the stored images
+// to the regenerated pixels.
+
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/core/encoding/base64",
+  "moonbitlang/core/env",
+  "moonbitlang/x@0.5.6/crypto",
+}
+
+///|
+let target : String = "conformance/src/png_vectors_test.mbt"
+
+///|
+let tarball : String = "conformance/pngsuite/PngSuite-2017jul19.tgz"
+
+///|
+/// The SHA-256 of the release's tarball, as http://www.schaik.com/pngsuite/
+/// served it.
+let tarball_sha256 : String = "0294b244c95a8342c01b00010cf34abdcabc7c6a34fd0fe1bd963917537bfdc8"
+
+///|
+/// Where the tarball is unpacked.
+let unpacked : String = "_build/pngsuite"
+
+///|
+/// The pypng uv runs when python3 has no `png` module: the release Debian 13
+/// packages as python3-png, which CI installs. PyPI's latest is older.
+let pypng_pin : String = "pypng @ git+https://gitlab.com/drj11/pypng@pypng-0.20231004.0"
+
+///|
+/// Decodes every `.png` of the directory it is given with pypng, its warnings
+/// (a CRC that does not match, since 0.20231004.0) taken as errors, and prints
+/// `pypng <version>`, then one line an image: `<file> ok <w>x<h> <sha256>`
+/// or `<file> error <exception>`.
+let reference : String =
+  #|import sys, os, hashlib, array, warnings, png
+  #|warnings.simplefilter("error")
+  #|d = sys.argv[1]
+  #|print("pypng", png.__version__)
+  #|for name in sorted(f for f in os.listdir(d) if f.endswith(".png")):
+  #|    data = open(os.path.join(d, name), "rb").read()
+  #|    try:
+  #|        w, h, rows, info = png.Reader(bytes=data).read()
+  #|        digest = hashlib.sha256()
+  #|        for row in rows:
+  #|            if info["bitdepth"] > 8:
+  #|                a = array.array("H", row)
+  #|                if sys.byteorder == "little":
+  #|                    a.byteswap()
+  #|                digest.update(a.tobytes())
+  #|            else:
+  #|                digest.update(bytes(row))
+  #|        print(name, "ok", "%dx%d" % (w, h), digest.hexdigest())
+  #|    except Exception as e:
+  #|        print(name, "error", type(e).__name__)
+
+///|
+/// The command that runs Python with pypng: python3, when its `png` module
+/// is pypng (another package of that name has no `Reader`), or else uv. It
+/// runs in the unpacked directory, where no `png` directory of this
+/// repository shadows the module.
+async fn python() -> Array[String] {
+  let probe = @shell.Cmd(
+    "python3",
+    ["-c", "import png; png.Reader; png.__version__"],
+    cwd=unpacked,
+  ).output() catch {
+    _ => return ["uv", "run", "--quiet", "--with", pypng_pin, "python3"]
+  }
+  if probe.exit_code() == 0 {
+    ["python3"]
+  } else {
+    ["uv", "run", "--quiet", "--with", pypng_pin, "python3"]
+  }
+}
+
+///|
+fn hex_digest(data : Bytes) -> String {
+  @crypto.bytes_to_hex_string(@crypto.sha256(data))
+}
+
+///|
+/// `data` as the lines of a multiline string literal.
+fn literal(data : Bytes) -> String {
+  let b64 = @base64.encode(data)
+  let out = StringBuilder()
+  out.write_string("(\n")
+  for i = 0; i < b64.length().max(1); i = i + 76 {
+    let line = b64.view(start_offset=i, end_offset=(i + 76).min(b64.length()))
+    out.write_string("      #|\{line}\n")
+  }
+  out.write_string("    )")
+  out.to_string()
+}
+
+///|
+/// `text` as `moon fmt` leaves it, so that formatting the workspace does not
+/// make the file stale.
+async fn formatted(text : String) -> String {
+  let output = @shell.Cmd("moonfmt", ["-"], stdin=Text(text)).output(
+    max_output_bytes=1 << 28,
+  )
+  output.check()
+  output.stdout()
+}
+
+///|
+/// Writes, or with `check` checks, the vectors file, from the unpacked
+/// images and `command`, which runs pypng.
+async fn vectors(command : Array[String], check : Bool) -> Unit {
+  let answer = @shell.Cmd(command[0], [
+    ..command[1:],
+    "-c",
+    reference,
+    ".",
+  ], cwd=unpacked).output(max_output_bytes=1 << 20)
+  if answer.exit_code() != 0 {
+    fail("pypng: \{answer.stderr()}")
+  }
+  let lines = answer.stdout().trim_end(chars="\n").split("\n").to_array()
+  let version = lines[0].to_owned()
+  let out = StringBuilder()
+  out.write_string((
+    $|// Generated by scripts/gen_png_vectors.mbtx, DON'T EDIT IT. From
+    $|// \{tarball}.
+    $|
+    $|///|
+    $|/// The reference decoder that `png_vectors` record the answers of.
+    $|let png_reference : String = "\{version}"
+    $|
+    $|///|
+    $|/// PngSuite's images, and what the reference makes of each.
+    $|let png_vectors : Array[PngVector] = [
+    $|
+  ))
+  for line in lines[1:] {
+    let fields = line.split(" ").map(f => f.to_owned()).to_array()
+    let file = fields[0]
+    let data = @fs.read_file("\{unpacked}/\{file}").binary()
+    let name = file.strip_suffix(".png").unwrap_or(file[:]).to_owned()
+    let answer = fields[1:].to_owned().join(" ")
+    out.write_string((
+      $|  {
+      $|    name: "\{name}",
+      $|    data: \{literal(data)},
+      $|    reference: "\{answer}",
+      $|  },
+      $|
+    ))
+  }
+  out.write_string("]\n")
+  let text = formatted(out.to_string())
+  if check {
+    guard @fs.exists(target) else { fail("\{target} is missing") }
+    if @fs.read_file(target).text() != text {
+      fail(
+        "\{target} is stale (or the reference is \{version}): run moon run scripts/gen_png_vectors.mbtx",
+      )
+    }
+  } else {
+    @fs.write_file(target, text)
+    println("wrote \{target}")
+  }
+}
+
+///|
+/// A seeded 32-bit LCG: the same numbers on every platform and version.
+struct Rng {
+  mut state : UInt
+}
+
+///|
+fn Rng::below(self : Rng, bound : Int) -> Int {
+  self.state = self.state * 1664525 + 1013904223
+  (self.state >> 8).reinterpret_as_int() % bound
+}
+
+///|
+/// The benchmarks' image: `width` x `height` 8-bit RGB, gradients across
+/// it, a few discs of flat color, and a little noise, as rows of samples.
+fn picture(width : Int, height : Int) -> Bytes {
+  let rng = { state: 4242 }
+  let discs = Array::makei(12, _ => {
+    (
+      rng.below(width),
+      rng.below(height),
+      20 + rng.below(width / 6),
+      rng.below(256),
+    )
+  })
+  let out = Buffer()
+  for y in 0..<height {
+    for x in 0..<width {
+      let mut r = x * 255 / width
+      let mut g = y * 255 / height
+      let mut b = (x + y) * 255 / (width + height)
+      for disc in discs {
+        let (cx, cy, radius, shade) = disc
+        if (x - cx) * (x - cx) + (y - cy) * (y - cy) < radius * radius {
+          r = shade
+          g = 255 - shade
+          b = shade / 2
+        }
+      }
+      // Noise on one pixel in four, of a level or two.
+      let noise = if rng.below(4) == 0 { rng.below(5) - 2 } else { 0 }
+      out.write_byte((r + noise).max(0).min(255).to_byte())
+      out.write_byte((g + noise).max(0).min(255).to_byte())
+      out.write_byte((b + noise).max(0).min(255).to_byte())
+    }
+  }
+  out.to_bytes()
+}
+
+///|
+let bench_target : String = "bench/src/png_data/png_data.mbt"
+
+///|
+/// The benchmarks' image's size.
+let bench_width : Int = 512
+
+///|
+let bench_height : Int = 384
+
+///|
+/// Compresses stdin with zlib at its default level, on stdout.
+let deflate : String =
+  #|import sys, zlib
+  #|sys.stdout.buffer.write(zlib.compress(sys.stdin.buffer.read(), 6))
+
+///|
+/// The CRC-32 of `data` (ISO 3309, as PNG's chunks use it).
+fn crc32(data : Bytes) -> UInt {
+  let mut c = 0xFFFFFFFFU
+  for byte in data {
+    c = c ^ byte.to_uint()
+    for _ in 0..<8 {
+      c = if (c & 1) != 0 { 0xEDB88320U ^ (c >> 1) } else { c >> 1 }
+    }
+  }
+  c ^ 0xFFFFFFFFU
+}
+
+///|
+fn be32(out : Buffer, n : UInt) -> Unit {
+  out.write_byte((n >> 24).to_byte())
+  out.write_byte((n >> 16).to_byte())
+  out.write_byte((n >> 8).to_byte())
+  out.write_byte(n.to_byte())
+}
+
+///|
+/// A chunk of type `name` around `data`.
+fn chunk(out : Buffer, name : String, data : Bytes) -> Unit {
+  let typed = Buffer()
+  for c in name {
+    typed.write_byte(c.to_int().to_byte())
+  }
+  typed.write_bytes(data)
+  let body = typed.to_bytes()
+  be32(out, data.length().reinterpret_as_uint())
+  out.write_bytes(body)
+  be32(out, crc32(body))
+}
+
+///|
+fn predict(kind : Int, a : Int, b : Int, c : Int) -> Int {
+  match kind {
+    0 => 0
+    1 => a
+    2 => b
+    3 => (a + b) / 2
+    _ => {
+      let p = a + b - c
+      let pa = (p - a).abs()
+      let pb = (p - b).abs()
+      let pc = (p - c).abs()
+      if pa <= pb && pa <= pc {
+        a
+      } else if pb <= pc {
+        b
+      } else {
+        c
+      }
+    }
+  }
+}
+
+///|
+/// `rows` (each `n` bytes of RGB) filtered as libpng chooses by default:
+/// for each row the type whose bytes, read as signed, have the smallest sum
+/// of absolute values.
+fn filtered(rows : Array[Bytes], n : Int) -> Bytes {
+  let out = Buffer()
+  let mut above = Bytes::make(n, b'\x00')
+  for row in rows {
+    let mut best = Bytes::make(0, b'\x00')
+    let mut best_kind = 0
+    let mut best_cost = -1
+    for kind in 0..<5 {
+      let line = Bytes::makei(n, i => {
+        let a = if i >= 3 { row[i - 3].to_int() } else { 0 }
+        let c = if i >= 3 { above[i - 3].to_int() } else { 0 }
+        (row[i].to_int() - predict(kind, a, above[i].to_int(), c)).to_byte()
+      })
+      let mut cost = 0
+      for byte in line {
+        let v = byte.to_int()
+        cost += if v < 128 { v } else { 256 - v }
+      }
+      if best_cost < 0 || cost < best_cost {
+        best = line
+        best_kind = kind
+        best_cost = cost
+      }
+    }
+    out.write_byte(best_kind.to_byte())
+    out.write_bytes(best)
+    above = row
+  }
+  out.to_bytes()
+}
+
+///|
+/// A PNG of `raw`, 8-bit RGB rows of `width` x `height`, filtered as libpng
+/// does and compressed by Python's zlib, in Adam7's passes when
+/// `interlaced`.
+async fn encode_png(
+  command : Array[String],
+  raw : Bytes,
+  width : Int,
+  height : Int,
+  interlaced : Bool,
+) -> Bytes {
+  let lattices = if interlaced {
+    [
+      (0, 0, 8, 8),
+      (4, 0, 8, 8),
+      (0, 4, 4, 8),
+      (2, 0, 4, 4),
+      (0, 2, 2, 4),
+      (1, 0, 2, 2),
+      (0, 1, 1, 2),
+    ]
+  } else {
+    [(0, 0, 1, 1)]
+  }
+  let data = Buffer()
+  for lattice in lattices {
+    let (x0, y0, dx, dy) = lattice
+    let columns = (width - x0 + dx - 1) / dx
+    let rows = []
+    for y = y0; y < height; y = y + dy {
+      rows.push(
+        Bytes::makei(columns * 3, i => {
+          raw[(y * width + x0 + i / 3 * dx) * 3 + i % 3]
+        }),
+      )
+    }
+    if columns > 0 && rows.length() > 0 {
+      data.write_bytes(filtered(rows, columns * 3))
+    }
+  }
+  let zlib = @shell.Cmd(
+    command[0],
+    [..command[1:], "-c", deflate],
+    cwd=unpacked,
+    stdin=Binary(data.to_bytes()),
+  ).output(max_output_bytes=1 << 26)
+  zlib.check()
+  let ihdr = Buffer()
+  be32(ihdr, width.reinterpret_as_uint())
+  be32(ihdr, height.reinterpret_as_uint())
+  for byte in [b'\x08', b'\x02', b'\x00', b'\x00', if interlaced { b'\x01' } else { b'\x00' }] {
+    ihdr.write_byte(byte)
+  }
+  let out = Buffer()
+  out.write_bytes(b"\x89PNG\r\n\x1a\n")
+  chunk(out, "IHDR", ihdr.to_bytes())
+  let idat = zlib.stdout_bytes()
+  // IDAT chunks of 8 KiB, as libpng writes them.
+  for at = 0; at < idat.length(); at = at + 8192 {
+    chunk(out, "IDAT", idat[at:(at + 8192).min(idat.length())].to_owned())
+  }
+  chunk(out, "IEND", b"")
+  out.to_bytes()
+}
+
+///|
+/// Decodes the PNG on stdin and writes its samples, row by row, on stdout.
+let decode : String =
+  #|import sys, png
+  #|w, h, rows, info = png.Reader(bytes=sys.stdin.buffer.read()).read()
+  #|for row in rows:
+  #|    sys.stdout.buffer.write(bytes(row))
+
+///|
+/// The data of `pub let <binding>` in the generated file, if it is there.
+fn stored(file : String, binding : String) -> Bytes? raise {
+  let b64 = StringBuilder()
+  let mut inside = false
+  for line in file.split("\n") {
+    if line == "pub let \{binding} : String =" {
+      inside = true
+    } else if inside && line.has_prefix("  #|") {
+      b64.write_view(line.view(start_offset=4))
+    } else if inside {
+      break
+    }
+  }
+  if inside {
+    Some(@base64.decode(b64.to_string()))
+  } else {
+    None
+  }
+}
+
+///|
+/// Writes, or with `check` checks, the benchmarks' images.
+async fn bench_data(command : Array[String], check : Bool) -> Unit {
+  let raw = picture(bench_width, bench_height)
+  let file = if check {
+    guard @fs.exists(bench_target) else { fail("\{bench_target} is missing") }
+    Some(@fs.read_file(bench_target).text())
+  } else {
+    None
+  }
+  let stale = "\{bench_target} is stale: run moon run scripts/gen_png_vectors.mbtx"
+  let out = StringBuilder()
+  out.write_string((
+    $|// Generated by scripts/gen_png_vectors.mbtx, DON'T EDIT IT.
+    $|
+    $|///|
+    $|/// The width of the benchmarks' images.
+    $|pub let width : Int = \{bench_width}
+    $|
+    $|///|
+    $|/// The height of the benchmarks' images.
+    $|pub let height : Int = \{bench_height}
+    $|
+  ))
+  for interlaced in [false, true] {
+    let binding = if interlaced { "interlaced" } else { "plain" }
+    let data = match file {
+      Some(text) => {
+        guard stored(text, binding) is Some(data) else { fail(stale) }
+        let back = @shell.Cmd(command[0], [..command[1:], "-c", decode], cwd=unpacked, stdin=Binary(data)).output(max_output_bytes=1 << 26)
+        back.check()
+        if back.stdout_bytes() != raw {
+          fail(stale)
+        }
+        data
+      }
+      None =>
+        encode_png(command, raw, bench_width, bench_height, interlaced)
+    }
+    let b64 = @base64.encode(data)
+    let kind = if interlaced { "interlaced (Adam7)" } else { "not interlaced" }
+    out.write_string(
+      "\n///|\n/// The image, 8-bit RGB, \{kind}, filtered as libpng chooses and compressed by zlib (\{data.length()} bytes).\npub let \{binding} : String =\n",
+    )
+    for i = 0; i < b64.length(); i = i + 76 {
+      let line = b64.view(start_offset=i, end_offset=(i + 76).min(b64.length()))
+      out.write_string("  #|\{line}\n")
+    }
+  }
+  let text = formatted(out.to_string())
+  if file is Some(stored) {
+    if stored != text {
+      fail(stale)
+    }
+  } else {
+    @fs.write_file(bench_target, text)
+    println("wrote \{bench_target}")
+  }
+}
+
+///|
+async fn main {
+  let check = @env.args().contains("--check")
+  let archive = @fs.read_file(tarball).binary()
+  if hex_digest(archive) != tarball_sha256 {
+    fail("\{tarball} is not PngSuite's release of 2017-07-19")
+  }
+  @fs.mkdir(unpacked, recursive=true, allow_exist=true)
+  @shell.Cmd("tar", ["-xzf", tarball, "-C", unpacked]).output().check()
+  let command = python()
+  vectors(command, check)
+  bench_data(command, check)
+}

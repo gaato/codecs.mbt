@@ -1,0 +1,14 @@
+// Decodes the benchmarks' PNG images a few times and prints the bytes of
+// rows: an executable alone, so that its peak memory (what a Wasm engine
+// takes to compile the decoder, and what the decoder holds) can be measured
+// without the build that `moon run` also counts.
+
+import {
+  "gaato/png",
+  "gaato/codec_bench/png_data",
+  "moonbitlang/core/encoding/base64",
+}
+
+pkgtype(kind: "executable")
+
+supported_targets = "js + native + wasm + wasm-gc"

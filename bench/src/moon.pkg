@@ -4,6 +4,9 @@ import {
   "gaato/zstd",
   "gaato/brotli",
   "gaato/deflate",
+  "gaato/png",
+  "gaato/codec_bench/png_data",
+  "moonbitlang/typst/codecs",
   "moonbitlang/core/bench",
   "moonbitlang/core/encoding/base64",
 } for "test"

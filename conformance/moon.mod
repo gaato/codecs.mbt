@@ -21,4 +21,7 @@ import {
   "gaato/zstd@0.3.1",
   "gaato/brotli@0.4.1",
   "gaato/deflate@0.1.0",
+  "gaato/codec_image@0.1.0",
+  "gaato/png@0.1.0",
+  "moonbitlang/typst@0.1.7",
 }

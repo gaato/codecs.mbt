@@ -146,9 +146,11 @@ pub(all) enum Position {
 } derive(Eq, @debug.Debug)
 
 ///|
+/// `Position::equal` and `Position::not_equal`, the derived comparison.
 pub extend Position with Eq::{equal, not_equal}
 
 ///|
+/// `Position::to_repr`, the derived debug representation.
 pub extend Position with @debug.Debug::{to_repr}
 
 ///|
@@ -164,9 +166,11 @@ pub(all) enum Verdict {
 } derive(Eq, @debug.Debug)
 
 ///|
+/// `Verdict::equal` and `Verdict::not_equal`, the derived comparison.
 pub extend Verdict with Eq::{equal, not_equal}
 
 ///|
+/// `Verdict::to_repr`, the derived debug representation.
 pub extend Verdict with @debug.Debug::{to_repr}
 
 ///|

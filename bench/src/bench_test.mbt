@@ -146,3 +146,51 @@ test "encode" (b : @bench.T) {
     b.keep(deflate_encode(binary))
   })
 }
+
+///|
+/// Decodes a PNG image whole into 64 KiB slices of rows, as a consumer
+/// would, and returns how many bytes of rows came out.
+fn png_decode(input : Bytes) -> Int32 {
+  let decoder = @png.Decoder()
+  let out = FixedArray::make(1 << 16, b'\x00')
+  let mut rest = input[:]
+  let mut total = 0
+  for ;; {
+    let status = decoder.step(rest, out.mut_view(), end=true) catch {
+      _ => abort("png: bad image")
+    }
+    rest = rest[decoder.last_consumed():]
+    total += decoder.last_produced()
+    if status is Done {
+      return total
+    }
+  }
+}
+
+///|
+/// Decodes a PNG image with typst's `decode_png` (the `png` crate's
+/// reader, ported), and returns how many bytes of pixels came out.
+fn typst_decode(input : Bytes) -> Int32 {
+  let (_, pixels) = @codecs.decode_png(input) catch {
+    _ => abort("typst: bad image")
+  }
+  pixels.length()
+}
+
+///|
+test "png" (b : @bench.T) {
+  let plain = decode64(@png_data.plain)
+  let interlaced = decode64(@png_data.interlaced)
+  let size = @png_data.width * @png_data.height * 3
+  // Both decode to the image's size before anything is timed.
+  assert_eq(png_decode(plain), size)
+  assert_eq(png_decode(interlaced), size)
+  assert_eq(typst_decode(plain), size)
+  assert_eq(typst_decode(interlaced), size)
+  b.bench(name="png 512x384 rgb8", () => b.keep(png_decode(plain)))
+  b.bench(name="png 512x384 rgb8 adam7", () => b.keep(png_decode(interlaced)))
+  b.bench(name="typst png 512x384 rgb8", () => b.keep(typst_decode(plain)))
+  b.bench(name="typst png 512x384 rgb8 adam7", () => {
+    b.keep(typst_decode(interlaced))
+  })
+}

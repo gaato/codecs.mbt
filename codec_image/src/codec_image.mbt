@@ -40,9 +40,11 @@ pub(all) enum Status {
 } derive(Eq, @debug.Debug)
 
 ///|
+/// `Status::equal` and `Status::not_equal`, the derived comparison.
 pub extend Status with Eq::{equal, not_equal}
 
 ///|
+/// `Status::to_repr`, the derived debug representation.
 pub extend Status with @debug.Debug::{to_repr}
 
 ///|
@@ -56,9 +58,11 @@ pub(all) enum Until {
 } derive(Eq, @debug.Debug)
 
 ///|
+/// `Until::equal` and `Until::not_equal`, the derived comparison.
 pub extend Until with Eq::{equal, not_equal}
 
 ///|
+/// `Until::to_repr`, the derived debug representation.
 pub extend Until with @debug.Debug::{to_repr}
 
 ///|

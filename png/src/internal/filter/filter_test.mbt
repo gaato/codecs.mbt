@@ -99,3 +99,14 @@ test "unfilter: a type past 4 is refused, the row unchanged" {
     assert_true(cur.iter().all(b => b == b'\x01'))
   }
 }
+
+///|
+test "unfilter: nothing past either row's end is read or written, whatever len says" {
+  for kind in 0..<5 {
+    let cur = FixedArray::make(4, b'\x01')
+    let prev = FixedArray::make(3, b'\x02')
+    // `len` past both arrays: only bytes 1 and 2, which both have, change.
+    assert_true(@filter.unfilter(kind.to_byte(), cur, prev, 100, 1))
+    assert_eq(cur[3], b'\x01')
+  }
+}

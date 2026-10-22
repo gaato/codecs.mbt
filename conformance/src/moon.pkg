@@ -9,6 +9,10 @@ import {
   "gaato/deflate",
   "gaato/deflate/zlib",
   "gaato/deflate/gzip",
+  "gaato/codec_image",
+  "gaato/png",
+  "moonbitlang/typst/codecs",
+  "moonbitlang/core/debug",
   "moonbitlang/core/encoding/base64",
 } for "test"
 

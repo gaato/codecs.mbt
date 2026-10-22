@@ -14,7 +14,11 @@
 // buffers swap, and the row waits there for the caller's slice. The previous
 // row starts as zeros at each pass. An interlaced image comes out pass by
 // pass (Adam7); a pass with no pixels has no rows, not even their filter
-// bytes. So the decoder holds two rows and the zlib decoder, allocated once
+// bytes. The zlib decoder writes a whole row with `step_into`, which fills
+// an array from its start: when the row buffer is exactly the row (an image
+// that is not interlaced, or Adam7's last pass), and the row begins in this
+// call. A row of a narrower pass, or one that a previous call began, goes
+// through `step` into a view of the buffer. So the decoder holds two rows and the zlib decoder, allocated once
 // after IHDR, whatever the image's height.
 //
 // The answers follow the image contract of `gaato/codec_image`: `Header` at
@@ -89,9 +93,11 @@ pub(all) enum ColorType {
 } derive(Eq, @debug.Debug)
 
 ///|
+/// `ColorType::equal` and `ColorType::not_equal`, the derived comparison.
 pub extend ColorType with Eq::{equal, not_equal}
 
 ///|
+/// `ColorType::to_repr`, the derived debug representation.
 pub extend ColorType with @debug.Debug::{to_repr}
 
 ///|
@@ -936,8 +942,10 @@ fn Decoder::write_row(self : Decoder, output : MutArrayView[Byte]) -> Bool {
     return false
   }
   let row = self.prev
+  // SAFETY: `produced + n <= output.length()` was checked above, and `row`
+  // holds 1 + the bytes of a full row, at least `1 + n`.
   for i in 0..<n {
-    output[self.produced + i] = row[1 + i]
+    output.unsafe_set(self.produced + i, row.unsafe_get(1 + i))
   }
   if self.rows_count == 0 {
     self.rows_pass = self.pass
@@ -955,101 +963,121 @@ fn Decoder::write_row(self : Decoder, output : MutArrayView[Byte]) -> Bool {
 }
 
 ///|
+/// Same as `Decoder::step`.
 pub impl @codec_image.Decode for Decoder with fn step(self, input, output, end~) {
   Decoder::step(self, input, output, end~)
 }
 
 ///|
+/// Same as `Decoder::last_consumed`.
 pub impl @codec_image.Decode for Decoder with fn last_consumed(self) {
   Decoder::last_consumed(self)
 }
 
 ///|
+/// Same as `Decoder::last_produced`.
 pub impl @codec_image.Decode for Decoder with fn last_produced(self) {
   Decoder::last_produced(self)
 }
 
 ///|
+/// Same as `Decoder::reset`.
 pub impl @codec_image.Decode for Decoder with fn reset(self) {
   Decoder::reset(self)
 }
 
 ///|
+/// Same as `Decoder::memory_usage`.
 pub impl @codec_image.Decode for Decoder with fn memory_usage(self) {
   Decoder::memory_usage(self)
 }
 
 ///|
+/// Same as `Decoder::room_needed`.
 pub impl @codec_image.Decode for Decoder with fn room_needed(self) {
   Decoder::room_needed(self)
 }
 
 ///|
+/// Same as `Decoder::width`.
 pub impl @codec_image.Decode for Decoder with fn width(self) {
   Decoder::width(self)
 }
 
 ///|
+/// Same as `Decoder::height`.
 pub impl @codec_image.Decode for Decoder with fn height(self) {
   Decoder::height(self)
 }
 
 ///|
+/// Same as `Decoder::frame_x`.
 pub impl @codec_image.Decode for Decoder with fn frame_x(self) {
   Decoder::frame_x(self)
 }
 
 ///|
+/// Same as `Decoder::frame_y`.
 pub impl @codec_image.Decode for Decoder with fn frame_y(self) {
   Decoder::frame_y(self)
 }
 
 ///|
+/// Same as `Decoder::frame_width`.
 pub impl @codec_image.Decode for Decoder with fn frame_width(self) {
   Decoder::frame_width(self)
 }
 
 ///|
+/// Same as `Decoder::frame_height`.
 pub impl @codec_image.Decode for Decoder with fn frame_height(self) {
   Decoder::frame_height(self)
 }
 
 ///|
+/// Same as `Decoder::pass`.
 pub impl @codec_image.Decode for Decoder with fn pass(self) {
   Decoder::pass(self)
 }
 
 ///|
+/// Same as `Decoder::pass_x`.
 pub impl @codec_image.Decode for Decoder with fn pass_x(self) {
   Decoder::pass_x(self)
 }
 
 ///|
+/// Same as `Decoder::pass_y`.
 pub impl @codec_image.Decode for Decoder with fn pass_y(self) {
   Decoder::pass_y(self)
 }
 
 ///|
+/// Same as `Decoder::pass_dx`.
 pub impl @codec_image.Decode for Decoder with fn pass_dx(self) {
   Decoder::pass_dx(self)
 }
 
 ///|
+/// Same as `Decoder::pass_dy`.
 pub impl @codec_image.Decode for Decoder with fn pass_dy(self) {
   Decoder::pass_dy(self)
 }
 
 ///|
+/// Same as `Decoder::rows_first`.
 pub impl @codec_image.Decode for Decoder with fn rows_first(self) {
   Decoder::rows_first(self)
 }
 
 ///|
+/// Same as `Decoder::rows_count`.
 pub impl @codec_image.Decode for Decoder with fn rows_count(self) {
   Decoder::rows_count(self)
 }
 
 ///|
+/// Same as `Decoder::row_bytes`.
 pub impl @codec_image.Decode for Decoder with fn row_bytes(self) {
   Decoder::row_bytes(self)
 }

@@ -35,7 +35,7 @@ ledger OK, 1 = an unexplained or over-budget file, 2 = the run itself failed
 The pitfalls the script pins (stale counters, `-f summary` skewing totals,
 tcc on openSUSE) are described in zstd's ledger, `zstd/TEST_COVERAGE.md`.
 
-Snapshot at the last full measurement (2026-10-22): **100.0 %** (372/372
+Snapshot at the last full measurement (2026-10-22): **100.0 %** (375/375
 lines).
 
 ## Policy
@@ -50,6 +50,12 @@ Must be covered by tests:
   counting its lattice;
 - every color type and bit depth, interlaced or not, at every size up to
   8 x 8, under several splits of input and output.
+
+Beyond this module's tests, the private conformance module runs the decoder
+over PngSuite: every valid image against pypng's samples and typst's
+`decode_png`, under the harness's checks of splits, truncation, trailing
+bytes, `until=EndOfMember`, `reset` and corruption, and the broken images
+against the kinds of error their names describe.
 
 ## Accepted uncovered
 

@@ -1,5 +1,5 @@
 {
-  "modules": ["codec", "codec_bytes", "zstd", "brotli", "deflate"],
+  "modules": ["codec", "codec_bytes", "codec_image", "zstd", "brotli", "deflate", "png"],
   "generated": [
     "zstd/src/internal/proof_bits",
     "zstd/src/internal/proof_codes",
@@ -14,6 +14,7 @@
     "deflate/src/internal/huffman",
     "deflate/src/internal/lz77",
     "deflate/src/internal/proof_bits",
-    "deflate/src/internal/proof_codes"
+    "deflate/src/internal/proof_codes",
+    "png/src/internal/crc32"
   ]
 }
