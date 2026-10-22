@@ -28,11 +28,7 @@ fn rows_of(chunks : Array[Bytes]) -> Bytes raise {
       if out.length() < decoder.room_needed() {
         out = FixedArray::make(decoder.room_needed() * 16, b'\x00')
       }
-      let status = decoder.step(
-        input,
-        out.mut_view(),
-        end=i == chunks.length() - 1,
-      )
+      let status = decoder.step_into(input, out, end=i == chunks.length() - 1)
       input = input[decoder.last_consumed():]
       match status {
         Rows =>
@@ -53,6 +49,8 @@ test "decode a 2 x 2 grayscale image in two pieces" {
   assert_eq(rows, b"\x00\xff\x80\x40")
 }
 ```
+
+`step_into` writes into a whole `FixedArray` with bulk copies of the rows; `step`, the contract's method, writes into any `MutArrayView`.
 
 After `Header`, `width()`, `height()`, `bit_depth()`, `color_type()` and `interlaced()` describe the image; from `Frame`, `palette()` holds an indexed-color image's palette.
 

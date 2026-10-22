@@ -51,6 +51,7 @@ pub fn Decoder::row_bytes(Self) -> Int32
 pub fn Decoder::rows_count(Self) -> Int32
 pub fn Decoder::rows_first(Self) -> Int32
 pub fn Decoder::step(Self, BytesView, MutArrayView[Byte], end~ : Bool) -> @codec_image.Status raise @codec.CodecError
+pub fn Decoder::step_into(Self, BytesView, FixedArray[Byte], end~ : Bool) -> @codec_image.Status raise @codec.CodecError
 pub fn Decoder::width(Self) -> Int32
 pub impl @codec_image.Decode for Decoder
 

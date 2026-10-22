@@ -35,7 +35,7 @@ ledger OK, 1 = an unexplained or over-budget file, 2 = the run itself failed
 The pitfalls the script pins (stale counters, `-f summary` skewing totals,
 tcc on openSUSE) are described in zstd's ledger, `zstd/TEST_COVERAGE.md`.
 
-Snapshot at the last full measurement (2026-10-22): **100.0 %** (375/375
+Snapshot at the last full measurement (2026-10-22): **100.0 %** (411/411
 lines).
 
 ## Policy

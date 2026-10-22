@@ -59,7 +59,7 @@ check each array and the sum. Sizes count 4 bytes for an `Int`, 2 for an
 |---|---|
 | The bit reader, the window's positions and a block's counts | A few words |
 | Checksum state: Adler-32 (zlib), CRC-32 and length (gzip), the header's CRC-32 | A few words |
-| The fixed codes' tables, the CRC-32 table | 5 KiB and 1 KiB, shared by all decoders |
+| The fixed codes' tables, the CRC-32 tables | 5 KiB and 9 KiB (one table for a byte at a time and eight for eight bytes at a time), shared by all decoders |
 
 ## Fixed per encoder
 

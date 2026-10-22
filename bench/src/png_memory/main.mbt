@@ -9,7 +9,7 @@ fn rows_of(b64 : String) -> Int32 {
   let mut rest = input[:]
   let mut total = 0
   for ;; {
-    let status = decoder.step(rest, out.mut_view(), end=true) catch {
+    let status = decoder.step_into(rest, out, end=true) catch {
       _ => abort("bad image")
     }
     rest = rest[decoder.last_consumed():]

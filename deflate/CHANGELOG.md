@@ -9,6 +9,7 @@ never does. Every breaking change is listed with a migration note.
 
 ### Changed
 
+- gzip's CRC-32 is computed eight bytes at a time (slice-by-8), from 9 KiB of tables computed at start-up and shared by every decoder and encoder, in place of 1 KiB. The output and the errors are unchanged.
 - **The README is about using the module.** Install, Usage, Packages, gzip, zlib, Streams that do not end, Limits, Errors and Links; links are absolute, so they work on mooncakes.io. The compression ratio table and how the levels follow libdeflate's moved to `docs/compression.md`, the exact memory figures are in RESOURCE_BOUNDS.md, and the checks against zlib and libdeflate in TEST_COVERAGE.md. The `gaato/codec_bytes` trait methods and `Header`'s derived methods have doc comments, and the repository-only `scripts/` and `docs/` are no longer packaged.
 
 ### Fixed

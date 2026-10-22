@@ -38,3 +38,24 @@ test "equal to the bitwise reference, whole and in pieces" {
     assert_eq(@crc32.update_bytes(@crc32.INITIAL, one), reference(one))
   }
 }
+
+///|
+test "eight bytes at a time: every length up to 64, from every alignment" {
+  let data = Bytes::makei(80, i => (i * 151 + 7).to_byte())
+  let array = data.to_array()
+  for start in 0..<8 {
+    for len in 0..<=64 {
+      let piece = data[start:start + len]
+      let expected = reference(piece.to_owned())
+      assert_eq(@crc32.update_bytes(@crc32.INITIAL, piece), expected)
+      assert_eq(
+        @crc32.update(@crc32.INITIAL, array[start:start + len]),
+        expected,
+      )
+      // Continued from a CRC so far, as chunks of a stream are.
+      let split = len / 3
+      let head = @crc32.update_bytes(@crc32.INITIAL, piece[:split])
+      assert_eq(@crc32.update_bytes(head, piece[split:]), expected)
+    }
+  }
+}

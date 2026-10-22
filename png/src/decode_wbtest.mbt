@@ -618,3 +618,28 @@ test "a truecolor image's PLTE of a wrong length is left out" {
   inspect(decoder.palette().length(), content="0")
   inspect(decoder.ignored_chunks(), content="1")
 }
+
+///|
+test "step_into writes what step writes, into a whole array" {
+  for format in formats {
+    let (color_type, bit_depth) = format
+    for interlaced in [false, true] {
+      let (png, raw) = image(11, 6, bit_depth, color_type, interlaced~)
+      for room in [1, 40] {
+        let decoder = Decoder()
+        let rows = Buffer()
+        let mut rest = png[:]
+        for ;; {
+          let out = FixedArray::make(room.max(decoder.room_needed()), b'\x00')
+          let status = decoder.step_into(rest, out, end=true)
+          rest = rest[decoder.last_consumed():]
+          rows.write_bytes(Bytes::from_array(out[:decoder.last_produced()]))
+          if status is Done {
+            break
+          }
+        }
+        assert_eq(rows.to_bytes(), raw.rows)
+      }
+    }
+  }
+}

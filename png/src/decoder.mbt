@@ -163,6 +163,8 @@ pub struct Decoder {
   priv mut rows_count : Int32
   priv mut rows_bytes : Int32
   priv mut failure : @codec.CodecError?
+  // The caller's array, during a `step_into`.
+  priv mut fixed_out : FixedArray[Byte]?
 }
 
 ///|
@@ -232,6 +234,7 @@ pub fn Decoder::Decoder(
     rows_count: 0,
     rows_bytes: 0,
     failure: None,
+    fixed_out: None,
   }
 }
 
@@ -482,6 +485,33 @@ pub fn Decoder::step(
   output : MutArrayView[Byte],
   end~ : Bool,
 ) -> Status raise @codec.CodecError {
+  self.step_with(input, output, None, end~)
+}
+
+///|
+/// `step` into a whole `FixedArray`, with bulk copies of the rows.
+pub fn Decoder::step_into(
+  self : Decoder,
+  input : BytesView,
+  output : FixedArray[Byte],
+  end~ : Bool,
+) -> Status raise @codec.CodecError {
+  self.step_with(input, output.mut_view(), Some(output), end~)
+}
+
+///|
+/// A step into `output`, which is the whole of `fixed_output` when given.
+fn Decoder::step_with(
+  self : Decoder,
+  input : BytesView,
+  output : MutArrayView[Byte],
+  fixed_output : FixedArray[Byte]?,
+  end~ : Bool,
+) -> Status raise @codec.CodecError {
+  self.fixed_out = fixed_output
+  defer {
+    self.fixed_out = None
+  }
   self.consumed = 0
   self.produced = 0
   self.rows_count = 0
@@ -944,8 +974,12 @@ fn Decoder::write_row(self : Decoder, output : MutArrayView[Byte]) -> Bool {
   let row = self.prev
   // SAFETY: `produced + n <= output.length()` was checked above, and `row`
   // holds 1 + the bytes of a full row, at least `1 + n`.
-  for i in 0..<n {
-    output.unsafe_set(self.produced + i, row.unsafe_get(1 + i))
+  match self.fixed_out {
+    Some(out) => FixedArray::unsafe_blit(out, self.produced, row, 1, n)
+    None =>
+      for i in 0..<n {
+        output.unsafe_set(self.produced + i, row.unsafe_get(1 + i))
+      }
   }
   if self.rows_count == 0 {
     self.rows_pass = self.pass

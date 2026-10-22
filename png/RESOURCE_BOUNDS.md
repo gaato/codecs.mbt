@@ -15,7 +15,9 @@ The decoder holds two rows and a zlib decoder, whatever the image's height:
 rows are handed out as they are decoded, and an interlaced image comes out
 pass by pass, so nothing holds the image. Chunk data passes through, into
 IHDR's and PLTE's fixed fields, into the zlib decoder, or only into the CRC
-of a chunk that is skipped. Sizes count 1 byte for a `Byte`.
+of a chunk that is skipped. Sizes count 1 byte for a `Byte`. The CRC-32's
+tables, 9 KiB computed at start-up, are shared by every decoder and not
+counted.
 
 ## Enforced limits
 
