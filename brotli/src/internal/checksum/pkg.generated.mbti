@@ -2,7 +2,7 @@
 package "gaato/brotli/internal/checksum"
 
 // Values
-pub fn crc32(BytesView) -> UInt
+pub fn crc32(BytesView) -> UInt32
 
 pub fn sha256(BytesView) -> String
 

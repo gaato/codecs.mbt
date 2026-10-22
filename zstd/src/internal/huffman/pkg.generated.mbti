@@ -2,19 +2,19 @@
 package "gaato/zstd/internal/huffman"
 
 // Values
-pub const INCOMPLETE : Int = -4
+pub const INCOMPLETE : Int32 = -4
 
-pub const NO_WEIGHT_ONE : Int = -5
+pub const NO_WEIGHT_ONE : Int32 = -5
 
-pub const ONE_SYMBOL : Int = -2
+pub const ONE_SYMBOL : Int32 = -2
 
-pub const OVERFULL : Int = -6
+pub const OVERFULL : Int32 = -6
 
-pub const TOO_DEEP : Int = -3
+pub const TOO_DEEP : Int32 = -3
 
-pub const WEIGHT_TOO_LARGE : Int = -1
+pub const WEIGHT_TOO_LARGE : Int32 = -1
 
-pub fn build_table(FixedArray[Int], Int, FixedArray[Byte], FixedArray[Byte], FixedArray[Int], FixedArray[Int]) -> Int
+pub fn build_table(FixedArray[Int32], Int32, FixedArray[Byte], FixedArray[Byte], FixedArray[Int32], FixedArray[Int32]) -> Int32
 
 // Errors
 

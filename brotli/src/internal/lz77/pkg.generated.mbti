@@ -2,11 +2,11 @@
 package "gaato/brotli/internal/lz77"
 
 // Values
-pub const MIN_MATCH : Int = 4
+pub const MIN_MATCH : Int32 = 4
 
-pub fn hash4(FixedArray[Byte], Int, Int) -> Int
+pub fn hash4(FixedArray[Byte], Int32, Int32) -> Int32
 
-pub fn match_length(FixedArray[Byte], Int, Int, Int) -> Int
+pub fn match_length(FixedArray[Byte], Int32, Int32, Int32) -> Int32
 
 // Errors
 
@@ -14,12 +14,12 @@ pub fn match_length(FixedArray[Byte], Int, Int, Int) -> Int
 pub struct Matcher {
   // private fields
 }
-pub fn Matcher::Matcher(hash_bits? : Int) -> Self
-pub fn Matcher::capacity(Self) -> Int
-pub fn Matcher::distance(Self) -> Int
-pub fn Matcher::find(Self, FixedArray[Byte], Int, Int, Int, Int) -> Int
+pub fn Matcher::Matcher(hash_bits? : Int32) -> Self
+pub fn Matcher::capacity(Self) -> Int32
+pub fn Matcher::distance(Self) -> Int32
+pub fn Matcher::find(Self, FixedArray[Byte], Int32, Int32, Int32, Int32) -> Int32
 pub fn Matcher::reset(Self) -> Unit
-pub fn Matcher::slide(Self, Int) -> Unit
+pub fn Matcher::slide(Self, Int32) -> Unit
 
 // Type aliases
 

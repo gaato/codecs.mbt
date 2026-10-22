@@ -2,9 +2,9 @@
 package "gaato/codec_parts/proof_controls/codes"
 
 // Values
-pub fn complete_or_over(FixedArray[Int]) -> Bool
+pub fn complete_or_over(FixedArray[Int32]) -> Bool
 
-pub fn first_not_counted(FixedArray[Int]) -> Unit
+pub fn first_not_counted(FixedArray[Int32]) -> Unit
 
 // Errors
 

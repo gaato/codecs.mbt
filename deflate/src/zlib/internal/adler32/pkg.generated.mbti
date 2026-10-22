@@ -2,13 +2,13 @@
 package "gaato/deflate/zlib/internal/adler32"
 
 // Values
-pub const INITIAL : UInt = 1
+pub const INITIAL : UInt32 = 1
 
-pub fn of_bytes(BytesView) -> UInt
+pub fn of_bytes(BytesView) -> UInt32
 
-pub fn update(UInt, ArrayView[Byte]) -> UInt
+pub fn update(UInt32, ArrayView[Byte]) -> UInt32
 
-pub fn update_bytes(UInt, BytesView) -> UInt
+pub fn update_bytes(UInt32, BytesView) -> UInt32
 
 // Errors
 

@@ -2,13 +2,13 @@
 package "gaato/zstd/internal/frame"
 
 // Values
-pub fn content_size_size(Int) -> Int
+pub fn content_size_size(Int32) -> Int32
 
-pub fn dictionary_id_size(Int) -> Int
+pub fn dictionary_id_size(Int32) -> Int32
 
-pub fn header_len(Int) -> Int?
+pub fn header_len(Int32) -> Int32?
 
-pub fn window_size(Int) -> UInt64
+pub fn window_size(Int32) -> UInt64
 
 // Errors
 

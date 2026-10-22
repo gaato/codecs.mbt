@@ -2,9 +2,9 @@
 package "gaato/codec_parts/proof_canonical"
 
 // Values
-pub fn canonical_fits(FixedArray[Int], FixedArray[Int], Int, Int) -> Unit
+pub fn canonical_fits(FixedArray[Int32], FixedArray[Int32], Int32, Int32) -> Unit
 
-pub fn canonical_order(FixedArray[Int], FixedArray[Int], Int, Int, Int) -> Unit
+pub fn canonical_order(FixedArray[Int32], FixedArray[Int32], Int32, Int32, Int32) -> Unit
 
 // Errors
 

@@ -2,61 +2,61 @@
 package "gaato/zstd/internal/proof_codes"
 
 // Values
-pub fn canonical(FixedArray[Int], FixedArray[Int], Int) -> Int
+pub fn canonical(FixedArray[Int32], FixedArray[Int32], Int32) -> Int32
 
-pub fn canonically_before(FixedArray[Int], Int, Int) -> Bool
+pub fn canonically_before(FixedArray[Int32], Int32, Int32) -> Bool
 
-pub fn coded_counted(FixedArray[Int], FixedArray[Int], Int) -> Bool
+pub fn coded_counted(FixedArray[Int32], FixedArray[Int32], Int32) -> Bool
 
-pub fn count_grows(FixedArray[Int], Int, Int, Int) -> Unit
+pub fn count_grows(FixedArray[Int32], Int32, Int32, Int32) -> Unit
 
-pub fn count_others(FixedArray[Int], Int) -> Unit
+pub fn count_others(FixedArray[Int32], Int32) -> Unit
 
-pub fn count_step(FixedArray[Int], Int) -> Unit
+pub fn count_step(FixedArray[Int32], Int32) -> Unit
 
-pub fn counted(FixedArray[Int], FixedArray[Int], Int) -> Bool
+pub fn counted(FixedArray[Int32], FixedArray[Int32], Int32) -> Bool
 
-pub fn counted_below(FixedArray[Int], FixedArray[Int], Int, Int) -> Bool
+pub fn counted_below(FixedArray[Int32], FixedArray[Int32], Int32, Int32) -> Bool
 
-pub fn counts_nonneg(FixedArray[Int]) -> Bool
+pub fn counts_nonneg(FixedArray[Int32]) -> Bool
 
-pub fn first_code(FixedArray[Int], Int) -> Int
+pub fn first_code(FixedArray[Int32], Int32) -> Int32
 
-pub fn first_code_one(FixedArray[Int]) -> Unit
+pub fn first_code_one(FixedArray[Int32]) -> Unit
 
-pub fn first_code_step(FixedArray[Int], Int) -> Unit
+pub fn first_code_step(FixedArray[Int32], Int32) -> Unit
 
-pub fn halves(Int) -> Bool
+pub fn halves(Int32) -> Bool
 
-pub fn halves_at(Int, Int) -> Bool
+pub fn halves_at(Int32, Int32) -> Bool
 
-pub fn kraft(FixedArray[Int]) -> Int
+pub fn kraft(FixedArray[Int32]) -> Int32
 
-pub fn kraft_one_bit(FixedArray[Int]) -> Unit
+pub fn kraft_one_bit(FixedArray[Int32]) -> Unit
 
-pub fn kraft_space(FixedArray[Int]) -> Unit
+pub fn kraft_space(FixedArray[Int32]) -> Unit
 
-pub fn lengths_below(FixedArray[Int], Int, Int) -> Bool
+pub fn lengths_below(FixedArray[Int32], Int32, Int32) -> Bool
 
-pub fn lengths_within(FixedArray[Int], Int, Int) -> Bool
+pub fn lengths_within(FixedArray[Int32], Int32, Int32) -> Bool
 
-pub fn none_longer(FixedArray[Int], Int) -> Bool
+pub fn none_longer(FixedArray[Int32], Int32) -> Bool
 
-pub fn numof(FixedArray[Int], Int, Int, Int) -> Int
+pub fn numof(FixedArray[Int32], Int32, Int32, Int32) -> Int32
 
-pub fn others_stay(FixedArray[Int], Int) -> Bool
+pub fn others_stay(FixedArray[Int32], Int32) -> Bool
 
-pub fn rev(Int, Int) -> Int
+pub fn rev(Int32, Int32) -> Int32
 
-pub fn rev_steps(Int) -> Bool
+pub fn rev_steps(Int32) -> Bool
 
-pub fn reverse_facts(Int) -> Unit
+pub fn reverse_facts(Int32) -> Unit
 
-pub fn shorter_or_first(FixedArray[Int], Int, Int) -> Bool
+pub fn shorter_or_first(FixedArray[Int32], Int32, Int32) -> Bool
 
-pub fn space_left(FixedArray[Int], Int) -> Int
+pub fn space_left(FixedArray[Int32], Int32) -> Int32
 
-pub fn space_left_step(FixedArray[Int], Int) -> Unit
+pub fn space_left_step(FixedArray[Int32], Int32) -> Unit
 
 // Errors
 

@@ -2,9 +2,9 @@
 package "gaato/codec_parts/proof_controls/unbounded"
 
 // Values
-pub fn half_below_500(Int) -> Int
+pub fn half_below_500(Int32) -> Int32
 
-pub fn low_bits_below_7(Int) -> Int
+pub fn low_bits_below_7(Int32) -> Int32
 
 // Errors
 

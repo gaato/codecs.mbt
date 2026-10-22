@@ -2,17 +2,17 @@
 package "gaato/zstd/internal/proof_bits"
 
 // Values
-pub fn is_byte(Int) -> Bool
+pub fn is_byte(Int32) -> Bool
 
-pub fn low_bits(Int, Int) -> Int
+pub fn low_bits(Int32, Int32) -> Int32
 
-pub fn pow2(Int) -> Int
+pub fn pow2(Int32) -> Int32
 
-pub fn shift_ok(Int) -> Bool
+pub fn shift_ok(Int32) -> Bool
 
-pub fn shl(Int, Int) -> Int
+pub fn shl(Int32, Int32) -> Int32
 
-pub fn shr(Int, Int) -> Int
+pub fn shr(Int32, Int32) -> Int32
 
 // Errors
 

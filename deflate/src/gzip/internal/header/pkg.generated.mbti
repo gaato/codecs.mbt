@@ -6,43 +6,43 @@ import {
 }
 
 // Values
-pub const FCOMMENT : Int = 16
+pub const FCOMMENT : Int32 = 16
 
-pub const FEXTRA : Int = 4
+pub const FEXTRA : Int32 = 4
 
-pub const FHCRC : Int = 2
+pub const FHCRC : Int32 = 2
 
-pub const FIXED_SIZE : Int = 10
+pub const FIXED_SIZE : Int32 = 10
 
-pub const FNAME : Int = 8
+pub const FNAME : Int32 = 8
 
-pub const FTEXT : Int = 1
+pub const FTEXT : Int32 = 1
 
-pub const MAX_EXTRA : Int = 65535
+pub const MAX_EXTRA : Int32 = 65535
 
-pub const START_SIZE : Int = 4
+pub const START_SIZE : Int32 = 4
 
 pub fn begins_member(BytesView) -> Bool
 
-pub fn build(text~ : Bool, mtime~ : UInt, xfl~ : Byte, os~ : Byte, extra~ : Bytes?, name~ : Bytes?, comment~ : Bytes?) -> Bytes
+pub fn build(text~ : Bool, mtime~ : UInt32, xfl~ : Byte, os~ : Byte, extra~ : Bytes?, name~ : Bytes?, comment~ : Bytes?) -> Bytes
 
-pub fn check_crc(UInt, BytesView) -> Result[Unit, String]
+pub fn check_crc(UInt32, BytesView) -> Result[Unit, String]
 
-pub fn check_header_crc(UInt, BytesView) -> Result[Unit, String]
+pub fn check_header_crc(UInt32, BytesView) -> Result[Unit, String]
 
-pub fn check_size(UInt, BytesView) -> Result[Unit, String]
+pub fn check_size(UInt32, BytesView) -> Result[Unit, String]
 
 pub fn check_start(BytesView) -> Result[Unit, String]
 
-pub fn le16(BytesView) -> Int
+pub fn le16(BytesView) -> Int32
 
-pub fn le32(BytesView) -> UInt
+pub fn le32(BytesView) -> UInt32
 
 pub fn parse_fixed(BytesView) -> Result[Fixed, String]
 
-pub fn put_le32(UInt) -> Bytes
+pub fn put_le32(UInt32) -> Bytes
 
-pub fn trailer(UInt, UInt) -> Bytes
+pub fn trailer(UInt32, UInt32) -> Bytes
 
 pub fn writable(Bytes?, Bytes?, Bytes?) -> Bool
 
@@ -50,8 +50,8 @@ pub fn writable(Bytes?, Bytes?, Bytes?) -> Bool
 
 // Types and methods
 pub(all) struct Fixed {
-  flags : Int
-  mtime : UInt
+  flags : Int32
+  mtime : UInt32
   xfl : Byte
   os : Byte
 } derive(Eq, @debug.Debug)

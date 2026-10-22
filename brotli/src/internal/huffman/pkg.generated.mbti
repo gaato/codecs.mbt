@@ -2,11 +2,11 @@
 package "gaato/brotli/internal/huffman"
 
 // Values
-pub fn canonical_codes(FixedArray[Int], Int, FixedArray[Int]) -> Unit
+pub fn canonical_codes(FixedArray[Int32], Int32, FixedArray[Int32]) -> Unit
 
-pub fn code_lengths(FixedArray[Int], Int, Int, FixedArray[Int]) -> Unit
+pub fn code_lengths(FixedArray[Int32], Int32, Int32, FixedArray[Int32]) -> Unit
 
-pub fn reverse_bits(Int, Int) -> Int
+pub fn reverse_bits(Int32, Int32) -> Int32
 
 // Errors
 
@@ -14,9 +14,9 @@ pub fn reverse_bits(Int, Int) -> Int
 pub struct Builder {
   // private fields
 }
-pub fn Builder::Builder(root_bits~ : Int, max_alphabet~ : Int) -> Self
-pub fn Builder::build(Self, FixedArray[UInt16], Int, FixedArray[Int], Int, invalid~ : UInt16) -> Int
-pub fn Builder::memory_usage(Self) -> Int
+pub fn Builder::Builder(root_bits~ : Int32, max_alphabet~ : Int32) -> Self
+pub fn Builder::build(Self, FixedArray[UInt16], Int32, FixedArray[Int32], Int32, invalid~ : UInt16) -> Int32
+pub fn Builder::memory_usage(Self) -> Int32
 
 // Type aliases
 

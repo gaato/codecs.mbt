@@ -2,7 +2,7 @@
 package "gaato/zstd/internal/proof_fields"
 
 // Values
-pub fn field_at(Int, Int, Int, Int, Int, Int, Int) -> Bool
+pub fn field_at(Int32, Int32, Int32, Int32, Int32, Int32, Int32) -> Bool
 
 // Errors
 

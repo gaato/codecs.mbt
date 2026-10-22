@@ -49,16 +49,16 @@ pub using @codec {type Resource}
 // Traits
 pub(open) trait Decode {
   fn step(Self, BytesView, MutArrayView[Byte], end~ : Bool) -> Status raise @codec.CodecError
-  fn last_consumed(Self) -> Int
-  fn last_produced(Self) -> Int
+  fn last_consumed(Self) -> Int32
+  fn last_produced(Self) -> Int32
   fn reset(Self) -> Unit
-  fn memory_usage(Self) -> Int
+  fn memory_usage(Self) -> Int32
 }
 
 pub(open) trait Encode {
   fn step(Self, BytesView, MutArrayView[Byte], action~ : EncodeAction) -> Status raise @codec.CodecError
-  fn last_consumed(Self) -> Int
-  fn last_produced(Self) -> Int
+  fn last_consumed(Self) -> Int32
+  fn last_produced(Self) -> Int32
   fn reset(Self) -> Unit
-  fn memory_usage(Self) -> Int
+  fn memory_usage(Self) -> Int32
 }

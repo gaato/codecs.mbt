@@ -2,7 +2,7 @@
 package "gaato/brotli/internal/transform"
 
 // Values
-pub fn transform_into(FixedArray[Byte], BytesView, BytesView, Int, BytesView) -> Int
+pub fn transform_into(FixedArray[Byte], BytesView, BytesView, Int32, BytesView) -> Int32
 
 // Errors
 

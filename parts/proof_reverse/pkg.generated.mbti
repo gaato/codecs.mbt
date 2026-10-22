@@ -2,7 +2,7 @@
 package "gaato/codec_parts/proof_reverse"
 
 // Values
-pub fn involution(Int, Int) -> Unit
+pub fn involution(Int32, Int32) -> Unit
 
 // Errors
 

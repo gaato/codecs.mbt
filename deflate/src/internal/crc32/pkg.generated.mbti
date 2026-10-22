@@ -2,11 +2,11 @@
 package "gaato/deflate/internal/crc32"
 
 // Values
-pub const INITIAL : UInt = 0
+pub const INITIAL : UInt32 = 0
 
-pub fn update(UInt, ArrayView[Byte]) -> UInt
+pub fn update(UInt32, ArrayView[Byte]) -> UInt32
 
-pub fn update_bytes(UInt, BytesView) -> UInt
+pub fn update_bytes(UInt32, BytesView) -> UInt32
 
 // Errors
 

@@ -22,7 +22,7 @@ pub(all) enum ErrorKind {
   ChecksumMismatch
   TrailingData
   LimitExceeded(Limit)
-  DictionaryRequired(UInt?)
+  DictionaryRequired(UInt32?)
   DictionaryMismatch
   Unsupported
 } derive(Eq, @debug.Debug)

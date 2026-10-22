@@ -2,29 +2,29 @@
 package "gaato/brotli/internal/rules"
 
 // Values
-pub const NUM_BLOCK_COUNT_CODES : Int = 26
+pub const NUM_BLOCK_COUNT_CODES : Int32 = 26
 
-pub fn block_count(Int, Int) -> Int
+pub fn block_count(Int32, Int32) -> Int32
 
-pub fn block_count_extra_bits(Int) -> Int
+pub fn block_count_extra_bits(Int32) -> Int32
 
-pub fn direct_distance_codes(Int, Int) -> Int
+pub fn direct_distance_codes(Int32, Int32) -> Int32
 
-pub fn distance(Int, Int, npostfix~ : Int, ndirect~ : Int, last1~ : Int, last2~ : Int, last3~ : Int, last4~ : Int) -> Int?
+pub fn distance(Int32, Int32, npostfix~ : Int32, ndirect~ : Int32, last1~ : Int32, last2~ : Int32, last3~ : Int32, last4~ : Int32) -> Int32?
 
-pub fn distance_alphabet_size(Int, Int) -> Int
+pub fn distance_alphabet_size(Int32, Int32) -> Int32
 
-pub fn distance_extra_bits(Int, Int, Int) -> Int
+pub fn distance_extra_bits(Int32, Int32, Int32) -> Int32
 
-pub fn inverse_move_to_front(FixedArray[Byte], Int) -> Unit
+pub fn inverse_move_to_front(FixedArray[Byte], Int32) -> Unit
 
-pub fn meta_block_length(Int, Int) -> Int?
+pub fn meta_block_length(Int32, Int32) -> Int32?
 
-pub fn metadata_length(Int, Int) -> Int?
+pub fn metadata_length(Int32, Int32) -> Int32?
 
-pub fn next_block_type(Int, current~ : Int, previous~ : Int, types~ : Int) -> Int
+pub fn next_block_type(Int32, current~ : Int32, previous~ : Int32, types~ : Int32) -> Int32
 
-pub fn window_bits(Int) -> (Int, Int)?
+pub fn window_bits(Int32) -> (Int32, Int32)?
 
 // Errors
 

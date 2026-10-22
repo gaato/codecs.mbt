@@ -12,7 +12,7 @@ pub struct Xxh64 {
 pub fn Xxh64::Xxh64() -> Self
 pub fn Xxh64::digest(Self) -> UInt64
 pub fn Xxh64::reset(Self) -> Unit
-pub fn Xxh64::update(Self, FixedArray[Byte], Int, Int) -> Unit
+pub fn Xxh64::update(Self, FixedArray[Byte], Int32, Int32) -> Unit
 pub fn Xxh64::update_bytes(Self, BytesView) -> Unit
 
 // Type aliases

@@ -6,25 +6,25 @@ import {
 }
 
 // Values
-pub fn byte_at(ArrayView[Byte], Int) -> Int
+pub fn byte_at(ArrayView[Byte], Int32) -> Int32
 
-pub fn decode_literals_header(Int, Int, Int, Int, Int, Int, Int) -> Result[LiteralsHeader, String]
+pub fn decode_literals_header(Int32, Int32, Int32, Int32, Int32, Int32, Int32) -> Result[LiteralsHeader, String]
 
-pub fn frame_header_len(Int) -> Result[Int, String]
+pub fn frame_header_len(Int32) -> Result[Int32, String]
 
-pub fn le16(ArrayView[Byte], Int) -> Int
+pub fn le16(ArrayView[Byte], Int32) -> Int32
 
-pub fn parse_block_header(Int) -> Result[BlockHeader, String]
+pub fn parse_block_header(Int32) -> Result[BlockHeader, String]
 
 pub fn parse_frame_header(ArrayView[Byte]) -> Result[FrameHeader, String]
 
-pub fn parse_jump_table(ArrayView[Byte]) -> Result[(Int, Int, Int, Int), String]
+pub fn parse_jump_table(ArrayView[Byte]) -> Result[(Int32, Int32, Int32, Int32), String]
 
-pub fn parse_literals_header(ArrayView[Byte], Int) -> Result[LiteralsHeader, String]
+pub fn parse_literals_header(ArrayView[Byte], Int32) -> Result[LiteralsHeader, String]
 
-pub fn stream_sizes(Int, Int, Int, Int) -> Result[(Int, Int, Int, Int), String]
+pub fn stream_sizes(Int32, Int32, Int32, Int32) -> Result[(Int32, Int32, Int32, Int32), String]
 
-pub fn window_size(Int) -> UInt64
+pub fn window_size(Int32) -> UInt64
 
 // Errors
 
@@ -32,9 +32,9 @@ pub fn window_size(Int) -> UInt64
 pub(all) struct BlockHeader {
   last : Bool
   block_type : BlockType
-  size : Int
+  size : Int32
 } derive(Eq, @debug.Debug)
-pub fn BlockHeader::check(Self, Int) -> Result[Self, String]
+pub fn BlockHeader::check(Self, Int32) -> Result[Self, String]
 pub fn BlockHeader::equal(Self, Self) -> Bool
 pub fn BlockHeader::not_equal(Self, Self) -> Bool
 pub fn BlockHeader::to_repr(Self) -> @debug.Repr
@@ -51,10 +51,10 @@ pub fn BlockType::to_repr(Self) -> @debug.Repr
 pub(all) struct FrameHeader {
   single_segment : Bool
   has_checksum : Bool
-  dictionary_id : UInt
+  dictionary_id : UInt32
   content_size : UInt64?
   window_size : UInt64
-  header_len : Int
+  header_len : Int32
 } derive(Eq, @debug.Debug)
 pub fn FrameHeader::equal(Self, Self) -> Bool
 pub fn FrameHeader::not_equal(Self, Self) -> Bool
@@ -62,10 +62,10 @@ pub fn FrameHeader::to_repr(Self) -> @debug.Repr
 
 pub(all) struct LiteralsHeader {
   block_type : LiteralsType
-  size_format : Int
-  header_len : Int
-  regenerated : Int
-  compressed : Int
+  size_format : Int32
+  header_len : Int32
+  regenerated : Int32
+  compressed : Int32
 } derive(Eq, @debug.Debug)
 pub fn LiteralsHeader::equal(Self, Self) -> Bool
 pub fn LiteralsHeader::four_streams(Self) -> Bool

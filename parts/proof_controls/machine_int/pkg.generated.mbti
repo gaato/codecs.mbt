@@ -2,9 +2,9 @@
 package "gaato/codec_parts/proof_controls/machine_int"
 
 // Values
-pub fn add_u32(UInt, UInt) -> UInt
+pub fn add_u32(UInt32, UInt32) -> UInt32
 
-pub fn double(Int) -> Int
+pub fn double(Int32) -> Int32
 
 // Errors
 

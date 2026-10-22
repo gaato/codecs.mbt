@@ -8,9 +8,9 @@ import {
 }
 
 // Values
-pub fn compress(BytesView, level? : Int, header? : Header) -> Bytes
+pub fn compress(BytesView, level? : Int32, header? : Header) -> Bytes
 
-pub fn decompress(BytesView, max_output? : Int) -> Bytes raise @codec.CodecError
+pub fn decompress(BytesView, max_output? : Int32) -> Bytes raise @codec.CodecError
 
 // Errors
 
@@ -18,12 +18,12 @@ pub fn decompress(BytesView, max_output? : Int) -> Bytes raise @codec.CodecError
 pub struct Decoder {
   // private fields
 }
-pub fn Decoder::Decoder(until? : @codec_bytes.Until, keep_header? : Bool, max_header_bytes? : Int) -> Self
+pub fn Decoder::Decoder(until? : @codec_bytes.Until, keep_header? : Bool, max_header_bytes? : Int32) -> Self
 pub fn Decoder::header(Self) -> Header?
 pub fn Decoder::is_finished(Self) -> Bool
-pub fn Decoder::last_consumed(Self) -> Int
-pub fn Decoder::last_produced(Self) -> Int
-pub fn Decoder::memory_usage(Self) -> Int
+pub fn Decoder::last_consumed(Self) -> Int32
+pub fn Decoder::last_produced(Self) -> Int32
+pub fn Decoder::memory_usage(Self) -> Int32
 pub fn Decoder::reset(Self) -> Unit
 pub fn Decoder::step(Self, BytesView, MutArrayView[Byte], end~ : Bool) -> @codec_bytes.Status raise @codec.CodecError
 pub fn Decoder::step_into(Self, BytesView, FixedArray[Byte], end~ : Bool) -> @codec_bytes.Status raise @codec.CodecError
@@ -32,11 +32,11 @@ pub impl @codec_bytes.Decode for Decoder
 pub struct Encoder {
   // private fields
 }
-pub fn Encoder::Encoder(level? : Int, header? : Header) -> Self
+pub fn Encoder::Encoder(level? : Int32, header? : Header) -> Self
 pub fn Encoder::is_finished(Self) -> Bool
-pub fn Encoder::last_consumed(Self) -> Int
-pub fn Encoder::last_produced(Self) -> Int
-pub fn Encoder::memory_usage(Self) -> Int
+pub fn Encoder::last_consumed(Self) -> Int32
+pub fn Encoder::last_produced(Self) -> Int32
+pub fn Encoder::memory_usage(Self) -> Int32
 pub fn Encoder::reset(Self) -> Unit
 pub fn Encoder::step(Self, BytesView, MutArrayView[Byte], action~ : @codec_bytes.EncodeAction) -> @codec_bytes.Status
 pub fn Encoder::step_into(Self, BytesView, FixedArray[Byte], action~ : @codec_bytes.EncodeAction) -> @codec_bytes.Status
@@ -44,7 +44,7 @@ pub impl @codec_bytes.Encode for Encoder
 
 pub(all) struct Header {
   text : Bool
-  mtime : UInt
+  mtime : UInt32
   xfl : Byte
   os : Byte
   extra : Bytes?

@@ -8,25 +8,25 @@ import {
 }
 
 // Values
-pub fn[S : Stepper] check_error_splits(() -> S, BytesView, seed~ : UInt, memory_limit? : Int?, small? : Int) -> Transcript raise
+pub fn[S : Stepper] check_error_splits(() -> S, BytesView, seed~ : UInt32, memory_limit? : Int32?, small? : Int32) -> Transcript raise
 
-pub fn[E : @codec_bytes.Encode, D : @codec_bytes.Decode] check_flush(() -> E, () -> D, BytesView, flush_at~ : Array[Int]) -> Unit raise
+pub fn[E : @codec_bytes.Encode, D : @codec_bytes.Decode] check_flush(() -> E, () -> D, BytesView, flush_at~ : Array[Int32]) -> Unit raise
 
 pub fn[S : Stepper] check_member(() -> S, BytesView, BytesView, Transcript) -> Unit raise
 
 pub fn[S : Stepper] check_reset(() -> S, BytesView, BytesView) -> Unit raise
 
-pub fn[E : @codec_bytes.Encode, D : @codec_bytes.Decode] check_roundtrip(() -> E, () -> D, BytesView, encoder_memory_limit? : Int?, decoder_memory_limit? : Int?, small? : Int) -> Bytes raise
+pub fn[E : @codec_bytes.Encode, D : @codec_bytes.Decode] check_roundtrip(() -> E, () -> D, BytesView, encoder_memory_limit? : Int32?, decoder_memory_limit? : Int32?, small? : Int32) -> Bytes raise
 
-pub fn[S : Stepper] check_splits(() -> S, BytesView, memory_limit? : Int?, small? : Int) -> Transcript raise
+pub fn[S : Stepper] check_splits(() -> S, BytesView, memory_limit? : Int32?, small? : Int32) -> Transcript raise
 
 pub fn[S : Stepper] check_trailing(() -> S, BytesView, Transcript, garbage~ : Array[Bytes]) -> Unit raise
 
-pub fn[S : Stepper] check_truncation(() -> S, BytesView, Transcript, max_prefixes? : Int) -> Unit raise
+pub fn[S : Stepper] check_truncation(() -> S, BytesView, Transcript, max_prefixes? : Int32) -> Unit raise
 
-pub fn[S : Stepper] drive(S, BytesView, input_sizes? : Sizes, output_sizes? : Sizes, memory_limit? : Int?, first_member? : Bool) -> Transcript raise
+pub fn[S : Stepper] drive(S, BytesView, input_sizes? : Sizes, output_sizes? : Sizes, memory_limit? : Int32?, first_member? : Bool) -> Transcript raise
 
-pub fn[S : Stepper] fuzz(() -> S, BytesView, seed~ : UInt, rounds~ : Int, memory_limit? : Int?) -> Map[String, Int] raise
+pub fn[S : Stepper] fuzz(() -> S, BytesView, seed~ : UInt32, rounds~ : Int32, memory_limit? : Int32?) -> Map[String, Int32] raise
 
 pub fn sha256(BytesView) -> String
 
@@ -38,36 +38,36 @@ pub fn splits() -> Array[(Sizes, Sizes)]
 pub struct ByteDecoder[D] {
   decoder : D
 }
-pub fn[D : @codec_bytes.Decode] ByteDecoder::memory_usage(Self[D]) -> Int
+pub fn[D : @codec_bytes.Decode] ByteDecoder::memory_usage(Self[D]) -> Int32
 pub fn[D] ByteDecoder::new(D) -> Self[D]
 pub fn[D : @codec_bytes.Decode] ByteDecoder::reset(Self[D]) -> Unit
-pub fn[D : @codec_bytes.Decode] ByteDecoder::step(Self[D], BytesView, Int, end~ : Bool) -> Step raise
+pub fn[D : @codec_bytes.Decode] ByteDecoder::step(Self[D], BytesView, Int32, end~ : Bool) -> Step raise
 pub impl[D : @codec_bytes.Decode] Stepper for ByteDecoder[D]
 
 pub struct ByteEncoder[E] {
   encoder : E
 }
-pub fn[E : @codec_bytes.Encode] ByteEncoder::memory_usage(Self[E]) -> Int
+pub fn[E : @codec_bytes.Encode] ByteEncoder::memory_usage(Self[E]) -> Int32
 pub fn[E] ByteEncoder::new(E) -> Self[E]
 pub fn[E : @codec_bytes.Encode] ByteEncoder::reset(Self[E]) -> Unit
-pub fn[E : @codec_bytes.Encode] ByteEncoder::step(Self[E], BytesView, Int, end~ : Bool) -> Step raise
+pub fn[E : @codec_bytes.Encode] ByteEncoder::step(Self[E], BytesView, Int32, end~ : Bool) -> Step raise
 pub impl[E : @codec_bytes.Encode] Stepper for ByteEncoder[E]
 
 pub struct Rng {
-  mut state : UInt
+  mut state : UInt32
 }
-pub fn Rng::below(Self, Int) -> Int
-pub fn Rng::new(UInt) -> Self
+pub fn Rng::below(Self, Int32) -> Int32
+pub fn Rng::new(UInt32) -> Self
 
 pub(all) struct Sizes {
-  next : () -> Int
+  next : () -> Int32
   label : String
 }
-pub fn Sizes::fixed(Int) -> Self
-pub fn Sizes::random(UInt, Int) -> Self
+pub fn Sizes::fixed(Int32) -> Self
+pub fn Sizes::random(UInt32, Int32) -> Self
 
 pub(all) struct Step {
-  consumed : Int
+  consumed : Int32
   produced : Bytes
   stop : Stop
 }
@@ -88,9 +88,9 @@ pub(all) struct Transcript {
   events : Array[String]
   error : @codec.ErrorKind?
   message : String
-  consumed : Int
-  steps : Int
-  peak_memory : Int
+  consumed : Int32
+  steps : Int32
+  peak_memory : Int32
 }
 pub fn Transcript::agrees(Self, Self) -> Bool
 
@@ -98,7 +98,7 @@ pub fn Transcript::agrees(Self, Self) -> Bool
 
 // Traits
 pub(open) trait Stepper {
-  fn step(Self, BytesView, Int, end~ : Bool) -> Step raise
+  fn step(Self, BytesView, Int32, end~ : Bool) -> Step raise
   fn reset(Self) -> Unit
-  fn memory_usage(Self) -> Int
+  fn memory_usage(Self) -> Int32
 }

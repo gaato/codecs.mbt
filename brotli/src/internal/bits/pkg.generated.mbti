@@ -11,18 +11,18 @@ pub struct BitPacker {
 }
 pub fn BitPacker::BitPacker() -> Self
 pub fn BitPacker::align(Self) -> Unit
-pub fn BitPacker::buffered(Self) -> Int
-pub fn BitPacker::capacity(Self) -> Int
-pub fn BitPacker::drain(Self, MutArrayView[Byte], Int) -> Int
-pub fn BitPacker::drain_into(Self, FixedArray[Byte], Int) -> Int
+pub fn BitPacker::buffered(Self) -> Int32
+pub fn BitPacker::capacity(Self) -> Int32
+pub fn BitPacker::drain(Self, MutArrayView[Byte], Int32) -> Int32
+pub fn BitPacker::drain_into(Self, FixedArray[Byte], Int32) -> Int32
 pub fn BitPacker::is_aligned(Self) -> Bool
 pub fn BitPacker::mark(Self) -> Mark
-pub fn BitPacker::pending(Self) -> Int
-pub fn BitPacker::position(Self) -> Int
+pub fn BitPacker::pending(Self) -> Int32
+pub fn BitPacker::position(Self) -> Int32
 pub fn BitPacker::reset(Self) -> Unit
 pub fn BitPacker::rewind(Self, Mark) -> Unit
-pub fn BitPacker::write(Self, Int, Int) -> Unit
-pub fn BitPacker::write_bytes(Self, FixedArray[Byte], Int, Int) -> Unit
+pub fn BitPacker::write(Self, Int32, Int32) -> Unit
+pub fn BitPacker::write_bytes(Self, FixedArray[Byte], Int32, Int32) -> Unit
 
 pub struct Mark {
   // private fields

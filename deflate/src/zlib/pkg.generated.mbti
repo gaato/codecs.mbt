@@ -7,11 +7,11 @@ import {
 }
 
 // Values
-pub fn compress(BytesView, level? : Int, dictionary? : BytesView) -> Bytes
+pub fn compress(BytesView, level? : Int32, dictionary? : BytesView) -> Bytes
 
-pub fn decompress(BytesView, dictionary? : BytesView, max_output? : Int) -> Bytes raise @codec.CodecError
+pub fn decompress(BytesView, dictionary? : BytesView, max_output? : Int32) -> Bytes raise @codec.CodecError
 
-pub fn dictionary_id(BytesView) -> UInt
+pub fn dictionary_id(BytesView) -> UInt32
 
 pub fn is_header(Byte, Byte) -> Bool
 
@@ -23,9 +23,9 @@ pub struct Decoder {
 }
 pub fn Decoder::Decoder(dictionary? : BytesView, until? : @codec_bytes.Until) -> Self
 pub fn Decoder::is_finished(Self) -> Bool
-pub fn Decoder::last_consumed(Self) -> Int
-pub fn Decoder::last_produced(Self) -> Int
-pub fn Decoder::memory_usage(Self) -> Int
+pub fn Decoder::last_consumed(Self) -> Int32
+pub fn Decoder::last_produced(Self) -> Int32
+pub fn Decoder::memory_usage(Self) -> Int32
 pub fn Decoder::reset(Self) -> Unit
 pub fn Decoder::step(Self, BytesView, MutArrayView[Byte], end~ : Bool) -> @codec_bytes.Status raise @codec.CodecError
 pub fn Decoder::step_into(Self, BytesView, FixedArray[Byte], end~ : Bool) -> @codec_bytes.Status raise @codec.CodecError
@@ -34,11 +34,11 @@ pub impl @codec_bytes.Decode for Decoder
 pub struct Encoder {
   // private fields
 }
-pub fn Encoder::Encoder(level? : Int, dictionary? : BytesView) -> Self
+pub fn Encoder::Encoder(level? : Int32, dictionary? : BytesView) -> Self
 pub fn Encoder::is_finished(Self) -> Bool
-pub fn Encoder::last_consumed(Self) -> Int
-pub fn Encoder::last_produced(Self) -> Int
-pub fn Encoder::memory_usage(Self) -> Int
+pub fn Encoder::last_consumed(Self) -> Int32
+pub fn Encoder::last_produced(Self) -> Int32
+pub fn Encoder::memory_usage(Self) -> Int32
 pub fn Encoder::reset(Self) -> Unit
 pub fn Encoder::step(Self, BytesView, MutArrayView[Byte], action~ : @codec_bytes.EncodeAction) -> @codec_bytes.Status
 pub fn Encoder::step_into(Self, BytesView, FixedArray[Byte], action~ : @codec_bytes.EncodeAction) -> @codec_bytes.Status
