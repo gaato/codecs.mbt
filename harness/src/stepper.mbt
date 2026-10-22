@@ -7,6 +7,10 @@ pub(all) enum Stop {
   NeedMoreInput
   NeedMoreOutput
   Event(String)
+  /// The step wrote output and stopped for no reason the checks compare:
+  /// how many rows an image decoder's step writes depends on the room, so
+  /// it is not part of a transcript.
+  Wrote
   Done
   /// The step raised this kind of `CodecError`, with this message, after
   /// consuming and producing what the step says.
@@ -31,10 +35,10 @@ pub(all) struct Step {
 ///|
 /// A codec of any kind, seen through the checks' common lens: given input
 /// and room for output, take a step. A kind's adapter (`ByteDecoder` for
-/// byte streams) turns its contract into this, and checks its own rules on
-/// the way; a contract violation raises `Failure`, and a codec error ends
-/// the step with `Raised`, which keeps what the step consumed and produced
-/// before it.
+/// byte streams, `ImageDecoder` for images) turns its contract into this,
+/// and checks its own rules on the way; a contract violation raises
+/// `Failure`, and a codec error ends the step with `Raised`, which keeps
+/// what the step consumed and produced before it.
 pub(open) trait Stepper {
   fn step(Self, BytesView, Int32, end~ : Bool) -> Step raise
   fn reset(Self) -> Unit
@@ -81,8 +85,9 @@ pub impl[D : @codec_bytes.Decode] Stepper for ByteDecoder[D] with fn step(
 
 ///|
 /// A byte-stream step as the checks see it, once its counts are checked
-/// against what it was given: a step that raised too reports what it
-/// consumed and produced before the error, within what it was given.
+/// against what it was given (a step that raised too reports what it
+/// consumed and produced before the error, within what it was given), and a
+/// full slice is checked to be full.
 fn to_step(
   stop : Stop,
   input : BytesView,
@@ -90,13 +95,28 @@ fn to_step(
   consumed : Int32,
   produced : Int32,
 ) -> Step raise {
+  check_counts(input, out.length(), consumed, produced)
+  if stop is NeedMoreOutput && produced != out.length() {
+    fail("NeedMoreOutput with \{out.length() - produced} bytes of room left")
+  }
+  { consumed, produced: Bytes::from_array(out[:produced]), stop, }
+}
+
+///|
+/// Fails unless a step given `input` and `room` bytes of output consumed and
+/// produced within them.
+fn check_counts(
+  input : BytesView,
+  room : Int32,
+  consumed : Int32,
+  produced : Int32,
+) -> Unit raise {
   if consumed < 0 || consumed > input.length() {
     fail("consumed \{consumed} of \{input.length()} bytes")
   }
-  if produced < 0 || produced > out.length() {
-    fail("produced \{produced} bytes into \{out.length()}")
+  if produced < 0 || produced > room {
+    fail("produced \{produced} bytes into \{room}")
   }
-  { consumed, produced: Bytes::from_array(out[:produced]), stop, }
 }
 
 ///|

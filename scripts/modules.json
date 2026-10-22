@@ -6,8 +6,8 @@
     "coverage_scope: the directories, module-relative, whose .mbt files each module's coverage ledger measures: the library and the internal packages it ships, not test-only packages.",
     "copies: for each module, the packages of parts/ it takes and which of their files, for scripts/gen_parts.mbtx to copy into <module>/src/internal/<package>. Files, not whole packages, so that a module carries (and its coverage ledger covers) only what it uses."
   ],
-  "modules": ["codec", "codec_bytes", "zstd", "brotli", "deflate"],
-  "ledgered": ["zstd", "brotli", "deflate"],
+  "modules": ["codec", "codec_bytes", "codec_image", "zstd", "brotli", "deflate", "png"],
+  "ledgered": ["zstd", "brotli", "deflate", "png"],
   "coverage_scope": {
     "zstd": [
       "src",
@@ -43,7 +43,8 @@
       "src/internal/deflate",
       "src/internal/proof_bits",
       "src/internal/proof_codes"
-    ]
+    ],
+    "png": ["src", "src/internal/crc32"]
   },
   "copies": {
     "brotli": {
@@ -93,6 +94,9 @@
       "proof_bits": ["shifts.mbt", "shifts.mbtp", "shifts_test.mbt"],
       "proof_codes": ["codes.mbt", "codes.mbtp", "codes_test.mbt"],
       "proof_fields": ["fields.mbt", "fields.mbtp"]
+    },
+    "png": {
+      "crc32": ["crc32.mbt", "crc32_test.mbt"]
     }
   },
   "proved": {

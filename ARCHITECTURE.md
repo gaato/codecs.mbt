@@ -15,7 +15,7 @@ consumers     command-line tools, HTTP clients, applications
 formats       zstd  brotli  deflate     │  image formats  │  audio formats
                 one module per format; a format may embed another codec
 ──────────────┼───────────────────────────────────────────────────────────
-contracts     gaato/codec_bytes          │  an image contract │ an audio contract
+contracts     gaato/codec_bytes          │  gaato/codec_image │ an audio contract
   per kind    byte stream in, bytes out  │  pixels, by rows   │ samples, by blocks
 ──────────────┼───────────────────────────────────────────────────────────
 vocabulary    gaato/codec: errors, limits, resources
@@ -24,11 +24,12 @@ building      bit readers and writers, checksums, prefix-code tables,
 blocks        entropy coders: small, mostly pure functions
 ```
 
-Only the byte-stream contract and the compression formats exist today:
-zstd, brotli, and DEFLATE with its two containers, zlib and gzip, in one
-module of three packages (`gaato/deflate`, `gaato/deflate/zlib`,
-`gaato/deflate/gzip`). The image and audio rows show where such codecs would
-go; nothing in the layers below has to change for them.
+The byte-stream contract and the compression formats exist today: zstd,
+brotli, and DEFLATE with its two containers, zlib and gzip, in one module of
+three packages (`gaato/deflate`, `gaato/deflate/zlib`, `gaato/deflate/gzip`).
+The image contract, `gaato/codec_image`, is written, and its first format,
+PNG (`gaato/png`), is being built on it. The audio row shows where such
+codecs would go; nothing in the layers below has to change for them.
 
 **Vocabulary.** `gaato/codec` holds what every kind of codec reports in the
 same terms: the error kinds, and the limits a stream can exceed, in bytes. A
@@ -44,7 +45,8 @@ an image contract that is still settling should not force a new version on
 every compression codec. The rules are the same for every kind: errors stick,
 a codec never reads past what it needs, results do not depend on how input
 and output are split, and memory stays within the limits it was given. The
-byte-stream contract is written down in [CONTRACT.md](CONTRACT.md).
+byte-stream and image contracts are written down in
+[CONTRACT.md](CONTRACT.md).
 
 **Formats.** Each format is one module. A format that contains another embeds
 that codec as a value (a PNG decoder holds a zlib decoder, which holds an
@@ -77,8 +79,8 @@ and depends only on the contract modules.
 A byte-stream codec's step consumes input, fills output, and says why it
 stopped: done, needs more input, or needs more room. Kinds whose output has
 structure add events to that answer. An image decoder's step can stop to
-report the image's header, rows it has written, metadata it was asked for, or
-the end of a frame; an audio decoder's step reports the stream's parameters
+report the image's header, the start of a frame, rows it has written,
+metadata it was asked for, or the end of a frame; an audio decoder's step reports the stream's parameters
 and blocks of samples.
 
 Codecs do not hold a whole frame unless the format leaves no choice. A PNG

@@ -60,7 +60,9 @@ let max_steps : Int32 = 50_000_000
 ///
 /// - `NeedMoreInput` consumed everything handed over, and never comes after
 ///   `end`: at the end a codec finishes or reports `Truncated`;
-/// - `NeedMoreOutput` filled the room, and a step with room makes progress;
+/// - a step with room that answers `NeedMoreOutput` makes progress (whether
+///   the room was really full, the adapter checks: only it knows the unit
+///   of output);
 /// - `Done` comes only with `end` and every byte consumed; with
 ///   `first_member=true` (a codec that stops after the first member), `Done` may
 ///   leave input unread, and the transcript says how much was consumed;
@@ -157,12 +159,7 @@ pub fn[S : Stepper] drive(
           fail("NeedMoreInput after the end of the input")
         }
       }
-      NeedMoreOutput =>
-        if step.produced.length() != room {
-          fail(
-            "NeedMoreOutput with \{room - step.produced.length()} bytes of room left",
-          )
-        }
+      NeedMoreOutput | Wrote => ()
       Event(event) => events.push(event)
     }
     if room > 0 &&

@@ -1,0 +1,67 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/codec_image"
+
+import {
+  "gaato/codec",
+  "moonbitlang/core/debug",
+}
+
+// Values
+
+// Errors
+
+// Types and methods
+pub(all) enum Status {
+  Header
+  Frame
+  Rows
+  Metadata
+  FrameEnd
+  Done
+  NeedMoreInput
+  NeedMoreOutput
+} derive(Eq, @debug.Debug)
+pub fn Status::equal(Self, Self) -> Bool
+pub fn Status::not_equal(Self, Self) -> Bool
+pub fn Status::to_repr(Self) -> @debug.Repr
+
+pub(all) enum Until {
+  EndOfInput
+  EndOfMember
+} derive(Eq, @debug.Debug)
+pub fn Until::equal(Self, Self) -> Bool
+pub fn Until::not_equal(Self, Self) -> Bool
+pub fn Until::to_repr(Self) -> @debug.Repr
+
+// Type aliases
+pub using @codec {type CodecError}
+
+pub using @codec {type ErrorKind}
+
+pub using @codec {type Limit}
+
+pub using @codec {type Resource}
+
+// Traits
+pub(open) trait Decode {
+  fn step(Self, BytesView, MutArrayView[Byte], end~ : Bool) -> Status raise @codec.CodecError
+  fn last_consumed(Self) -> Int32
+  fn last_produced(Self) -> Int32
+  fn reset(Self) -> Unit
+  fn memory_usage(Self) -> Int32
+  fn room_needed(Self) -> Int32
+  fn width(Self) -> Int32
+  fn height(Self) -> Int32
+  fn frame_x(Self) -> Int32
+  fn frame_y(Self) -> Int32
+  fn frame_width(Self) -> Int32
+  fn frame_height(Self) -> Int32
+  fn pass(Self) -> Int32
+  fn pass_x(Self) -> Int32
+  fn pass_y(Self) -> Int32
+  fn pass_dx(Self) -> Int32
+  fn pass_dy(Self) -> Int32
+  fn rows_first(Self) -> Int32
+  fn rows_count(Self) -> Int32
+  fn row_bytes(Self) -> Int32
+}

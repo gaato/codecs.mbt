@@ -1,6 +1,7 @@
 members = [
   "codec",
   "codec_bytes",
+  "codec_image",
   "harness",
   "conformance",
   "bench",
@@ -8,4 +9,5 @@ members = [
   "zstd",
   "brotli",
   "deflate",
+  "png",
 ]

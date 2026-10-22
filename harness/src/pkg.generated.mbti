@@ -4,6 +4,7 @@ package "gaato/codec_harness"
 import {
   "gaato/codec",
   "gaato/codec_bytes",
+  "gaato/codec_image",
   "moonbitlang/core/debug",
 }
 
@@ -53,6 +54,17 @@ pub fn[E : @codec_bytes.Encode] ByteEncoder::reset(Self[E]) -> Unit
 pub fn[E : @codec_bytes.Encode] ByteEncoder::step(Self[E], BytesView, Int32, end~ : Bool) -> Step raise
 pub impl[E : @codec_bytes.Encode] Stepper for ByteEncoder[E]
 
+pub struct ImageDecoder[D] {
+  decoder : D
+  describe : (D, @codec_image.Status) -> String
+  // private fields
+}
+pub fn[D : @codec_image.Decode] ImageDecoder::memory_usage(Self[D]) -> Int32
+pub fn[D] ImageDecoder::new(D, describe? : (D, @codec_image.Status) -> String) -> Self[D]
+pub fn[D : @codec_image.Decode] ImageDecoder::reset(Self[D]) -> Unit
+pub fn[D : @codec_image.Decode] ImageDecoder::step(Self[D], BytesView, Int32, end~ : Bool) -> Step raise
+pub impl[D : @codec_image.Decode] Stepper for ImageDecoder[D]
+
 pub struct Rng {
   mut state : UInt32
 }
@@ -76,6 +88,7 @@ pub(all) enum Stop {
   NeedMoreInput
   NeedMoreOutput
   Event(String)
+  Wrote
   Done
   Raised(@codec.ErrorKind, String)
 } derive(Eq, @debug.Debug)

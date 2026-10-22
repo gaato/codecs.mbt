@@ -1,6 +1,7 @@
 import {
   "gaato/codec",
   "gaato/codec_bytes",
+  "gaato/codec_image",
   "moonbitlang/core/debug",
 }
 
