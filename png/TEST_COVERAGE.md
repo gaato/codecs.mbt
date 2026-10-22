@@ -24,7 +24,8 @@ ledger OK, 1 = an unexplained or over-budget file, 2 = the run itself failed
 ### What is measured
 
 - Sources: every non-test `.mbt` of the package `src/` (the decoder's state
-  machine), of its internal packages `src/internal/rules/` (chunk types and
+  machine, the fixed-length ancillary chunks and the blocks of reported
+  ones), of its internal packages `src/internal/rules/` (chunk types and
   their order, IHDR's fields, row sizes, Adam7's passes) and
   `src/internal/filter/` (the filters' reverse), and of the copy of the
   shared part `src/internal/crc32/` (generated from `parts/`, with its
@@ -35,8 +36,8 @@ ledger OK, 1 = an unexplained or over-budget file, 2 = the run itself failed
 The pitfalls the script pins (stale counters, `-f summary` skewing totals,
 tcc on openSUSE) are described in zstd's ledger, `zstd/TEST_COVERAGE.md`.
 
-Snapshot at the last full measurement (2026-10-22): **100.0 %** (411/411
-lines).
+Snapshot at the last full measurement (2026-10-22): **99.7 %** (628/630
+lines), the two uncovered lines ledgered below.
 
 ## Policy
 
@@ -49,11 +50,15 @@ Must be covered by tests:
   (`src/internal/rules/rules_test.mbt`), and every pass of Adam7 against
   counting its lattice;
 - every color type and bit depth, interlaced or not, at every size up to
-  8 x 8, under several splits of input and output.
+  8 x 8, under several splits of input and output;
+- every check of a fixed-length ancillary chunk's length and values, and of
+  a reported chunk's keyword, compression fields and zlib stream, and
+  `max_chunk_bytes` both as a chunk comes and as it inflates.
 
 Beyond this module's tests, the private conformance module runs the decoder
-over PngSuite: every valid image against pypng's samples and typst's
-`decode_png`, under the harness's checks of splits, truncation, trailing
+over PngSuite: every valid image against pypng's samples and what pypng
+reads of gAMA, tRNS, bKGD, pHYs and sBIT, its text chunks against Python's
+zlib, and against typst's `decode_png`, under the harness's checks of splits, truncation, trailing
 bytes, `until=EndOfMember`, `reset` and corruption, and the broken images
 against the kinds of error their names describe.
 
@@ -61,3 +66,4 @@ against the kinds of error their names describe.
 
 | File | Budget | Reason |
 |---|---|---|
+| src/decoder.mbt | 2 | `blit` for JS (`#cfg(target="js")`), which copies a row byte by byte: the ledger measures native, which compiles the block copy instead. The gates run the same tests on JS, among them "step_into writes what step writes, into a whole array". |

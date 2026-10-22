@@ -67,6 +67,90 @@ pub const IDAT : Int32 = 2
 pub const IEND : Int32 = 3
 
 ///|
+/// cHRM's index in `known`.
+pub const CHRM : Int32 = 4
+
+///|
+/// cICP's index in `known`.
+pub const CICP : Int32 = 5
+
+///|
+/// gAMA's index in `known`.
+pub const GAMA : Int32 = 6
+
+///|
+/// iCCP's index in `known`.
+pub const ICCP : Int32 = 7
+
+///|
+/// mDCV's index in `known`.
+pub const MDCV : Int32 = 8
+
+///|
+/// cLLI's index in `known`.
+pub const CLLI : Int32 = 9
+
+///|
+/// sBIT's index in `known`.
+pub const SBIT : Int32 = 10
+
+///|
+/// sRGB's index in `known`.
+pub const SRGB : Int32 = 11
+
+///|
+/// bKGD's index in `known`.
+pub const BKGD : Int32 = 12
+
+///|
+/// tRNS's index in `known`.
+pub const TRNS : Int32 = 13
+
+///|
+/// hIST's index in `known`.
+pub const HIST : Int32 = 14
+
+///|
+/// acTL's index in `known`.
+pub const ACTL : Int32 = 15
+
+///|
+/// eXIf's index in `known`.
+pub const EXIF : Int32 = 16
+
+///|
+/// pHYs's index in `known`.
+pub const PHYS : Int32 = 17
+
+///|
+/// sPLT's index in `known`.
+pub const SPLT : Int32 = 18
+
+///|
+/// tIME's index in `known`.
+pub const TIME : Int32 = 19
+
+///|
+/// iTXt's index in `known`.
+pub const ITXT : Int32 = 20
+
+///|
+/// tEXt's index in `known`.
+pub const TEXT : Int32 = 21
+
+///|
+/// zTXt's index in `known`.
+pub const ZTXT : Int32 = 22
+
+///|
+/// fcTL's index in `known`.
+pub const FCTL : Int32 = 23
+
+///|
+/// fdAT's index in `known`.
+pub const FDAT : Int32 = 24
+
+///|
 /// Where an ancillary chunk of table 7 may come, by index in `known` (the
 /// critical ones are placed by `place` itself).
 let placements : FixedArray[Placement] = FixedArray::makei(

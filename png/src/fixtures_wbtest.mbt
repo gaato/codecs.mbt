@@ -203,7 +203,8 @@ priv struct Run {
 ///|
 /// Runs `decoder` over `input` in chunks of `chunk` bytes, with `room` bytes
 /// of output a step, or `room_needed` when that is more, checking after every step what any image decoder must
-/// keep: counts within what the step was given, writing only on `Rows`,
+/// keep: counts within what the step was given, writing only on `Rows` and
+/// `Metadata` (whose blocks are part of the output),
 /// `NeedMoreInput` with every byte consumed, and an error that sticks.
 fn run(
   decoder : Decoder,
@@ -258,7 +259,7 @@ fn run(
         "consumed \{consumed} of \{pending.length()}, produced \{produced} into \{out.length()}",
       )
     }
-    if produced != 0 && !(status is Rows) {
+    if produced != 0 && !(status is (Rows | Metadata)) {
       fail("\{@debug.to_string(status)} wrote \{produced} bytes")
     }
     peak = peak.max(decoder.memory_usage())
@@ -273,6 +274,7 @@ fn run(
           "Rows \{decoder.pass()} \{decoder.rows_first()}+\{decoder.rows_count()}",
         )
       }
+      Metadata => answers.push("Metadata \{decoder.metadata_type()}")
       NeedMoreInput => {
         if pending.length() != 0 || end {
           fail("NeedMoreInput with \{pending.length()} bytes left, end \{end}")

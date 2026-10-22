@@ -52,7 +52,7 @@ let png_vectors : Array[PngVector] = [
       #|AwgAEgAUPoAAIAFA4QMIABIAFD6AACABQOEDCAASABQ+gAAgAUDhAwgAEgAUPoAAIAFA4QMIABIA
       #|FD6AACABQOEDrNu2zb4Gs2n9C98FlZObRxMyAAAAAElFTkSuQmCC
     ),
-    reference: "ok 256x256 7fcf8ac366b5882df343a58c5f4eca3736ea8a69ee3a8cfa4227603199eea2a5",
+    reference: "ok 256x256 7fcf8ac366b5882df343a58c5f4eca3736ea8a69ee3a8cfa4227603199eea2a5; text 0 e3b0c44298fc1c14",
   },
   {
     name: "basi0g01",
@@ -62,7 +62,7 @@ let png_vectors : Array[PngVector] = [
       #|uXCj8tHe2Wlc5b9ZY9/ZKq9Mn9kn6kSeZIffW5w255m5G98IK01L1AFP5AFLAat6F67mlNKNMoot
       #|Y4N6cEUeFkhwLZqf9KEdL3pRqiHloYx//QCU41EdZhgi8gAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 fee3d83c1b62e2877326a20efa6b7daea5b2eee84dc72c35d6c49057c4e14a69",
+    reference: "ok 32x32 fee3d83c1b62e2877326a20efa6b7daea5b2eee84dc72c35d6c49057c4e14a69; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "basi0g02",
@@ -71,7 +71,7 @@ let png_vectors : Array[PngVector] = [
       #|eJxjUGLoYADhcoa7YJyTw3DsGJSUlgYxNm5EZ7OuZ13PEPUh6gMDkMHKAGRE4RZDSCBkEUpIUscQ
       #|uuo/GMMZGAIMMEEEA6YKwaCSOQCcUoBNhbbZfQAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 bd14cc029225eafca67eeb37227713e958e4a9d19e66838c6867db359425942f",
+    reference: "ok 32x32 bd14cc029225eafca67eeb37227713e958e4a9d19e66838c6867db359425942f; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "basi0g04",
@@ -82,7 +82,7 @@ let png_vectors : Array[PngVector] = [
       #|QNZpvsMH+TJHcBaHcjq/Mf+DoihLpbSua2OsZSCtcwyk7XsG0g4DA2m9ZyDtODKQNgQG0k4TgR8n
       #|geup000HFgAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 b4fbcf460e45f6a9a3c86328f0c1abed6a13c354c85554ff9f1760f87558226d",
+    reference: "ok 32x32 b4fbcf460e45f6a9a3c86328f0c1abed6a13c354c85554ff9f1760f87558226d; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "basi0g08",
@@ -93,7 +93,7 @@ let png_vectors : Array[PngVector] = [
       #|gr0H8F98sT+AuwetL9YMARw8WI7v8fTgO77HzoMtypJ66gBeQxtiV5Y0UwewGchF5r/Du5h2nYT5
       #|77AupsAPm7n/RegfnygAAAAASUVORK5CYII=
     ),
-    reference: "ok 32x32 3f79224ccb00156a58645afcd6521d0facbf9cdec212b03935eb25e59e9dc532",
+    reference: "ok 32x32 3f79224ccb00156a58645afcd6521d0facbf9cdec212b03935eb25e59e9dc532; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "basi0g16",
@@ -105,7 +105,7 @@ let png_vectors : Array[PngVector] = [
       #|/dup3LVFa1HXmA61LY59f6Ygp1Eg1gZGQaBRILYGdxoFYmtAGgXx9YmCfPD+RMHwuuAFVpjuiRT/
       #|//4AAAAASUVORK5CYII=
     ),
-    reference: "ok 32x32 bd5ce54014a325deabcef479b7b62639f5bd651e00741eaaa1dd37a66091778c",
+    reference: "ok 32x32 bd5ce54014a325deabcef479b7b62639f5bd651e00741eaaa1dd37a66091778c; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "basi2c08",
@@ -117,7 +117,7 @@ let png_vectors : Array[PngVector] = [
       #|yTqtpsmbc4Zaqy/AlJINkBogP13f4ZcNKEVngybP+6/v/NMGVPRtEZvkeT+Cc4f8DRidW8TWmjwj
       #|1Fp/24AxRleDN99NCjEh/D0zAAAAAElFTkSuQmCC
     ),
-    reference: "ok 32x32 3ff78c7d0ac9033c81fbcc389478d7a594ef5508979e1b6a63cfd5b7f1949beb",
+    reference: "ok 32x32 3ff78c7d0ac9033c81fbcc389478d7a594ef5508979e1b6a63cfd5b7f1949beb; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "basi2c16",
@@ -134,7 +134,7 @@ let png_vectors : Array[PngVector] = [
       #|E+3iZ/0furRogMkPgOzPABMYXrSLR7oD3yvare8xgcuJdvGOExiHaBcPmMD4RLt4ywTGLdrFnQn8
       #|P6Jd/B2kFN6z3xNE9wAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 e2703f2e6722086d78e9f0da1d1dda2174f92bd7e27f45ae5177b282ec626eff",
+    reference: "ok 32x32 e2703f2e6722086d78e9f0da1d1dda2174f92bd7e27f45ae5177b282ec626eff; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "basi3p01",
@@ -143,7 +143,7 @@ let png_vectors : Array[PngVector] = [
       #|7v8iImb/bBrSJgAAAClJREFUeJxjYICCD1C4CgpD0bCxMcOZM9hJCININj8QQIgPQAAhKBADAAm6
       #|Qi12qcOeAAAAAElFTkSuQmCC
     ),
-    reference: "ok 32x32 b3da8ea8f31027ca08f791fa4014a6c2e06b3d7977e6242faed61d43df957973",
+    reference: "ok 32x32 b3da8ea8f31027ca08f791fa4014a6c2e06b3d7977e6242faed61d43df957973; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "basi3p02",
@@ -153,7 +153,7 @@ let png_vectors : Array[PngVector] = [
       #|GUreuAFi9Pais78u+LqAgT+KP4oByPjKAGTw4xZDSCBkEUpIUvc/dBUYIxiYQqugLAQDKvEfwaCS
       #|OQC0Wn3pH3XhAwAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 08572da5f73c4b11c9ddc849f35278613fe1f97667d9d14706fd5b1b7e63811f",
+    reference: "ok 32x32 08572da5f73c4b11c9ddc849f35278613fe1f97667d9d14706fd5b1b7e63811f; gAMA 100000; sBIT 1,1,1; text 0 e3b0c44298fc1c14",
   },
   {
     name: "basi3p04",
@@ -165,7 +165,7 @@ let png_vectors : Array[PngVector] = [
       #|B9NATJMxrcC0C9NSTNsxnYFwT0do6Jkzq1aVlxsbv3s3cyamACpXUBBTAJXr4oIpgMq9exdTAI3L
       #|gCmAylVSwhRA5aalYQqgcnfvxhAAALN26mgMdNBfAAAAAElFTkSuQmCC
     ),
-    reference: "ok 32x32 bf91537a2275dca669cda244206fb228bffe1f34737a3e6db92e9bd0f95d0a54",
+    reference: "ok 32x32 bf91537a2275dca669cda244206fb228bffe1f34737a3e6db92e9bd0f95d0a54; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "basi3p08",
@@ -198,7 +198,7 @@ let png_vectors : Array[PngVector] = [
       #|szAYtsAhGAHr4Bj8ANoKb2ERPId+sB1OwxeghXAPJsEw+A774TK8A5oHM+EG/IH38Bf2wQqg0TAK
       #|DsN0eAlD4TgsBvoKm2AjjINHMBbOwAL4D3P+/hByr8HlAAAAAElFTkSuQmCC
     ),
-    reference: "ok 32x32 13a149ddd561daa99b0033e2f9aa5366c28ff11bbad9e555f8ab6a7f7acd8e02",
+    reference: "ok 32x32 13a149ddd561daa99b0033e2f9aa5366c28ff11bbad9e555f8ab6a7f7acd8e02; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "basi4a08",
@@ -208,7 +208,7 @@ let png_vectors : Array[PngVector] = [
       #|gECcs/ygoZsDyb7wA5Hoek2pMpAXeDw3VaVbMHTUADx/biG5Wbt+Lve2LD4W4FKoZnFYQQZovtmq
       #|d8+kNR2sMG8wBU6wwQlOuDb4hw2OCozsTz0JHVlVXQAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 699c411e440723b7857255cab5d47cc617e61f3511866d8745f50fbcc24535e9",
+    reference: "ok 32x32 699c411e440723b7857255cab5d47cc617e61f3511866d8745f50fbcc24535e9; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "basi4a16",
@@ -265,7 +265,7 @@ let png_vectors : Array[PngVector] = [
       #|5PgqISd+ICRfEtL1j0K6KoVUHhUyZ5qQeRuEzHML6T4h5MgX7EjPe/C/SQETOWwWx8sAAAAASUVO
       #|RK5CYII=
     ),
-    reference: "ok 32x32 efbbc333bdd49dec3f802d1f68ea1626a2300109809996ce4c0daa4696a46079",
+    reference: "ok 32x32 efbbc333bdd49dec3f802d1f68ea1626a2300109809996ce4c0daa4696a46079; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "basi6a08",
@@ -278,7 +278,7 @@ let png_vectors : Array[PngVector] = [
       #|5L9ZDbkbrABQdH/sUBXOgNoOVwAoG+Uz8M5tWQC1m8sA6m0gAxTPgB+qsgDqdSgDqNepDFA6A5+C
       #|SlP0aU5zQgAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 2eb6a2cb3166e9c188add371157e9f81caa18fdf34d218844ed930b53b7431d2",
+    reference: "ok 32x32 2eb6a2cb3166e9c188add371157e9f81caa18fdf34d218844ed930b53b7431d2; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "basi6a16",
@@ -358,7 +358,7 @@ let png_vectors : Array[PngVector] = [
       #|yBDaAjB3G6I0CX1+Q/gbkgcdBywd+gKlKalnafOlFeAoPFaLFvDVgmgdylSrtO7l9f8v2ufAfwAZ
       #|C+9JQJpSCQAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 165b1f18ae3a6b43badb788ea6ee9040d4fcf1d47ee28ee66c48e36f6a52768b",
+    reference: "ok 32x32 165b1f18ae3a6b43badb788ea6ee9040d4fcf1d47ee28ee66c48e36f6a52768b; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "basn0g01",
@@ -367,7 +367,7 @@ let png_vectors : Array[PngVector] = [
       #|eJwtzLEJAzAMBdHr0gSySiALejRvkBU8gsGNCmFFB1Hx4IovqurSpIRszqklUwbnUzRXEuIRsiG/
       #|SyY9G0JzJSVei9qynm9qyjBpLp0pYW7pbzBl8L8fEIdJL9AvFMkAAAAASUVORK5CYII=
     ),
-    reference: "ok 32x32 fee3d83c1b62e2877326a20efa6b7daea5b2eee84dc72c35d6c49057c4e14a69",
+    reference: "ok 32x32 fee3d83c1b62e2877326a20efa6b7daea5b2eee84dc72c35d6c49057c4e14a69; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "basn0g02",
@@ -375,7 +375,7 @@ let png_vectors : Array[PngVector] = [
       #|iVBORw0KGgoAAAANSUhEUgAAACAAAAAgAgAAAAAcoT2JAAAABGdBTUEAAYagMeiWXwAAAB9JREFU
       #|eJxjYAhd9R+M8TCIUMIAU4aPATMJH2OQuQcAvUl/gYsJiakAAAAASUVORK5CYII=
     ),
-    reference: "ok 32x32 bd14cc029225eafca67eeb37227713e958e4a9d19e66838c6867db359425942f",
+    reference: "ok 32x32 bd14cc029225eafca67eeb37227713e958e4a9d19e66838c6867db359425942f; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "basn0g04",
@@ -384,7 +384,7 @@ let png_vectors : Array[PngVector] = [
       #|eJxjYGAQFFRSMjZ2cQkNTUsrL2cgQwCV29FBjgAqd+ZMcgRQuatWkSOAyt29mxwBVO6ZM+QIoHLv
       #|3iVHAJX77h0ZAgAfFO4B6v9B+gAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 b4fbcf460e45f6a9a3c86328f0c1abed6a13c354c85554ff9f1760f87558226d",
+    reference: "ok 32x32 b4fbcf460e45f6a9a3c86328f0c1abed6a13c354c85554ff9f1760f87558226d; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "basn0g08",
@@ -393,7 +393,7 @@ let png_vectors : Array[PngVector] = [
       #|eJxjZGAkABQIyLMMBQWMDwgp+PcfP2B5MBwUMMoRkGdkonlcDAYFjI/wyv7/z/iH5nExGBQwyuCV
       #|ZWQEAFDl/nE14thZAAAAAElFTkSuQmCC
     ),
-    reference: "ok 32x32 3f79224ccb00156a58645afcd6521d0facbf9cdec212b03935eb25e59e9dc532",
+    reference: "ok 32x32 3f79224ccb00156a58645afcd6521d0facbf9cdec212b03935eb25e59e9dc532; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "basn0g16",
@@ -402,7 +402,7 @@ let png_vectors : Array[PngVector] = [
       #|eJzV0jEKwDAMQ1E5W+9/xtygk8AoezLVKgSj2Y8/OICnuFcTE2OgOoJgHQiZAN2C9kDKBOgW3AZC
       #|JkC3oD2QMgG6BbeBkAnQLWgPpExgP28H7E/0GTjPfwAW2EvYX64rn9cAAAAASUVORK5CYII=
     ),
-    reference: "ok 32x32 bd5ce54014a325deabcef479b7b62639f5bd651e00741eaaa1dd37a66091778c",
+    reference: "ok 32x32 bd5ce54014a325deabcef479b7b62639f5bd651e00741eaaa1dd37a66091778c; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "basn2c08",
@@ -411,7 +411,7 @@ let png_vectors : Array[PngVector] = [
       #|eJzt1cEJADAMAkCF7JH9t3ITO0Qr9KH4zuErtA0EO4AKFPgcoO3kfUx4QIECD0qHH8KEBxQo8KB0
       #|OCOpQIG7cHejwAGCsfleD0DPSwAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 3ff78c7d0ac9033c81fbcc389478d7a594ef5508979e1b6a63cfd5b7f1949beb",
+    reference: "ok 32x32 3ff78c7d0ac9033c81fbcc389478d7a594ef5508979e1b6a63cfd5b7f1949beb; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "basn2c16",
@@ -423,7 +423,7 @@ let png_vectors : Array[PngVector] = [
       #|A529WWAeerPAbPQoUH8GNNA5r9yAEjp7sYAeerGAKnoUyJ8BbXTOMxvwgM6eCPhBTwS8oTO/5kL+
       #|Xge7xOwAAAAASUVORK5CYII=
     ),
-    reference: "ok 32x32 e2703f2e6722086d78e9f0da1d1dda2174f92bd7e27f45ae5177b282ec626eff",
+    reference: "ok 32x32 e2703f2e6722086d78e9f0da1d1dda2174f92bd7e27f45ae5177b282ec626eff; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "basn3p01",
@@ -431,7 +431,7 @@ let png_vectors : Array[PngVector] = [
       #|iVBORw0KGgoAAAANSUhEUgAAACAAAAAgAQMAAABJtOi3AAAABGdBTUEAAYagMeiWXwAAAAZQTFRF
       #|7v8iImb/bBrSJgAAABVJREFUeJxj4AcCBjTiAxCgEwOkDgC7Hz/Bk4JmWQAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 b3da8ea8f31027ca08f791fa4014a6c2e06b3d7977e6242faed61d43df957973",
+    reference: "ok 32x32 b3da8ea8f31027ca08f791fa4014a6c2e06b3d7977e6242faed61d43df957973; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "basn3p02",
@@ -440,7 +440,7 @@ let png_vectors : Array[PngVector] = [
       #|AQEBfC53ggAAAAxQTFRFAP8A/wAA//8AAAD/ZT8rugAAACJJREFUeJxj+B+6igGEGfAw8MnBGKug
       #|LHwMqNL/+BiDzD0AvUl/geqJjhsAAAAASUVORK5CYII=
     ),
-    reference: "ok 32x32 08572da5f73c4b11c9ddc849f35278613fe1f97667d9d14706fd5b1b7e63811f",
+    reference: "ok 32x32 08572da5f73c4b11c9ddc849f35278613fe1f97667d9d14706fd5b1b7e63811f; gAMA 100000; sBIT 1,1,1; text 0 e3b0c44298fc1c14",
   },
   {
     name: "basn3p04",
@@ -450,7 +450,7 @@ let png_vectors : Array[PngVector] = [
       #|AP9E0rBJvQAAAEdJREFUeJxj6OgIDT1zZtWq8nJj43fvZs5kIEMAlSsoSI4AKtfFhRwBVO7du+QI
       #|oHEZyBFA5SopkSOAyk1LI0cAlbt7NxkCAODE6tEPggV9AAAAAElFTkSuQmCC
     ),
-    reference: "ok 32x32 bf91537a2275dca669cda244206fb228bffe1f34737a3e6db92e9bd0f95d0a54",
+    reference: "ok 32x32 bf91537a2275dca669cda244206fb228bffe1f34737a3e6db92e9bd0f95d0a54; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "basn3p08",
@@ -479,7 +479,7 @@ let png_vectors : Array[PngVector] = [
       #|yElpzjKGErQkqvMyC7jFv9xmBM2JuTzDRDLxN4l4jF1EZjIwmhfZzSOMpT4xiH70IQG/k5En2UKc
       #|owudycsG8jCBmtwHgRv+EIeWyOAAAAAASUVORK5CYII=
     ),
-    reference: "ok 32x32 13a149ddd561daa99b0033e2f9aa5366c28ff11bbad9e555f8ab6a7f7acd8e02",
+    reference: "ok 32x32 13a149ddd561daa99b0033e2f9aa5366c28ff11bbad9e555f8ab6a7f7acd8e02; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "basn4a08",
@@ -488,7 +488,7 @@ let png_vectors : Array[PngVector] = [
       #|eJxj/M/AwAGFnGg0MSKcLN8ZKAMsP4a+AaNhMBoGVDFgNBBHw4AqBowG4mgYUMMAAN8qIH3E64XI
       #|AAAAAElFTkSuQmCC
     ),
-    reference: "ok 32x32 699c411e440723b7857255cab5d47cc617e61f3511866d8745f50fbcc24535e9",
+    reference: "ok 32x32 699c411e440723b7857255cab5d47cc617e61f3511866d8745f50fbcc24535e9; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "basn4a16",
@@ -533,7 +533,7 @@ let png_vectors : Array[PngVector] = [
       #|7a2UzNxLSuebM+CkYDOrOGBlaxkrLXc1MyY3lp55ye2haUmvwXGV4TxJMr73gDOqAFsZiyfyGhwX
       #|kQnZsmqteSGcFxPYO2n58poN/wUgAscPw+GsdQAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 efbbc333bdd49dec3f802d1f68ea1626a2300109809996ce4c0daa4696a46079",
+    reference: "ok 32x32 efbbc333bdd49dec3f802d1f68ea1626a2300109809996ce4c0daa4696a46079; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "basn6a08",
@@ -543,7 +543,7 @@ let png_vectors : Array[PngVector] = [
       #|DVigB041HiJ9gFyCVOMbsEIPXNwuAHkgiJL/4qABNqB7QAeUPBAE2QAZUDZAfwEb8ABSIBqcFg+4
       #|TAAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 2eb6a2cb3166e9c188add371157e9f81caa18fdf34d218844ed930b53b7431d2",
+    reference: "ok 32x32 2eb6a2cb3166e9c188add371157e9f81caa18fdf34d218844ed930b53b7431d2; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "basn6a16",
@@ -610,7 +610,7 @@ let png_vectors : Array[PngVector] = [
       #|NHNBPiZm5/5vbG7+/fr9ofVvbgb5NJbZ1ny3NmqZZLb5LmS2iRluxsYEZG/T/kdx/xvwP2XY7MOt
       #|27XzAAAAAElFTkSuQmCC
     ),
-    reference: "ok 32x32 165b1f18ae3a6b43badb788ea6ee9040d4fcf1d47ee28ee66c48e36f6a52768b",
+    reference: "ok 32x32 165b1f18ae3a6b43badb788ea6ee9040d4fcf1d47ee28ee66c48e36f6a52768b; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "bgai4a08",
@@ -620,7 +620,7 @@ let png_vectors : Array[PngVector] = [
       #|gECcs/ygoZsDyb7wA5Hoek2pMpAXeDw3VaVbMHTUADx/biG5Wbt+Lve2LD4W4FKoZnFYQQZovtmq
       #|d8+kNR2sMG8wBU6wwQlOuDb4hw2OCozsTz0JHVlVXQAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 699c411e440723b7857255cab5d47cc617e61f3511866d8745f50fbcc24535e9",
+    reference: "ok 32x32 699c411e440723b7857255cab5d47cc617e61f3511866d8745f50fbcc24535e9; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "bgai4a16",
@@ -677,7 +677,7 @@ let png_vectors : Array[PngVector] = [
       #|5PgqISd+ICRfEtL1j0K6KoVUHhUyZ5qQeRuEzHML6T4h5MgX7EjPe/C/SQETOWwWx8sAAAAASUVO
       #|RK5CYII=
     ),
-    reference: "ok 32x32 efbbc333bdd49dec3f802d1f68ea1626a2300109809996ce4c0daa4696a46079",
+    reference: "ok 32x32 efbbc333bdd49dec3f802d1f68ea1626a2300109809996ce4c0daa4696a46079; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "bgan6a08",
@@ -687,7 +687,7 @@ let png_vectors : Array[PngVector] = [
       #|DVigB041HiJ9gFyCVOMbsEIPXNwuAHkgiJL/4qABNqB7QAeUPBAE2QAZUDZAfwEb8ABSIBqcFg+4
       #|TAAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 2eb6a2cb3166e9c188add371157e9f81caa18fdf34d218844ed930b53b7431d2",
+    reference: "ok 32x32 2eb6a2cb3166e9c188add371157e9f81caa18fdf34d218844ed930b53b7431d2; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "bgan6a16",
@@ -754,7 +754,7 @@ let png_vectors : Array[PngVector] = [
       #|NHNBPiZm5/5vbG7+/fr9ofVvbgb5NJbZ1ny3NmqZZLb5LmS2iRluxsYEZG/T/kdx/xvwP2XY7MOt
       #|27XzAAAAAElFTkSuQmCC
     ),
-    reference: "ok 32x32 165b1f18ae3a6b43badb788ea6ee9040d4fcf1d47ee28ee66c48e36f6a52768b",
+    reference: "ok 32x32 165b1f18ae3a6b43badb788ea6ee9040d4fcf1d47ee28ee66c48e36f6a52768b; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "bgbn4a08",
@@ -763,7 +763,7 @@ let png_vectors : Array[PngVector] = [
       #|AACqjSMyAAAANUlEQVR4nGP8z8DAAYWcaDQxIpws3xkoAyw/hr4Bo2EwGgZUMWA0EEfDgCoGjAbi
       #|aBhQwwAA3yogfcTrhcgAAAAASUVORK5CYII=
     ),
-    reference: "ok 32x32 699c411e440723b7857255cab5d47cc617e61f3511866d8745f50fbcc24535e9",
+    reference: "ok 32x32 699c411e440723b7857255cab5d47cc617e61f3511866d8745f50fbcc24535e9; gAMA 100000; bKGD 0; text 0 e3b0c44298fc1c14",
   },
   {
     name: "bggn4a16",
@@ -808,7 +808,7 @@ let png_vectors : Array[PngVector] = [
       #|+JKi7f6UKFwwKXtuJIXtrZTM3EtK55sz4KRgM6s4YGVrGSstdzUzJjeWnnnJ7aFpSa/BcZXhPEky
       #|vveAM6oAWxmLJ/IaHBeRCdmyaq15IZwXE9g7afnymg3/BSACxw/D4ax1AAAAAElFTkSuQmCC
     ),
-    reference: "ok 32x32 efbbc333bdd49dec3f802d1f68ea1626a2300109809996ce4c0daa4696a46079",
+    reference: "ok 32x32 efbbc333bdd49dec3f802d1f68ea1626a2300109809996ce4c0daa4696a46079; gAMA 100000; bKGD 43908; text 0 e3b0c44298fc1c14",
   },
   {
     name: "bgwn6a08",
@@ -818,7 +818,7 @@ let png_vectors : Array[PngVector] = [
       #|MF57fpz/ujODHXUFRwPKBqj5DVigB041HiJ9gFyCVOMbsEIPXNwuAHkgiJL/4qABNqB7QAeUPBAE
       #|2QAZUDZAfwEb8ABSIBqcFg+4TAAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 2eb6a2cb3166e9c188add371157e9f81caa18fdf34d218844ed930b53b7431d2",
+    reference: "ok 32x32 2eb6a2cb3166e9c188add371157e9f81caa18fdf34d218844ed930b53b7431d2; gAMA 100000; bKGD 255,255,255; text 0 e3b0c44298fc1c14",
   },
   {
     name: "bgyn6a16",
@@ -885,7 +885,7 @@ let png_vectors : Array[PngVector] = [
       #|gPSCJP7puDUCVppmtinxCfNxNHNBPiZm5/5vbG7+/fr9ofVvbgb5NJbZ1ny3NmqZZLb5LmS2iRlu
       #|xsYEZG/T/kdx/xvwP2XY7MOt27XzAAAAAElFTkSuQmCC
     ),
-    reference: "ok 32x32 165b1f18ae3a6b43badb788ea6ee9040d4fcf1d47ee28ee66c48e36f6a52768b",
+    reference: "ok 32x32 165b1f18ae3a6b43badb788ea6ee9040d4fcf1d47ee28ee66c48e36f6a52768b; gAMA 100000; bKGD 65535,65535,0; text 0 e3b0c44298fc1c14",
   },
   {
     name: "ccwn2c08",
@@ -918,7 +918,7 @@ let png_vectors : Array[PngVector] = [
       #|/pWXDuOeqe7ONrr1spbTIv+yLDVm+Yl9Dzy7+NyeA/tvveTrAECWy8pKhUxXVy+PRutKKqgeeeTB
       #|XffM317uJ4E7t/4N+Ky7RKwdiSgAAAAASUVORK5CYII=
     ),
-    reference: "ok 32x32 aa3f73251f6bbc2941340f7ec100cfdce91405f81b450f61f1988e34e34f4e31",
+    reference: "ok 32x32 aa3f73251f6bbc2941340f7ec100cfdce91405f81b450f61f1988e34e34f4e31; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "ccwn3p08",
@@ -952,7 +952,7 @@ let png_vectors : Array[PngVector] = [
       #|68zMYrS1Ve/fv286YQL72yPogOHI45iY2bP1JwBlP6phSIPTQ52jY8jHjx8xNcMTLV4AAPEBazSl
       #|s8MzAAAAAElFTkSuQmCC
     ),
-    reference: "ok 32x32 870b08cf7b4077b516a493de8a05da4c6bb74b51b9ff729fe531420d65ab112e",
+    reference: "ok 32x32 870b08cf7b4077b516a493de8a05da4c6bb74b51b9ff729fe531420d65ab112e; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "cdfn2c08",
@@ -966,7 +966,7 @@ let png_vectors : Array[PngVector] = [
       #|nNozrQTLr8RbxZMix9Z9cDQfxz1B2kK0WY0dabc5EtlRf0B1/Ku63McfFzN1pnMg8LcAAAAASUVO
       #|RK5CYII=
     ),
-    reference: "ok 8x32 1ee277423b26ef991e62d0a6e5135879fb2a5101a0559e087fca6f055902eb4a",
+    reference: "ok 8x32 1ee277423b26ef991e62d0a6e5135879fb2a5101a0559e087fca6f055902eb4a; gAMA 100000; pHYs 1,4,0; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "cdhn2c08",
@@ -979,7 +979,7 @@ let png_vectors : Array[PngVector] = [
       #|5HDU1JWi6WqdhkFkH63xZhCNIr8oPsAGkacvNu2d8YOH3ql+a9N/CM1cqmi++6QAAAAASUVORK5C
       #|YII=
     ),
-    reference: "ok 32x8 2d5a7c970865c21cf33f521c6cfabf66edb8b47b4606f9ffe1edc284e49a1bd0",
+    reference: "ok 32x8 2d5a7c970865c21cf33f521c6cfabf66edb8b47b4606f9ffe1edc284e49a1bd0; gAMA 100000; pHYs 4,1,0; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "cdsn2c08",
@@ -990,7 +990,7 @@ let png_vectors : Array[PngVector] = [
       #|X/PoNvbbNlQkJ0dqRI0Qxz5Qg+VlffxQXQuyEsphFxNP3V93hxQKfAEqsC/QF17WrgAAAABJRU5E
       #|rkJggg==
     ),
-    reference: "ok 8x8 b3e7927207f259f28f5f28560777087cb9bbe544638e6004f6dd354263696da4",
+    reference: "ok 8x8 b3e7927207f259f28f5f28560777087cb9bbe544638e6004f6dd354263696da4; gAMA 100000; pHYs 1,1,0; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "cdun2c08",
@@ -1009,7 +1009,7 @@ let png_vectors : Array[PngVector] = [
       #|h2boC3z10dZB0PKvE+FEl+/9CLXPFn9KaT+ert9jAdZ+7fDwkiuMKwvnr4TB23Q+inJs0cjmNQD2
       #|iXkVTS7R5fNmDFCtNsDx+f6C/QMQQNfOLmy7EgAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 081245750052f6a4dba236e82d2abdc5a06fd60b3d78fabcb8c4a96b5b158526",
+    reference: "ok 32x32 081245750052f6a4dba236e82d2abdc5a06fd60b3d78fabcb8c4a96b5b158526; gAMA 100000; pHYs 1000,1000,1; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "ch1n3p04",
@@ -1020,7 +1020,7 @@ let png_vectors : Array[PngVector] = [
       #|eJxj6OgIDT1zZtWq8nJj43fvZs5kIEMAlSsoSI4AKtfFhRwBVO7du+QIoHEZyBFA5SopkSOAyk1L
       #|I0cAlbt7NxkCAODE6tEPggV9AAAAAElFTkSuQmCC
     ),
-    reference: "ok 32x32 bf91537a2275dca669cda244206fb228bffe1f34737a3e6db92e9bd0f95d0a54",
+    reference: "ok 32x32 bf91537a2275dca669cda244206fb228bffe1f34737a3e6db92e9bd0f95d0a54; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "ch2n3p08",
@@ -1058,7 +1058,7 @@ let png_vectors : Array[PngVector] = [
       #|OKm4zIfM5DixiB/ISWnOMoYStCSq8zILuMW/3GYEzYm5PMNEMvE3iXiMXURmMjCaF9nNI4ylPjGI
       #|fvQhAb+TkSfZQpyjC53JywbyMIGa3AeBG/4Qh5bI4AAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 13a149ddd561daa99b0033e2f9aa5366c28ff11bbad9e555f8ab6a7f7acd8e02",
+    reference: "ok 32x32 13a149ddd561daa99b0033e2f9aa5366c28ff11bbad9e555f8ab6a7f7acd8e02; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "cm0n0g04",
@@ -1070,7 +1070,7 @@ let png_vectors : Array[PngVector] = [
       #|Q7wgEglj1HEWnotO21UjhCkxMbcujYEVchDk8GYDF+QwsIHkZ2gopYF0/QAe2cJF+P+JawAAAABJ
       #|RU5ErkJggg==
     ),
-    reference: "ok 32x32 81b1366b7b24ef086de65ecc83ee1dc00b060813810bd1e0f4f059a376d5d2c3",
+    reference: "ok 32x32 81b1366b7b24ef086de65ecc83ee1dc00b060813810bd1e0f4f059a376d5d2c3; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "cm7n0g04",
@@ -1082,7 +1082,7 @@ let png_vectors : Array[PngVector] = [
       #|Q7wgEglj1HEWnotO21UjhCkxMbcujYEVchDk8GYDF+QwsIHkZ2gopYF0/QAe2cJF+P+JawAAAABJ
       #|RU5ErkJggg==
     ),
-    reference: "ok 32x32 81b1366b7b24ef086de65ecc83ee1dc00b060813810bd1e0f4f059a376d5d2c3",
+    reference: "ok 32x32 81b1366b7b24ef086de65ecc83ee1dc00b060813810bd1e0f4f059a376d5d2c3; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "cm9n0g04",
@@ -1094,7 +1094,7 @@ let png_vectors : Array[PngVector] = [
       #|Q7wgEglj1HEWnotO21UjhCkxMbcujYEVchDk8GYDF+QwsIHkZ2gopYF0/QAe2cJF+P+JawAAAABJ
       #|RU5ErkJggg==
     ),
-    reference: "ok 32x32 81b1366b7b24ef086de65ecc83ee1dc00b060813810bd1e0f4f059a376d5d2c3",
+    reference: "ok 32x32 81b1366b7b24ef086de65ecc83ee1dc00b060813810bd1e0f4f059a376d5d2c3; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "cs3n2c16",
@@ -1104,7 +1104,7 @@ let png_vectors : Array[PngVector] = [
       #|qUNsiBBQZ1gR0cARUFIz3pug3586wo5+rOcfIaBOsCSggSOgpcB8D4D3R9DgfUyECIhDbAhp4Ajo
       #|KPD+CBq8P4IG72MiQkCdYUVEA0dAyQcwUyZpXH92ZwAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 3c4215d3daa0f300b80f7dd890375122e9e4e8a754a2667fa65acc2a75082dfd",
+    reference: "ok 32x32 3c4215d3daa0f300b80f7dd890375122e9e4e8a754a2667fa65acc2a75082dfd; gAMA 100000; sBIT 13,13,13; text 0 e3b0c44298fc1c14",
   },
   {
     name: "cs3n3p08",
@@ -1115,7 +1115,7 @@ let png_vectors : Array[PngVector] = [
       #|yscBggAAALGzYldUsO2/pyMk73SGGE7QF3pDe2gLzdADHA7QDqIfdIUu0AocntAIbaAFdIdu0BIc
       #|1tAEvaABOkIf+AMiQDPhd/SuJgAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 14192c19349762587d2e1d488ace85a7235b7f43b7a4769827c9b75d4ef5678f",
+    reference: "ok 32x32 14192c19349762587d2e1d488ace85a7235b7f43b7a4769827c9b75d4ef5678f; gAMA 100000; sBIT 3,3,3; text 0 e3b0c44298fc1c14",
   },
   {
     name: "cs5n2c08",
@@ -1125,7 +1125,7 @@ let png_vectors : Array[PngVector] = [
       #|wQgaastFyOPeJ7ctWLZATzCCjsLuAfIgBPlXBHkQ/kgwgm8KeRCCPAhB/hVh2QI9wQgaXuXOFG8Q
       #|ELloAAAAAElFTkSuQmCC
     ),
-    reference: "ok 32x32 086bb1fe427cb0494643404563367134d4ae449bf78ab64bd114c839f5c412f1",
+    reference: "ok 32x32 086bb1fe427cb0494643404563367134d4ae449bf78ab64bd114c839f5c412f1; gAMA 100000; sBIT 5,5,5; text 0 e3b0c44298fc1c14",
   },
   {
     name: "cs5n3p08",
@@ -1136,7 +1136,7 @@ let png_vectors : Array[PngVector] = [
       #|9QAAAEtJREFUeJyFwQUBwAAAgDDu7u79Wz4CG5NA9YJW8AhqwSUoBIdgFISCUvAKBkEgWASp4BN0
       #|glkQCVZBLNgEiWAXZIJccAoqwS1oxA/GcT4B7dbxuwAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 128ee9a96de345dda21aeed4962c11416aad612c7d9a0a57ae9c074b241df85f",
+    reference: "ok 32x32 128ee9a96de345dda21aeed4962c11416aad612c7d9a0a57ae9c074b241df85f; gAMA 100000; sBIT 5,5,5; text 0 e3b0c44298fc1c14",
   },
   {
     name: "cs8n2c08",
@@ -1145,7 +1145,7 @@ let png_vectors : Array[PngVector] = [
       #|eJzt1UENADAMQlGa4GPzr2pT0olo/mkgoO9EqRYba9HADhBgmGq4CL7sffkECDBNie6B4EGw4F8R
       #|4AOgBA+CBQ+CdQIEGOYB69wUb0ah5KoAAAAASUVORK5CYII=
     ),
-    reference: "ok 32x32 f7413c817fa3bd9e5f944dc3eb1ca5277ffbfd03e212b9760c0e90dc9334464a",
+    reference: "ok 32x32 f7413c817fa3bd9e5f944dc3eb1ca5277ffbfd03e212b9760c0e90dc9334464a; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "cs8n3p08",
@@ -1156,7 +1156,7 @@ let png_vectors : Array[PngVector] = [
       #|wAAAgDDu7u79Wz4CG7UgEHyCR3AJDsEimASDoBFsgliQCypBL1CZIBQkgkJQClrBLogEqaATjIJZ
       #|sApOwS14xQ8p4j4B+PNT2QAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 7e482973fadf002cbe3dbde0ad2e2c6843907412d50593f2bcfb2bbacddf8f26",
+    reference: "ok 32x32 7e482973fadf002cbe3dbde0ad2e2c6843907412d50593f2bcfb2bbacddf8f26; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "ct0n0g04",
@@ -1167,7 +1167,7 @@ let png_vectors : Array[PngVector] = [
       #|6FC6gK++e3hw510DOYcvB3CPKiQo7CrpeezVg6DX/h7a6efoQPdDvCASCWPUcRaei07bVSOEKTEx
       #|ty6NgRVyEOTwZgMX5DCwgeRnaCilgXT9AB7ZwkX4/4lrAAAAAElFTkSuQmCC
     ),
-    reference: "ok 32x32 81b1366b7b24ef086de65ecc83ee1dc00b060813810bd1e0f4f059a376d5d2c3",
+    reference: "ok 32x32 81b1366b7b24ef086de65ecc83ee1dc00b060813810bd1e0f4f059a376d5d2c3; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "ct1n0g04",
@@ -1187,7 +1187,7 @@ let png_vectors : Array[PngVector] = [
       #|HqbtRgs76FC6gK++e3hw510DOYcvB3CPKiQo7CrpeezVg6DX/h7a6efoQPdDvCASCWPUcRaei07b
       #|VSOEKTExty6NgRVyEOTwZgMX5DCwgeRnaCilgXT9AB7ZwkX4/4lrAAAAAElFTkSuQmCC
     ),
-    reference: "ok 32x32 81b1366b7b24ef086de65ecc83ee1dc00b060813810bd1e0f4f059a376d5d2c3",
+    reference: "ok 32x32 81b1366b7b24ef086de65ecc83ee1dc00b060813810bd1e0f4f059a376d5d2c3; gAMA 100000; text 6 9b33d3309e76db28",
   },
   {
     name: "cten0g04",
@@ -1207,7 +1207,7 @@ let png_vectors : Array[PngVector] = [
       #|ngDcSRBAlgAIQAxctYo8AYSTwFyyBBDc3bvPnCFPAMGFeo50AQDds/NRVdY0lwAAAABJRU5ErkJg
       #|gg==
     ),
-    reference: "ok 32x32 77699e782de5ebfedb99b308a21528f33beb236395833ee1aeff8f4c9b174a42",
+    reference: "ok 32x32 77699e782de5ebfedb99b308a21528f33beb236395833ee1aeff8f4c9b174a42; gAMA 100000; text 6 c88d71d226e60d98",
   },
   {
     name: "ctfn0g04",
@@ -1226,7 +1226,7 @@ let png_vectors : Array[PngVector] = [
       #|VCiRY/gPBsbGLi6hoWlp5eUMZAkoKSG4HR3kCfz/j+DOnEmeAAqXgTwBBHfVKvIE0LhkCSC4u3ef
       #|OUOeAILLAAGkCwAA+XLyQRLQxL0AAAAASUVORK5CYII=
     ),
-    reference: "ok 32x32 cae934cfbad1cf0260aa91c9d374a7479417d074c850bfc0a0dd163562fd81e9",
+    reference: "ok 32x32 cae934cfbad1cf0260aa91c9d374a7479417d074c850bfc0a0dd163562fd81e9; gAMA 100000; text 6 38b501089a1cc623",
   },
   {
     name: "ctgn0g04",
@@ -1253,7 +1253,7 @@ let png_vectors : Array[PngVector] = [
       #|0WjBAhawgAUsYKEWsFALWEALFrLTnd3pPcf/DpkAIEuptbXex5gTAkSSf5ppkINma2nQGvl9hLsC
       #|keR7KRIK5CX3vTXIBM7RIAcj7xXgAUU58kEPspNFAAAAAElFTkSuQmCC
     ),
-    reference: "ok 32x32 123ebbb7d635798b50d23fdc8f9797400d3695ac41916f6a44878eadab213277",
+    reference: "ok 32x32 123ebbb7d635798b50d23fdc8f9797400d3695ac41916f6a44878eadab213277; gAMA 100000; text 6 bec9b1b86fed26d8",
   },
   {
     name: "cthn0g04",
@@ -1282,7 +1282,7 @@ let png_vectors : Array[PngVector] = [
       #|BFxc/v8HO4kByGUgTyA09P9/sJMYVq0iTwDJSRBAhgCMCzLwzBnyBGDc3bsZGO7eJUsAAEBI89kM
       #|zfvBAAAAAElFTkSuQmCC
     ),
-    reference: "ok 32x32 fa41b099d3d89463decf1463c6fb1853d592703f55580659af57f87f2f80ed8e",
+    reference: "ok 32x32 fa41b099d3d89463decf1463c6fb1853d592703f55580659af57f87f2f80ed8e; gAMA 100000; text 6 e7384872eda19072",
   },
   {
     name: "ctjn0g04",
@@ -1305,7 +1305,7 @@ let png_vectors : Array[PngVector] = [
       #|kCOgpGRs/P8/jDtzJjkCIAP//4cayLBqFTkCaFwGcgSQnMSwe/eZM+QIwLggA8+cuXuXHAEYd/du
       #|oKMY3r0jQwAATn/xuQxIlj4AAAAASUVORK5CYII=
     ),
-    reference: "ok 32x32 054be0ed7c82689a470b5834640e99753ab961083e2d2f400c8a91ddca498546",
+    reference: "ok 32x32 054be0ed7c82689a470b5834640e99753ab961083e2d2f400c8a91ddca498546; gAMA 100000; text 6 d6a752e8108e42b5",
   },
   {
     name: "ctzn0g04",
@@ -1325,7 +1325,7 @@ let png_vectors : Array[PngVector] = [
       #|6efoQPdDvCASCWPUcRaei07bVSOEKTExty6NgRVyEOTwZgMX5DCwgeRnaCilgXT9AB7ZwkX4/4lr
       #|AAAAAElFTkSuQmCC
     ),
-    reference: "ok 32x32 81b1366b7b24ef086de65ecc83ee1dc00b060813810bd1e0f4f059a376d5d2c3",
+    reference: "ok 32x32 81b1366b7b24ef086de65ecc83ee1dc00b060813810bd1e0f4f059a376d5d2c3; gAMA 100000; text 6 b8dddfd3fd9d7349",
   },
   {
     name: "exif2c08",
@@ -1363,7 +1363,7 @@ let png_vectors : Array[PngVector] = [
       #|5+d0mLKOcpUa/Le1ALghLGRkJegqljYAQJnKGU10eR7lLwD/kXl0LQA6BMtT2eUFK0/sMo9uvbr+
       #|CztK5Y3mPSskAAAAAElFTkSuQmCC
     ),
-    reference: "ok 32x32 e30c3d99987a4addf9d5c6dbdb818b9daa40266798d95730027f532b0af7c927",
+    reference: "ok 32x32 e30c3d99987a4addf9d5c6dbdb818b9daa40266798d95730027f532b0af7c927; text 0 e3b0c44298fc1c14",
   },
   {
     name: "f00n0g08",
@@ -1375,7 +1375,7 @@ let png_vectors : Array[PngVector] = [
       #|bRHh9DBFdcqpCL8f+1CtcyLC7Sd9BMGxCEj6iIKWCKIg9vEnOEpFWPr1aVZF8j9oJCLLi38/iEND
       #|UDcENUNwYAgsgSWwxC/EfcpYUKbOtgAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 7ba6cb6da925cf1aa5c00575ecaaba8e87689639d54cdc19aa1bdc7c7b851f6e",
+    reference: "ok 32x32 7ba6cb6da925cf1aa5c00575ecaaba8e87689639d54cdc19aa1bdc7c7b851f6e; text 0 e3b0c44298fc1c14",
   },
   {
     name: "f00n2c08",
@@ -1425,7 +1425,7 @@ let png_vectors : Array[PngVector] = [
       #|kPAvE4QZwgLJCskG2Q6DAwYnjC6Y3EjyJAwEZh9S/BiowBJAahDWENLDyIhgcBSZMQxRYY8nDAQ5
       #|Ohz8D28m/FokjZPFAAAAAElFTkSuQmCC
     ),
-    reference: "ok 32x32 48ebbeec090aeee19eaf5c530de7206558ebeb7e764b3d64622b23f7d35d8c34",
+    reference: "ok 32x32 48ebbeec090aeee19eaf5c530de7206558ebeb7e764b3d64622b23f7d35d8c34; text 0 e3b0c44298fc1c14",
   },
   {
     name: "f01n0g08",
@@ -1437,7 +1437,7 @@ let png_vectors : Array[PngVector] = [
       #|JxaoGsQtceIZVYO4KU68omoQN6IT76gaxPXgxCeqBnFNBvGD/1emMIdB/C5BmcIUClHedCkYQ1tQ
       #|2BYMbAuSbUF0BNERREf8AZVRLIMTf6sKAAAAAElFTkSuQmCC
     ),
-    reference: "ok 32x32 6722cab2e71779b316ef8eda1314dc314e6c02b07e4896e5ed0cafe30284a927",
+    reference: "ok 32x32 6722cab2e71779b316ef8eda1314dc314e6c02b07e4896e5ed0cafe30284a927; text 0 e3b0c44298fc1c14",
   },
   {
     name: "f01n2c08",
@@ -1464,7 +1464,7 @@ let png_vectors : Array[PngVector] = [
       #|cGl/zyEUwoSvHAXCJhDSIA7ysppB676dO9g65FFEEZfQWmMo49cVPwuEo0DYBMImEEvngq2DrYOA
       #|PEQUUYKE0vHOcxAIR4FwEYhf/gtC7nstgnuX5wAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 83c42af816dfbfe062ab0556496475918886770ae49282f0cf9772a0c0429006",
+    reference: "ok 32x32 83c42af816dfbfe062ab0556496475918886770ae49282f0cf9772a0c0429006; text 0 e3b0c44298fc1c14",
   },
   {
     name: "f02n0g08",
@@ -1477,7 +1477,7 @@ let png_vectors : Array[PngVector] = [
       #|4g7A7HJ8MTpTgiEJ/D/1B0MSK6trG1s7e51DnYNBieXVRRgLgrEgGAuCsSCIgiAK4hfp5Je/v8zr
       #|/QAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 b188c36f926b7284ecc9981dd054aec56af32846b2fb4434260b7bba57c3a6da",
+    reference: "ok 32x32 b188c36f926b7284ecc9981dd054aec56af32846b2fb4434260b7bba57c3a6da; text 0 e3b0c44298fc1c14",
   },
   {
     name: "f02n2c08",
@@ -1514,7 +1514,7 @@ let png_vectors : Array[PngVector] = [
       #|xSteqAKE8wFCFSBUAaIr6Cph+YCeYnRzOjl5Rl4ZmtJW+gKE05LpBQj7MXsxO44tx6ZjLdIH/B9D
       #|PhSnV2U9PQAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 e23c806d2ff0b835bf8106530be6fe47a9c252780904931525ce44a72c7e937e",
+    reference: "ok 32x32 e23c806d2ff0b835bf8106530be6fe47a9c252780904931525ce44a72c7e937e; text 0 e3b0c44298fc1c14",
   },
   {
     name: "f03n0g08",
@@ -1527,7 +1527,7 @@ let png_vectors : Array[PngVector] = [
       #|Ij7ZMXHHxBetdje5L7ZN3DHPFx3aCaAGaRP3uPgi3qH99/sDRZO+KgEBcGznQ8ewYnklubYemCAV
       #|rAgmJ4D2yzDRBRFCe0MWKvogVPggTAxAiPgHY2dcQrz+CzkAAAAASUVORK5CYII=
     ),
-    reference: "ok 32x32 b1bf13e1d1d30fd33f3b4222e239ef3b2cc35a7db2143246bb7a20231fc3ee2e",
+    reference: "ok 32x32 b1bf13e1d1d30fd33f3b4222e239ef3b2cc35a7db2143246bb7a20231fc3ee2e; text 0 e3b0c44298fc1c14",
   },
   {
     name: "f03n2c08",
@@ -1556,7 +1556,7 @@ let png_vectors : Array[PngVector] = [
       #|MUyvaup0DHjV1bGoV4syqj2GcdvvZ6S96iiR9AGGvRpidGYThulrvZjUZSyvo5myq+6kpBl3fe4N
       #|AAYYw14t2lfNVM0HdMz4/wOljpe9l86W/gAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 fa2426c1c6eae9e320c1dd24934dfd2174441e3d6c2c89b58f26568073715b4e",
+    reference: "ok 32x32 fa2426c1c6eae9e320c1dd24934dfd2174441e3d6c2c89b58f26568073715b4e; text 0 e3b0c44298fc1c14",
   },
   {
     name: "f04n0g08",
@@ -1567,7 +1567,7 @@ let png_vectors : Array[PngVector] = [
       #|XTioX5MXZlhg4re5gt0FoKjIPZ+W7P0WzABMHFsrytITrC/x4UMMcWYfs1PIHdUoD7mixFKDUnwG
       #|DfSWDKSBkERfSKIvJNEXwkAIA/EAFiZMByGZYIEAAAAASUVORK5CYII=
     ),
-    reference: "ok 32x32 31dd33123e9c84b0ba4ac794bb1b4f93d84793e314ccd7b2d8f69e7993477a9e",
+    reference: "ok 32x32 31dd33123e9c84b0ba4ac794bb1b4f93d84793e314ccd7b2d8f69e7993477a9e; text 0 e3b0c44298fc1c14",
   },
   {
     name: "f04n2c08",
@@ -1591,7 +1591,7 @@ let png_vectors : Array[PngVector] = [
       #|Y9WCVeW1QAtc0oz2jPUQaQR2g92ZIcgpzYOqcgcrCIWnTFbzgIPsNw+OyjEP8qUMCwrW/wPZ2mq+
       #|jvKj/AAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 0e5f940eb50e220ecc68536b9adc6dd8f408c7d069a080b7865a999e99e1a405",
+    reference: "ok 32x32 0e5f940eb50e220ecc68536b9adc6dd8f408c7d069a080b7865a999e99e1a405; text 0 e3b0c44298fc1c14",
   },
   {
     name: "f99n0g04",
@@ -1605,7 +1605,7 @@ let png_vectors : Array[PngVector] = [
       #|0nbyGYB8W8gR+kkMtB2KWzfTTkQpU473oD8lu11NLuv166RW+W9R446QQgzEZLmeqxm+kpGSL48/
       #|2x/fzdR/AW8Fs1uE53SkAAAAAElFTkSuQmCC
     ),
-    reference: "ok 32x32 d0971a608a226fd05a0b399ec536fcbee5e32e448bb877145e151da35db185d0",
+    reference: "ok 32x32 d0971a608a226fd05a0b399ec536fcbee5e32e448bb877145e151da35db185d0; text 0 e3b0c44298fc1c14",
   },
   {
     name: "g03n0g16",
@@ -1618,7 +1618,7 @@ let png_vectors : Array[PngVector] = [
       #|hZDyfQUmOB5NAVWl+udlrx8cExwOpoDPxQRl6RfABNttoGCxCBM8AHUVjIYrRN23AAAAAElFTkSu
       #|QmCC
     ),
-    reference: "ok 32x32 f82d481560a346ab2020caac6dc33b9c126fb932bb076158dac6a9d96e83b301",
+    reference: "ok 32x32 f82d481560a346ab2020caac6dc33b9c126fb932bb076158dac6a9d96e83b301; gAMA 35000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "g03n2c08",
@@ -1631,7 +1631,7 @@ let png_vectors : Array[PngVector] = [
       #|4LFZs+HQbbd0Q7sHGXyXAQYDd2OY2W4XJ1vOHxEZfJUBoij7qc8ltyCDAwBq+w/20J+eQaUgg8+6
       #|AGRAt+W6DK5anlkjB1vfagAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 f22d048d68c2abdd98bb34bb97be39d38c8151c0aa7f7971fb104916c1cee023",
+    reference: "ok 32x32 f22d048d68c2abdd98bb34bb97be39d38c8151c0aa7f7971fb104916c1cee023; gAMA 35000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "g03n3p04",
@@ -1641,7 +1641,7 @@ let png_vectors : Array[PngVector] = [
       #|FmAAAfqoCAWCmUAAV4EsQEcVLkDQAQRwFcgClKlg6DA2YEZS0dDBYcxsgGIGB1wFCKSlJaTBVUAE
       #|2MACCBUJDGzMQC1IKtLS4O5AFiBTBQBS03C95h21qwAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 4b3da343fdaa339acbf6bc1e4ef43686c7b95459ad651aa0c422d1111f02be06",
+    reference: "ok 32x32 4b3da343fdaa339acbf6bc1e4ef43686c7b95459ad651aa0c422d1111f02be06; gAMA 35000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "g04n0g16",
@@ -1654,7 +1654,7 @@ let png_vectors : Array[PngVector] = [
       #|hX9uMShLHHQdxDFAkgBkmVJaK9XXyAyKwmZwvZpZa6GDPLdf4ddiBrcbDkajYQAzyDJPg/3eDUAN
       #|Pik0iSilDmOAAAAAAElFTkSuQmCC
     ),
-    reference: "ok 32x32 ad6b68d4fd2a55a06e0dae251178437bec9e5fa0245645477a3e4133f0d94607",
+    reference: "ok 32x32 ad6b68d4fd2a55a06e0dae251178437bec9e5fa0245645477a3e4133f0d94607; gAMA 45000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "g04n2c08",
@@ -1667,7 +1667,7 @@ let png_vectors : Array[PngVector] = [
       #|ev3QZFIgkcEeAPdmpfE4bDY/Vhcb1AJGo3BhSNpus7xucmWobgbvdYDdrnw0LTyLQQZvdYDfBhm8
       #|NgUgg5emAGRAf8tNGZwBkU1XhkiDotcAAAAASUVORK5CYII=
     ),
-    reference: "ok 32x32 0461849059574f457a0b641b55fe5a023a0d53770b232dffc23a7e8fec342eb6",
+    reference: "ok 32x32 0461849059574f457a0b641b55fe5a023a0d53770b232dffc23a7e8fec342eb6; gAMA 45000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "g04n3p04",
@@ -1677,7 +1677,7 @@ let png_vectors : Array[PngVector] = [
       #|gaQFW7CAXOae07ZgC7Zgt04IhPWq4D8Oj2VxqF1RLQpxQO8fsalTTRGHH8WlipoiDt8ECqsFsZZE
       #|q48biaxD9NybkzbEGLILBNGQDYjCff4Rh5fiBou1fg11pxGVAAAAAElFTkSuQmCC
     ),
-    reference: "ok 32x32 92f561bc1cf5b2fe5f23dcfeb3914ff0be7836217e09f5aa5372b59b05ff2217",
+    reference: "ok 32x32 92f561bc1cf5b2fe5f23dcfeb3914ff0be7836217e09f5aa5372b59b05ff2217; gAMA 45000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "g05n0g16",
@@ -1689,7 +1689,7 @@ let png_vectors : Array[PngVector] = [
       #|EkHXrQtut7lWCkBfiWAroCiuV10DWAS4y8sm6toqwAHLJq41lAiaBi3I6X4+C5Gmz6dSAMsjEAEO
       #|0LuW5XSfHpt/cERQ19tHWBtE8HrxAoigqtCCZAoeDz/BD+1fhGYCQbPgAAAAAElFTkSuQmCC
     ),
-    reference: "ok 32x32 86165aa0f850b034a22f225c8ac974804d0b24a0a7a95dbf7cc3932e61221fdc",
+    reference: "ok 32x32 86165aa0f850b034a22f225c8ac974804d0b24a0a7a95dbf7cc3932e61221fdc; gAMA 55000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "g05n2c08",
@@ -1702,7 +1702,7 @@ let png_vectors : Array[PngVector] = [
       #|brHIH49c3iIy2HoAlsu3u7PS4F5ksPEAeBUZrCEfRSKADFaQD2ZAf8uhvkU3ajlNmZwVLFcAAAAA
       #|SUVORK5CYII=
     ),
-    reference: "ok 32x32 42bd980a120391830c29454c51fb5f38cb65919be022ddb37616c2c9e8f247d2",
+    reference: "ok 32x32 42bd980a120391830c29454c51fb5f38cb65919be022ddb37616c2c9e8f247d2; gAMA 55000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "g05n3p04",
@@ -1712,7 +1712,7 @@ let png_vectors : Array[PngVector] = [
       #|FmAAAfqoUAKCmUAAV4EsQEcVaUBgDARwFcgClKkwMHZxYEFWwWDswuKAQwUIlJcXlMNVIAsgqWBg
       #|ZwFqQVJRXg53B7IAmSoA1Ah4O0rtoFUAAAAASUVORK5CYII=
     ),
-    reference: "ok 32x32 f45585d07d9141f67303d0244b43ba19229c999ad0f5096367c0133f1c36bff5",
+    reference: "ok 32x32 f45585d07d9141f67303d0244b43ba19229c999ad0f5096367c0133f1c36bff5; gAMA 55000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "g07n0g16",
@@ -1724,7 +1724,7 @@ let png_vectors : Array[PngVector] = [
       #|92vIDOb5HoDvnJ8bghj8BuBcIrCBO6HIEeY5QJ4zxjmAEELIHXWgePhDkV3b9jzlapMnmcE4Pr/C
       #|XcgMhsEMQAz63tKg6+wMPgLFodTQLHMsAAAAAElFTkSuQmCC
     ),
-    reference: "ok 32x32 3879a1bcc9408c781f7e73cec5c5833b4f5dea959bcc63f27052c2bf719679e4",
+    reference: "ok 32x32 3879a1bcc9408c781f7e73cec5c5833b4f5dea959bcc63f27052c2bf719679e4; gAMA 70000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "g07n2c08",
@@ -1736,7 +1736,7 @@ let png_vectors : Array[PngVector] = [
       #|114Gda22nVAGgweg66aqUhsAlAECfIbMxN4SuXn9jQE/adcMYBANRGxr/W5rFRFZq7Sez3XzuUsD
       #|rmP03Szvt+8X/o74NcrAB+BVKINzKAAyOIUCIAP0MxvK4AEWgFoVP+GhCgAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 f8901763eec2444a6a8e063cfe69f80c8f9689db0d7929e594acad2cefd9f468",
+    reference: "ok 32x32 f8901763eec2444a6a8e063cfe69f80c8f9689db0d7929e594acad2cefd9f468; gAMA 70000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "g07n3p04",
@@ -1746,7 +1746,7 @@ let png_vectors : Array[PngVector] = [
       #|FmAAAfqoMAYCFyCAq0AWoKOKUCCYCQRwFcgClKmYMFOJCUUFA1gAuwoQKC8vKFdiYoKogAswMCCr
       #|YGBnUkJRUV4OdweyAJkqACOga73pcj3PAAAAAElFTkSuQmCC
     ),
-    reference: "ok 32x32 ed5d9d47a1420a64ec1f20424bee414633bca9a290d51e35a680fbea278b7e81",
+    reference: "ok 32x32 ed5d9d47a1420a64ec1f20424bee414633bca9a290d51e35a680fbea278b7e81; gAMA 70000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "g10n0g16",
@@ -1757,7 +1757,7 @@ let png_vectors : Array[PngVector] = [
       #|GxOe12wP+j7Gxmgd1myCee66sx/G+J0TvCyT/Ajwa2QAAMeUNDHG8XvhBKJtaSEYpxQALItS/vyh
       #|SfbPtK7n2dcEz6sMvAHqCJi/5fyWiAAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 6a79369bf3c830dc2b35e7e98dc4761674b74922a4318dbe0bdc47b0feb54e60",
+    reference: "ok 32x32 6a79369bf3c830dc2b35e7e98dc4761674b74922a4318dbe0bdc47b0feb54e60; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "g10n2c08",
@@ -1768,7 +1768,7 @@ let png_vectors : Array[PngVector] = [
       #|KOAF/GQMUMB1GCApG7Qtd916D0NERDJPNQ2ahv1IM2/tBpqvad/buuYAdrMY6xn4znR2l6F/inxH
       #|1lNNg7JkIqoqHgb7P7hsIGsYjONitWwGk87+HuzrdA1S/VX8ANStTVTe34+eAAAAAElFTkSuQmCC
     ),
-    reference: "ok 32x32 0c9621d22a99c76d0b7bbba9fd5cb002ef6d16f935fb03cc7ad808fb68477805",
+    reference: "ok 32x32 0c9621d22a99c76d0b7bbba9fd5cb002ef6d16f935fb03cc7ad808fb68477805; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "g10n3p04",
@@ -1778,7 +1778,7 @@ let png_vectors : Array[PngVector] = [
       #|FmAAAfqoEASCmUAAV4EsQEcVLkBgDARwFcgClKkwME5LYENWwWCcxpaApoKNAaICBMrLC8rTGKAq
       #|4AJALUgqGNjZgIYiqSgvh7sDWYBMFQBG4oXJmToRDgAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 46789f831ea8373257d4c7ed49976a4e52cf51736276cfe6829d5c98c3fffcd4",
+    reference: "ok 32x32 46789f831ea8373257d4c7ed49976a4e52cf51736276cfe6829d5c98c3fffcd4; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "g25n0g16",
@@ -1791,7 +1791,7 @@ let png_vectors : Array[PngVector] = [
       #|GiDL5vNvgDHOAId6vTDRfQfL5XdljJsEmwF9Jrslz6dTgDy325KkHiSbAW0Mhzav1za7+bscNHCA
       #|XxE0GI38AGZAF4zHQgO6YDKRGXwAuz+aGCA4FKQAAAAASUVORK5CYII=
     ),
-    reference: "ok 32x32 ad9c67a1d8d2994815cd738981a566a61c44e154e917605fcbcae59bb53def85",
+    reference: "ok 32x32 ad9c67a1d8d2994815cd738981a566a61c44e154e917605fcbcae59bb53def85; gAMA 250000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "g25n2c08",
@@ -1805,7 +1805,7 @@ let png_vectors : Array[PngVector] = [
       #|hXdAW6sAIrJeB13h4wlzMiDAcAgXFGRA/aOREkAG1D8eKwFag8lECQCDX4gtYR8yuXeNAAAAAElF
       #|TkSuQmCC
     ),
-    reference: "ok 32x32 362ef50ba0995042b1967bab910f4ac7eaf7e972e189953c31b29944284e7749",
+    reference: "ok 32x32 362ef50ba0995042b1967bab910f4ac7eaf7e972e189953c31b29944284e7749; gAMA 250000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "g25n3p04",
@@ -1815,7 +1815,7 @@ let png_vectors : Array[PngVector] = [
       #|K7ACC7jICqzACrSUXoFtc1EkczVI+eX5FZYHncjQhoQHGa0RFzpQCh4Wih01lIKHf0KaKQtvZQyv
       #|cC8pRnHXaqpTzCEqziRCQo0Fyj94+Cg6NXRmxzu0UNgAAAAASUVORK5CYII=
     ),
-    reference: "ok 32x32 17618d80e87b759452c93343daa29be71a6f78b42a6c4aa0ef88465198e964fb",
+    reference: "ok 32x32 17618d80e87b759452c93343daa29be71a6f78b42a6c4aa0ef88465198e964fb; gAMA 250000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "oi1n0g16",
@@ -1824,7 +1824,7 @@ let png_vectors : Array[PngVector] = [
       #|eJzV0jEKwDAMQ1E5W+9/xtygk8AoezLVKgSj2Y8/OICnuFcTE2OgOoJgHQiZAN2C9kDKBOgW3AZC
       #|JkC3oD2QMgG6BbeBkAnQLWgPpExgP28H7E/0GTjPfwAW2EvYX64rn9cAAAAASUVORK5CYII=
     ),
-    reference: "ok 32x32 bd5ce54014a325deabcef479b7b62639f5bd651e00741eaaa1dd37a66091778c",
+    reference: "ok 32x32 bd5ce54014a325deabcef479b7b62639f5bd651e00741eaaa1dd37a66091778c; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "oi1n2c16",
@@ -1836,7 +1836,7 @@ let png_vectors : Array[PngVector] = [
       #|A529WWAeerPAbPQoUH8GNNA5r9yAEjp7sYAeerGAKnoUyJ8BbXTOMxvwgM6eCPhBTwS8oTO/5kL+
       #|Xge7xOwAAAAASUVORK5CYII=
     ),
-    reference: "ok 32x32 e2703f2e6722086d78e9f0da1d1dda2174f92bd7e27f45ae5177b282ec626eff",
+    reference: "ok 32x32 e2703f2e6722086d78e9f0da1d1dda2174f92bd7e27f45ae5177b282ec626eff; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "oi2n0g16",
@@ -1846,7 +1846,7 @@ let png_vectors : Array[PngVector] = [
       #|JkC3oD2QMjqwwDMAAAAeSURBVAG6BbeBkAnQLWgPpExgP28H7E/0GTjPfwAW2EvYX7J6X30AAAAA
       #|SUVORK5CYII=
     ),
-    reference: "ok 32x32 bd5ce54014a325deabcef479b7b62639f5bd651e00741eaaa1dd37a66091778c",
+    reference: "ok 32x32 bd5ce54014a325deabcef479b7b62639f5bd651e00741eaaa1dd37a66091778c; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "oi2n2c16",
@@ -1858,7 +1858,7 @@ let png_vectors : Array[PngVector] = [
       #|9Chg9x0Yi877jTYwA529WWAeerPAbPQoUH8GNNA5r9yAEjp7sYAeerGAKnoUyJ8BbXTOMxvwgM6e
       #|CPhBTwS8oTO/5kL+Xk13nmIAAAAASUVORK5CYII=
     ),
-    reference: "ok 32x32 e2703f2e6722086d78e9f0da1d1dda2174f92bd7e27f45ae5177b282ec626eff",
+    reference: "ok 32x32 e2703f2e6722086d78e9f0da1d1dda2174f92bd7e27f45ae5177b282ec626eff; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "oi4n0g16",
@@ -1868,7 +1868,7 @@ let png_vectors : Array[PngVector] = [
       #|AN2C9kDKBOgW3AZCJkC3oD3Oo8vsAAAAAklEQVSQMsVtZiAAAAAeSURBVAG6BbeBkAnQLWgPpExg
       #|P28H7E/0GTjPfwAW2EvYX7J6X30AAAAASUVORK5CYII=
     ),
-    reference: "ok 32x32 bd5ce54014a325deabcef479b7b62639f5bd651e00741eaaa1dd37a66091778c",
+    reference: "ok 32x32 bd5ce54014a325deabcef479b7b62639f5bd651e00741eaaa1dd37a66091778c; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "oi4n2c16",
@@ -1880,7 +1880,7 @@ let png_vectors : Array[PngVector] = [
       #|DfREZ+8m0B+9m8Ao9Chg9x0Yi877jTYwA529WWAeerPAbPQoUH8GNNA5r9yAEjp7sYAeerGAKnoU
       #|yJ8BbXTOMxvwgM6eCPhBTwS8oTO/5kIg4uIpAAAAAklEQVT+XnoXDXoAAAAASUVORK5CYII=
     ),
-    reference: "ok 32x32 e2703f2e6722086d78e9f0da1d1dda2174f92bd7e27f45ae5177b282ec626eff",
+    reference: "ok 32x32 e2703f2e6722086d78e9f0da1d1dda2174f92bd7e27f45ae5177b282ec626eff; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "oi9n0g16",
@@ -1909,7 +1909,7 @@ let png_vectors : Array[PngVector] = [
       #|SURBVAAoOH3oAAAAAUlEQVQW3OzIuQAAAAFJREFU2KAwJw4AAAABSURBVEvJNuXwAAAAAUlEQVTY
       #|oDAnDgAAAAFJREFUX9PsMY0AAAAASUVORK5CYII=
     ),
-    reference: "ok 32x32 bd5ce54014a325deabcef479b7b62639f5bd651e00741eaaa1dd37a66091778c",
+    reference: "ok 32x32 bd5ce54014a325deabcef479b7b62639f5bd651e00741eaaa1dd37a66091778c; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "oi9n2c16",
@@ -1969,7 +1969,7 @@ let png_vectors : Array[PngVector] = [
       #|AUlEQVS/c+bT9QAAAAFJREFU5mFROqUAAAABSURBVEKw6l1UAAAAAUlEQVT+cj2i8wAAAAFJREFU
       #|XqTrARsAAAAASUVORK5CYII=
     ),
-    reference: "ok 32x32 e2703f2e6722086d78e9f0da1d1dda2174f92bd7e27f45ae5177b282ec626eff",
+    reference: "ok 32x32 e2703f2e6722086d78e9f0da1d1dda2174f92bd7e27f45ae5177b282ec626eff; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "pp0n2c16",
@@ -1992,7 +1992,7 @@ let png_vectors : Array[PngVector] = [
       #|+MfuDx0AtmfnDfREZ+8m0B+9m8Ao9Chg9x0Yi877jTYwA529WWAeerPAbPQoUH8GNNA5r9yAEjp7
       #|sYAeerGAKnoUyJ8BbXTOMxvwgM6eCPhBTwS8oTO/5kL+Xge7xOwAAAAASUVORK5CYII=
     ),
-    reference: "ok 32x32 e2703f2e6722086d78e9f0da1d1dda2174f92bd7e27f45ae5177b282ec626eff",
+    reference: "ok 32x32 e2703f2e6722086d78e9f0da1d1dda2174f92bd7e27f45ae5177b282ec626eff; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "pp0n6a08",
@@ -2013,7 +2013,7 @@ let png_vectors : Array[PngVector] = [
       #|QcsfNBgMeuixLcnrlf1x//WzS2pJjgUAAAADyPWrwgMAAABgAMF+VXgAAAAAXIAdS3U3AAAAooAD
       #|G8P2VRMVDwMAAAAASUVORK5CYII=
     ),
-    reference: "ok 32x32 1acf3e2efa38d117e9b1d917edb8894af1e97701d635871e8ece690a542979e9",
+    reference: "ok 32x32 1acf3e2efa38d117e9b1d917edb8894af1e97701d635871e8ece690a542979e9; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "ps1n0g08",
@@ -2045,7 +2045,7 @@ let png_vectors : Array[PngVector] = [
       #|AABBSURBVHicY2RgJAAUCMizDAUFjA8IKfj3Hz9geTAcFDDKEZBnZKJ5XAwGBYyP8Mr+/8/4h+Zx
       #|MRgUMMrglWVkBABQ5f5xNeLYWQAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 3f79224ccb00156a58645afcd6521d0facbf9cdec212b03935eb25e59e9dc532",
+    reference: "ok 32x32 3f79224ccb00156a58645afcd6521d0facbf9cdec212b03935eb25e59e9dc532; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "ps1n2c16",
@@ -2080,7 +2080,7 @@ let png_vectors : Array[PngVector] = [
       #|GIvO+402MAOdvVlgHnqzwGz0KFB/BjTQOa/cgBI6e7GAHnqxgCp6FMifAW10zjMb8IDOngj4QU8E
       #|vKEzv+ZC/l4Hu8TsAAAAAElFTkSuQmCC
     ),
-    reference: "ok 32x32 e2703f2e6722086d78e9f0da1d1dda2174f92bd7e27f45ae5177b282ec626eff",
+    reference: "ok 32x32 e2703f2e6722086d78e9f0da1d1dda2174f92bd7e27f45ae5177b282ec626eff; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "ps2n0g08",
@@ -2127,7 +2127,7 @@ let png_vectors : Array[PngVector] = [
       #|AP8AAJbQi4YAAABBSURBVHicY2RgJAAUCMizDAUFjA8IKfj3Hz9geTAcFDDKEZBnZKJ5XAwGBYyP
       #|8Mr+/8/4h+ZxMRgUMMrglWVkBABQ5f5xNeLYWQAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 3f79224ccb00156a58645afcd6521d0facbf9cdec212b03935eb25e59e9dc532",
+    reference: "ok 32x32 3f79224ccb00156a58645afcd6521d0facbf9cdec212b03935eb25e59e9dc532; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "ps2n2c16",
@@ -2177,7 +2177,7 @@ let png_vectors : Array[PngVector] = [
       #|vZvAKPQoYPcdGIvO+402MAOdvVlgHnqzwGz0KFB/BjTQOa/cgBI6e7GAHnqxgCp6FMifAW10zjMb
       #|8IDOngj4QU8EvKEzv+ZC/l4Hu8TsAAAAAElFTkSuQmCC
     ),
-    reference: "ok 32x32 e2703f2e6722086d78e9f0da1d1dda2174f92bd7e27f45ae5177b282ec626eff",
+    reference: "ok 32x32 e2703f2e6722086d78e9f0da1d1dda2174f92bd7e27f45ae5177b282ec626eff; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "s01i3p01",
@@ -2185,7 +2185,7 @@ let png_vectors : Array[PngVector] = [
       #|iVBORw0KGgoAAAANSUhEUgAAAAEAAAABAQMAAAFS3GZcAAAABGdBTUEAAYagMeiWXwAAAANzQklU
       #|BAQEd/i1owAAAANQTFRFAAD/injSVwAAAApJREFUeJxjYAAAAAIAAUivpHEAAAAASUVORK5CYII=
     ),
-    reference: "ok 1x1 6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d",
+    reference: "ok 1x1 6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "s01n3p01",
@@ -2193,7 +2193,7 @@ let png_vectors : Array[PngVector] = [
       #|iVBORw0KGgoAAAANSUhEUgAAAAEAAAABAQMAAAAl21bKAAAABGdBTUEAAYagMeiWXwAAAANzQklU
       #|BAQEd/i1owAAAANQTFRFAAD/injSVwAAAApJREFUeJxjYAAAAAIAAUivpHEAAAAASUVORK5CYII=
     ),
-    reference: "ok 1x1 6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d",
+    reference: "ok 1x1 6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "s02i3p01",
@@ -2201,7 +2201,7 @@ let png_vectors : Array[PngVector] = [
       #|iVBORw0KGgoAAAANSUhEUgAAAAIAAAACAQMAAAE/f6/xAAAABGdBTUEAAYagMeiWXwAAAANzQklU
       #|BAQEd/i1owAAAANQTFRFAP//GVwvJQAAAAtJREFUeJxjYAABAAAGAAH+jGfIAAAAAElFTkSuQmCC
     ),
-    reference: "ok 2x2 df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+    reference: "ok 2x2 df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "s02n3p01",
@@ -2210,7 +2210,7 @@ let png_vectors : Array[PngVector] = [
       #|BAQEd/i1owAAAANQTFRFAP//GVwvJQAAAAxJREFUeJxjYGBgAAAABAAB9hc4VQAAAABJRU5ErkJg
       #|gg==
     ),
-    reference: "ok 2x2 df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+    reference: "ok 2x2 df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "s03i3p01",
@@ -2219,7 +2219,7 @@ let png_vectors : Array[PngVector] = [
       #|BAQEd/i1owAAAAZQTFRFAP8A/3cAseWlnwAAAAxJREFUeJxjYIADBwAATABB2snmHAAAAABJRU5E
       #|rkJggg==
     ),
-    reference: "ok 3x3 cdb032de4c6cb506da0606e0934e69ad1ae64773ffaa76f9d6e28192067c43cf",
+    reference: "ok 3x3 cdb032de4c6cb506da0606e0934e69ad1ae64773ffaa76f9d6e28192067c43cf; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "s03n3p01",
@@ -2228,7 +2228,7 @@ let png_vectors : Array[PngVector] = [
       #|BAQEd/i1owAAAAZQTFRFAP8A/3cAseWlnwAAAA5JREFUeJxjYGBwYGAAAADGAEE5MQxLAAAAAElF
       #|TkSuQmCC
     ),
-    reference: "ok 3x3 cdb032de4c6cb506da0606e0934e69ad1ae64773ffaa76f9d6e28192067c43cf",
+    reference: "ok 3x3 cdb032de4c6cb506da0606e0934e69ad1ae64773ffaa76f9d6e28192067c43cf; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "s04i3p01",
@@ -2237,7 +2237,7 @@ let png_vectors : Array[PngVector] = [
       #|BAQEd/i1owAAAAZQTFRF/wB3//8AmvdDuQAAABRJREFUeJxjaGAAwQMMDgwTGD4AABmuBAG53zf2
       #|AAAAAElFTkSuQmCC
     ),
-    reference: "ok 4x4 9bf80f2eee4d59cea2219e01c8b667fb941cec91eb3210be9f794bdd12690200",
+    reference: "ok 4x4 9bf80f2eee4d59cea2219e01c8b667fb941cec91eb3210be9f794bdd12690200; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "s04n3p01",
@@ -2246,7 +2246,7 @@ let png_vectors : Array[PngVector] = [
       #|BAQEd/i1owAAAAZQTFRF/wB3//8AmvdDuQAAAA9JREFUeJxj+MAwAQg/AAAMCAMBgre2CgAAAABJ
       #|RU5ErkJggg==
     ),
-    reference: "ok 4x4 9bf80f2eee4d59cea2219e01c8b667fb941cec91eb3210be9f794bdd12690200",
+    reference: "ok 4x4 9bf80f2eee4d59cea2219e01c8b667fb941cec91eb3210be9f794bdd12690200; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "s05i3p02",
@@ -2255,7 +2255,7 @@ let png_vectors : Array[PngVector] = [
       #|BAQEd/i1owAAAAlQTFRFAP//dwD//wAAQaSqcwAAABlJREFUeJxjaGBoYFjAACI7gHQAEE9tACIA
       #|TYMG43AkRkUAAAAASUVORK5CYII=
     ),
-    reference: "ok 5x5 4b22547a8aaaf222d0029a5af02686fb746882cdd703ef0e57e4e315e8f79c73",
+    reference: "ok 5x5 4b22547a8aaaf222d0029a5af02686fb746882cdd703ef0e57e4e315e8f79c73; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "s05n3p02",
@@ -2264,7 +2264,7 @@ let png_vectors : Array[PngVector] = [
       #|BAQEd/i1owAAAAlQTFRFAP//dwD//wAAQaSqcwAAABRJREFUeJxjWNXAMLWBYSKYXNUAACoHBZCu
       #|jPRKAAAAAElFTkSuQmCC
     ),
-    reference: "ok 5x5 4b22547a8aaaf222d0029a5af02686fb746882cdd703ef0e57e4e315e8f79c73",
+    reference: "ok 5x5 4b22547a8aaaf222d0029a5af02686fb746882cdd703ef0e57e4e315e8f79c73; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "s06i3p02",
@@ -2273,7 +2273,7 @@ let png_vectors : Array[PngVector] = [
       #|BAQEd/i1owAAAAlQTFRFAP8AAHf//wD/o0UOaAAAACJJREFUeJxjaGBoYJgAxA4MLQwrGDwYIhim
       #|JjBMSGBYtQAAWccHTMhl7SQAAAAASUVORK5CYII=
     ),
-    reference: "ok 6x6 43bb4cf086d625638856bbfcf4d6cf4641f0d82439e82fc2689bbdcb5e57d4ba",
+    reference: "ok 6x6 43bb4cf086d625638856bbfcf4d6cf4641f0d82439e82fc2689bbdcb5e57d4ba; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "s06n3p02",
@@ -2282,7 +2282,7 @@ let png_vectors : Array[PngVector] = [
       #|BAQEd/i1owAAAAlQTFRFAP8AAHf//wD/o0UOaAAAABZJREFUeJxjWLWAYWoCwwQwAjJWLQAAOc8G
       #|Xylw/coAAAAASUVORK5CYII=
     ),
-    reference: "ok 6x6 43bb4cf086d625638856bbfcf4d6cf4641f0d82439e82fc2689bbdcb5e57d4ba",
+    reference: "ok 6x6 43bb4cf086d625638856bbfcf4d6cf4641f0d82439e82fc2689bbdcb5e57d4ba; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "s07i3p02",
@@ -2291,7 +2291,7 @@ let png_vectors : Array[PngVector] = [
       #|BAQEd/i1owAAAAxQTFRF/wB3AP93//8AAAD/G0OznAAAACVJREFUeJxjOMBwgOEBwweGDQyvGf4z
       #|/GFIAcI/DFdjGG7MAZIAweMMgVWC+YkAAAAASUVORK5CYII=
     ),
-    reference: "ok 7x7 dc3eb9d0ad52b34162c1c410213b053c988e6e0bda5802948ab5918f84dd1500",
+    reference: "ok 7x7 dc3eb9d0ad52b34162c1c410213b053c988e6e0bda5802948ab5918f84dd1500; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "s07n3p02",
@@ -2300,7 +2300,7 @@ let png_vectors : Array[PngVector] = [
       #|BAQEd/i1owAAAAxQTFRF/wB3AP93//8AAAD/G0OznAAAABpJREFUeJxj+P+H4WoMw605DDfmgEgg
       #|+/8fAHF5CrkeXW0HAAAAAElFTkSuQmCC
     ),
-    reference: "ok 7x7 dc3eb9d0ad52b34162c1c410213b053c988e6e0bda5802948ab5918f84dd1500",
+    reference: "ok 7x7 dc3eb9d0ad52b34162c1c410213b053c988e6e0bda5802948ab5918f84dd1500; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "s08i3p02",
@@ -2309,7 +2309,7 @@ let png_vectors : Array[PngVector] = [
       #|BAQEd/i1owAAAAxQTFRFAP//dwD/d/8A/wAAqrpZHAAAACVJREFUeJxjYAACASB+wGDHoAWk9zDM
       #|YVjBoLWCQbeCQf8HUAAAUNcF93DTSq8AAAAASUVORK5CYII=
     ),
-    reference: "ok 8x8 2e22899559b86958349e462f6656c5ea3c197eadc23d6a083d764b9b99448db0",
+    reference: "ok 8x8 2e22899559b86958349e462f6656c5ea3c197eadc23d6a083d764b9b99448db0; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "s08n3p02",
@@ -2318,7 +2318,7 @@ let png_vectors : Array[PngVector] = [
       #|BAQEd/i1owAAAAxQTFRFAP//dwD/d/8A/wAAqrpZHAAAABtJREFUeJxjYGBg0FrBoP+DQbcChIAM
       #|IJeBAQA9VgU9+UwQEwAAAABJRU5ErkJggg==
     ),
-    reference: "ok 8x8 2e22899559b86958349e462f6656c5ea3c197eadc23d6a083d764b9b99448db0",
+    reference: "ok 8x8 2e22899559b86958349e462f6656c5ea3c197eadc23d6a083d764b9b99448db0; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "s09i3p02",
@@ -2327,7 +2327,7 @@ let png_vectors : Array[PngVector] = [
       #|BAQEd/i1owAAAAxQTFRFAP8AAHf//wD//3cA/1YAZAAAACNJREFUeJxjYEACC4BYC4wYGF4zXAdi
       #|Bgb7/wwMltEQDGQDAHX/B0YWjJcDAAAAAElFTkSuQmCC
     ),
-    reference: "ok 9x9 acdc987a3b75337ff6d6b198389bcb78010f9f44e646ac59327227a246d91e75",
+    reference: "ok 9x9 acdc987a3b75337ff6d6b198389bcb78010f9f44e646ac59327227a246d91e75; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "s09n3p02",
@@ -2336,7 +2336,7 @@ let png_vectors : Array[PngVector] = [
       #|BAQEd/i1owAAAAxQTFRFAP8AAHf//wD//3cA/1YAZAAAAB9JREFUeJxjYAAC+/8MDFarGRgso4FY
       #|GkKD+CBxIAAAaWUFw2pDfyMAAAAASUVORK5CYII=
     ),
-    reference: "ok 9x9 acdc987a3b75337ff6d6b198389bcb78010f9f44e646ac59327227a246d91e75",
+    reference: "ok 9x9 acdc987a3b75337ff6d6b198389bcb78010f9f44e646ac59327227a246d91e75; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "s32i3p04",
@@ -2349,7 +2349,7 @@ let png_vectors : Array[PngVector] = [
       #|4tEyDJ6ocfQFMuz8ER1/BaLs4HforcN6hMRF18KlMIyluP4QbCX0qz0hsN6yWjv/iTeEUtKElO3E
       #|IwAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 6e2e67be362a0bc033ef408b88c9d172da5dc5f1a4d4f6363906d7c6d3136b41",
+    reference: "ok 32x32 6e2e67be362a0bc033ef408b88c9d172da5dc5f1a4d4f6363906d7c6d3136b41; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "s32n3p04",
@@ -2360,7 +2360,7 @@ let png_vectors : Array[PngVector] = [
       #|iA40wDEkVAZ4hh2RQXMa6JLmxZaNPwEdBJO0aB9u3NhzraJvBKuCfwNmXQVBW9YQ5AskC1xW2n4Z
       #|MDEU2FlCNrOYae+Pt3ACA2HDSOt6Ji4AAAAASUVORK5CYII=
     ),
-    reference: "ok 32x32 6e2e67be362a0bc033ef408b88c9d172da5dc5f1a4d4f6363906d7c6d3136b41",
+    reference: "ok 32x32 6e2e67be362a0bc033ef408b88c9d172da5dc5f1a4d4f6363906d7c6d3136b41; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "s33i3p04",
@@ -2373,7 +2373,7 @@ let png_vectors : Array[PngVector] = [
       #|Xalhl1bUWRUbykVooPwtPHG5nPkunPG441Fzx8BnOyz0OBEdjF8ciQ7GAfjm9WsX5W+uWqMMK3r0
       #|tUZE5qo8m0OtEd48qlq5vtRXm8Td/wMULdZI1p9klQAAAABJRU5ErkJggg==
     ),
-    reference: "ok 33x33 5d2cefba188d3b09459fd4fb891f3fbf99d371f65c95cfffc056ec05f69e3152",
+    reference: "ok 33x33 5d2cefba188d3b09459fd4fb891f3fbf99d371f65c95cfffc056ec05f69e3152; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "s33n3p04",
@@ -2385,7 +2385,7 @@ let png_vectors : Array[PngVector] = [
       #|RfHIPXGleOQaNlWuM1GUa6H/VC46qV26ForEKRLnVB06SaJwiZKUUNn1D/vsEqZNI0mjP3h4SUrR
       #|60G3aBOzalcL5TqyTbmMqVzJqV0R5PoCM2LWk+YxJesAAAAASUVORK5CYII=
     ),
-    reference: "ok 33x33 5d2cefba188d3b09459fd4fb891f3fbf99d371f65c95cfffc056ec05f69e3152",
+    reference: "ok 33x33 5d2cefba188d3b09459fd4fb891f3fbf99d371f65c95cfffc056ec05f69e3152; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "s34i3p04",
@@ -2398,7 +2398,7 @@ let png_vectors : Array[PngVector] = [
       #|NhUCYsBwJl0soO9QA5ddSc00vD90/TOgprpQA9rFXWpQMxAzLzIdh/+g/wDxGv/uWt+IKQAAAABJ
       #|RU5ErkJggg==
     ),
-    reference: "ok 34x34 452c305eac4b6cac78633f46a68ba03caf0991e8ba86e12eff9fe0206457ab29",
+    reference: "ok 34x34 452c305eac4b6cac78633f46a68ba03caf0991e8ba86e12eff9fe0206457ab29; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "s34n3p04",
@@ -2409,7 +2409,7 @@ let png_vectors : Array[PngVector] = [
       #|KtbhSHY0EiwkBYHEglk0OW4yPfwXqHhOTraPG234vCcFYykqKwtUeFZS8Sx2NUjqhFz1LVl+vUgH
       #|rMXtiDoroU4AAAAASUVORK5CYII=
     ),
-    reference: "ok 34x34 452c305eac4b6cac78633f46a68ba03caf0991e8ba86e12eff9fe0206457ab29",
+    reference: "ok 34x34 452c305eac4b6cac78633f46a68ba03caf0991e8ba86e12eff9fe0206457ab29; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "s35i3p04",
@@ -2422,7 +2422,7 @@ let png_vectors : Array[PngVector] = [
       #|bsauFdl/Dk1NvTsthXeDdytUMP3N9MHjcec90x3vF96JXrjx2t5muuJC2cN1xi9lD9cPcCBjQeSG
       #|JXEpEhMYdU1hm5E4wlZGTGAHFj9IYTsd8A1MiVujzokXHXH+B9CK7qGbaRQOAAAAAElFTkSuQmCC
     ),
-    reference: "ok 35x35 74e6bc8a8f2d2cdc073c9d66e42cd370a19bbb11c6e3a38777123e5c4b5ae5bb",
+    reference: "ok 35x35 74e6bc8a8f2d2cdc073c9d66e42cd370a19bbb11c6e3a38777123e5c4b5ae5bb; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "s35n3p04",
@@ -2434,7 +2434,7 @@ let png_vectors : Array[PngVector] = [
       #|PfBkMvYG3JmMvZv4QmNGlTXOvFdo5FFkDCoD4N8YRqPhsSbgsdXyTt7oeak3et5BjIZ3EaPhZVwv
       #|76h4kuWdN3JMjIwjImMOa0zEaY3Ocb021tsVrJE+pMMPA+LuR86i5UgAAAAASUVORK5CYII=
     ),
-    reference: "ok 35x35 74e6bc8a8f2d2cdc073c9d66e42cd370a19bbb11c6e3a38777123e5c4b5ae5bb",
+    reference: "ok 35x35 74e6bc8a8f2d2cdc073c9d66e42cd370a19bbb11c6e3a38777123e5c4b5ae5bb; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "s36i3p04",
@@ -2447,7 +2447,7 @@ let png_vectors : Array[PngVector] = [
       #|iaINMGiqhq8rxDjpg7Fv3GUoOPFF72LvoF+/etipav4DtgosYSptELsHdXX2qaZa/jk/GoQXLvsY
       #|f8IAAAAASUVORK5CYII=
     ),
-    reference: "ok 36x36 973bd6f6e680605f8fba8ac52bd651daf51e713225af3fc858cd15280c7b34ca",
+    reference: "ok 36x36 973bd6f6e680605f8fba8ac52bd651daf51e713225af3fc858cd15280c7b34ca; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "s36n3p04",
@@ -2458,7 +2458,7 @@ let png_vectors : Array[PngVector] = [
       #|lSwhBixCbBjGNwDdhe4ILE5F4lBXCBToqEILgEKMqEIMnKoHGNCEgCQWoULCQgYYNjJgsZGBWBvJ
       #|E8L0EBZvgwMHAABJBMjTkay+AAAAAElFTkSuQmCC
     ),
-    reference: "ok 36x36 973bd6f6e680605f8fba8ac52bd651daf51e713225af3fc858cd15280c7b34ca",
+    reference: "ok 36x36 973bd6f6e680605f8fba8ac52bd651daf51e713225af3fc858cd15280c7b34ca; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "s37i3p04",
@@ -2471,7 +2471,7 @@ let png_vectors : Array[PngVector] = [
       #|dzk8dmgx1FaxV1+rTWza19bWS3xTPuj7F70pL7xnvP+Z8aRn90zp8CB4CdxxJXgJXIATiXIvtVJ4
       #|C8hb0OVK5ppzyUa1FE5rLb04FN4OuZdG367zplJ6fx0nFJojsT+zAAAAAElFTkSuQmCC
     ),
-    reference: "ok 37x37 80e6811019d527f032990c77c8ca4222db8caee4091d5e93a062760f7be3d912",
+    reference: "ok 37x37 80e6811019d527f032990c77c8ca4222db8caee4091d5e93a062760f7be3d912; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "s37n3p04",
@@ -2483,7 +2483,7 @@ let png_vectors : Array[PngVector] = [
       #|ajwIj80dBeGxybnV9J4pUPV6+j/TS3e2V3M69ttrUK/RpKmiV6QylcoKLVerXXMnjd4NGrxqjbW2
       #|12W2F0fbC9vbwPbOF91Lq96t+xXw26+MjUfFHuh8APqFElFWDb0cAAAAAElFTkSuQmCC
     ),
-    reference: "ok 37x37 80e6811019d527f032990c77c8ca4222db8caee4091d5e93a062760f7be3d912",
+    reference: "ok 37x37 80e6811019d527f032990c77c8ca4222db8caee4091d5e93a062760f7be3d912; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "s38i3p04",
@@ -2496,7 +2496,7 @@ let png_vectors : Array[PngVector] = [
       #|JHkGlEOX4zsOwdLZK3z3PNexEjunp17FeYZ995dr/uR24JpvYoIb3euVlyl7x3pCnZd8AfUFRB95
       #|/EUWAAAAAElFTkSuQmCC
     ),
-    reference: "ok 38x38 874bb8e76855ce4a84013f94825e13a485ebdd83cbf285d107174635a5d5df80",
+    reference: "ok 38x38 874bb8e76855ce4a84013f94825e13a485ebdd83cbf285d107174635a5d5df80; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "s38n3p04",
@@ -2507,7 +2507,7 @@ let png_vectors : Array[PngVector] = [
       #|KrliDNjE2DDtaAC6D8Mt2NyMzBs4MaDL0MUMgGLcaGLAuClgQBcDkmSLYTEPm72DyS3gsAIA8mkr
       #|g86sROEAAAAASUVORK5CYII=
     ),
-    reference: "ok 38x38 874bb8e76855ce4a84013f94825e13a485ebdd83cbf285d107174635a5d5df80",
+    reference: "ok 38x38 874bb8e76855ce4a84013f94825e13a485ebdd83cbf285d107174635a5d5df80; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "s39i3p04",
@@ -2521,7 +2521,7 @@ let png_vectors : Array[PngVector] = [
       #|lR++BfdYOcOnuGXukih3zxH3nMvOeOOeOh/OmfE0Zc7tuzXfuT9O1nzv7n/lf+b7tQ8uQOpurXn9
       #|AQyWNfYM/uLgAAAAAElFTkSuQmCC
     ),
-    reference: "ok 39x39 13979e6e475871adaf0bb95858ea6b5b1567dcac3a424c50199afbcdd16d81b5",
+    reference: "ok 39x39 13979e6e475871adaf0bb95858ea6b5b1567dcac3a424c50199afbcdd16d81b5; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "s39n3p04",
@@ -2534,7 +2534,7 @@ let png_vectors : Array[PngVector] = [
       #|V+7mznRlz2OmK/v0YDo0m25o+/kXGjfoDtED9g565dFv7WLlni/tDMeq7AxPli8bpjUVK/+f5gAA
       #|AABJRU5ErkJggg==
     ),
-    reference: "ok 39x39 13979e6e475871adaf0bb95858ea6b5b1567dcac3a424c50199afbcdd16d81b5",
+    reference: "ok 39x39 13979e6e475871adaf0bb95858ea6b5b1567dcac3a424c50199afbcdd16d81b5; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "s40i3p04",
@@ -2547,7 +2547,7 @@ let png_vectors : Array[PngVector] = [
       #|i0RW7QmJQJfcIiSaALqcltaTuvlJEiP9VZ7GAa21nCYBIUFIHHQJg3huUj3NiGvSHb9pXgoWak5w
       #|83t4AAAAAElFTkSuQmCC
     ),
-    reference: "ok 40x40 65224b35a3aafbb822691f624d3646cfb7d67fc450e7f94c941aac1ba3571289",
+    reference: "ok 40x40 65224b35a3aafbb822691f624d3646cfb7d67fc450e7f94c941aac1ba3571289; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "s40n3p04",
@@ -2558,7 +2558,7 @@ let png_vectors : Array[PngVector] = [
       #|+Jhi3BBHQCFGjxnRAGVRHms3Xq8LC51/Qurz99iacDg3tDcqpCyHbRLipgBXQk0ed8FHGggpUuCc
       #|uOnDYyF3dSfnZ1dwSF0UKQAAAABJRU5ErkJggg==
     ),
-    reference: "ok 40x40 65224b35a3aafbb822691f624d3646cfb7d67fc450e7f94c941aac1ba3571289",
+    reference: "ok 40x40 65224b35a3aafbb822691f624d3646cfb7d67fc450e7f94c941aac1ba3571289; gAMA 100000; sBIT 4,4,4; text 0 e3b0c44298fc1c14",
   },
   {
     name: "tbbn0g04",
@@ -2572,7 +2572,7 @@ let png_vectors : Array[PngVector] = [
       #|IspqRHawgnEKMQBoMNBOdsJHBb0ORvlxBkkERDQtdPh35FiDU5j9ZxgRQf3LxS5DQetL5eaCPiyn
       #|nFystE2m6+r/AOOSVs9bKk33AAAAAElFTkSuQmCC
     ),
-    reference: "ok 32x32 fddc6788a13c81a4a1146a7e7f9fc1b84f3b1621f3fb413c2007597b02869a32",
+    reference: "ok 32x32 fddc6788a13c81a4a1146a7e7f9fc1b84f3b1621f3fb413c2007597b02869a32; gAMA 100000; tRNS 15; bKGD 0; text 0 e3b0c44298fc1c14",
   },
   {
     name: "tbbn2c16",
@@ -2614,7 +2614,7 @@ let png_vectors : Array[PngVector] = [
       #|I+1iYpiH70LThDdt/IrD3YzT4DX4IcKvKfyfv5KLL33evsz9Rt4k/FbNafAazC0wTOarRLYgnxaP
       #|EhfhWYu/dyxEWQv4cfcc4e+kC1fK//7r9B+bDPke+qJhGgAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 08dbb27d5a81bfefa6656ea43231c6ee20523b2c212228ff88005f80f2dfe742",
+    reference: "ok 32x32 08dbb27d5a81bfefa6656ea43231c6ee20523b2c212228ff88005f80f2dfe742; gAMA 100000; tRNS 65535,65535,65535; bKGD 0,0,65535; text 0 e3b0c44298fc1c14",
   },
   {
     name: "tbbn3p08",
@@ -2647,7 +2647,7 @@ let png_vectors : Array[PngVector] = [
       #|yKLZEmsOeRVphWKTZ2C43jV/3mxTj8NdJ7HLA8F7+Xk2h5hwSgPBi+lmFfjkGRgSHuCXxwQADa7/
       #|kZ2V28AAAAAASUVORK5CYII=
     ),
-    reference: "ok 32x32 696a923fe74f240d4d76495bc3413a39d0a1cd8d0708fa08fea26e4abb255a85",
+    reference: "ok 32x32 696a923fe74f240d4d76495bc3413a39d0a1cd8d0708fa08fea26e4abb255a85; gAMA 100000; alpha 0,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255; bKGD 245; text 0 e3b0c44298fc1c14",
   },
   {
     name: "tbgn2c16",
@@ -2689,7 +2689,7 @@ let png_vectors : Array[PngVector] = [
       #|I+1iYpiH70LThDdt/IrD3YzT4DX4IcKvKfyfv5KLL33evsz9Rt4k/FbNafAazC0wTOarRLYgnxaP
       #|EhfhWYu/dyxEWQv4cfcc4e+kC1fK//7r9B+bDPke+qJhGgAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 08dbb27d5a81bfefa6656ea43231c6ee20523b2c212228ff88005f80f2dfe742",
+    reference: "ok 32x32 08dbb27d5a81bfefa6656ea43231c6ee20523b2c212228ff88005f80f2dfe742; gAMA 100000; tRNS 65535,65535,65535; bKGD 0,65535,0; text 0 e3b0c44298fc1c14",
   },
   {
     name: "tbgn3p08",
@@ -2722,7 +2722,7 @@ let png_vectors : Array[PngVector] = [
       #|yKLZEmsOeRVphWKTZ2C43jV/3mxTj8NdJ7HLA8F7+Xk2h5hwSgPBi+lmFfjkGRgSHuCXxwQADa7/
       #|kZ2V28AAAAAASUVORK5CYII=
     ),
-    reference: "ok 32x32 696a923fe74f240d4d76495bc3413a39d0a1cd8d0708fa08fea26e4abb255a85",
+    reference: "ok 32x32 696a923fe74f240d4d76495bc3413a39d0a1cd8d0708fa08fea26e4abb255a85; gAMA 100000; alpha 0,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255; bKGD 245; text 0 e3b0c44298fc1c14",
   },
   {
     name: "tbrn2c08",
@@ -2757,7 +2757,7 @@ let png_vectors : Array[PngVector] = [
       #|qGjEoDHet28f7Rb64/Pnz195fEkvuxcvXly5coWWNjFojCmDjo6OpRxcKmDORkdHtVotdRc9QZZ+
       #|6vUevzMzM/RCfa0jb/x1/Sd+IPxqXp1JowAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 ebefb12e340b9af9e649bebb3506b17e89726a47af24cfa9fd03a918ee5599c3",
+    reference: "ok 32x32 ebefb12e340b9af9e649bebb3506b17e89726a47af24cfa9fd03a918ee5599c3; gAMA 100000; tRNS 255,255,255; bKGD 255,0,0; text 0 e3b0c44298fc1c14",
   },
   {
     name: "tbwn0g16",
@@ -2787,7 +2787,7 @@ let png_vectors : Array[PngVector] = [
       #|1ra2xMSgoO3bcakiULXduzdhQmrqmTP41BCoXL9+ffwYvwqKa2cA4MyW1TM3HhMAAAAASUVORK5C
       #|YII=
     ),
-    reference: "ok 32x32 da74b48f756bea084eddcd9f7a9f1726ae40cc37bd9038c97cafcb638a871052",
+    reference: "ok 32x32 da74b48f756bea084eddcd9f7a9f1726ae40cc37bd9038c97cafcb638a871052; gAMA 100000; tRNS 65535; bKGD 65535; text 0 e3b0c44298fc1c14",
   },
   {
     name: "tbwn3p08",
@@ -2820,7 +2820,7 @@ let png_vectors : Array[PngVector] = [
       #|EmsOeRVphWKTZ2C43jV/3mxTj8NdJ7HLA8F7+Xk2h5hwSgPBi+lmFfjkGRgSHuCXxwQADa7/kZ2V
       #|28AAAAAASUVORK5CYII=
     ),
-    reference: "ok 32x32 696a923fe74f240d4d76495bc3413a39d0a1cd8d0708fa08fea26e4abb255a85",
+    reference: "ok 32x32 696a923fe74f240d4d76495bc3413a39d0a1cd8d0708fa08fea26e4abb255a85; gAMA 100000; alpha 0,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255; bKGD 0; text 0 e3b0c44298fc1c14",
   },
   {
     name: "tbyn3p08",
@@ -2853,7 +2853,7 @@ let png_vectors : Array[PngVector] = [
       #|yKLZEmsOeRVphWKTZ2C43jV/3mxTj8NdJ7HLA8F7+Xk2h5hwSgPBi+lmFfjkGRgSHuCXxwQADa7/
       #|kZ2V28AAAAAASUVORK5CYII=
     ),
-    reference: "ok 32x32 696a923fe74f240d4d76495bc3413a39d0a1cd8d0708fa08fea26e4abb255a85",
+    reference: "ok 32x32 696a923fe74f240d4d76495bc3413a39d0a1cd8d0708fa08fea26e4abb255a85; gAMA 100000; alpha 0,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255; bKGD 245; text 0 e3b0c44298fc1c14",
   },
   {
     name: "tm3n3p02",
@@ -2862,7 +2862,7 @@ let png_vectors : Array[PngVector] = [
       #|AAAAA3RSTlMAVaoLuSc5AAAAFElEQVR4XmNkAIJQIB4sjFWDiwEAKxcVYRYzLkEAAAAASUVORK5C
       #|YII=
     ),
-    reference: "ok 32x32 1fc25e84b6178c25a8be684318858fc52a78959f11522ba31687c5db981b526f",
+    reference: "ok 32x32 1fc25e84b6178c25a8be684318858fc52a78959f11522ba31687c5db981b526f; alpha 0,85,170,255; text 0 e3b0c44298fc1c14",
   },
   {
     name: "tp0n0g08",
@@ -2881,7 +2881,7 @@ let png_vectors : Array[PngVector] = [
       #|X9zdWxJsKy3s8xZbsr9SFFHf0Z0b5G9e/gt7vni/oLmtIz0wYMFfbPkCBP4daG1LDNqOLISe9e5N
       #|SD1Tj09B/dfH9fgVYAAA90bMUdlj1V0AAAAASUVORK5CYII=
     ),
-    reference: "ok 32x32 f208ac84d7c27049c22b5378df5835cd3f264fd6b4cb5f9556cb3909ef96a68e",
+    reference: "ok 32x32 f208ac84d7c27049c22b5378df5835cd3f264fd6b4cb5f9556cb3909ef96a68e; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "tp0n2c08",
@@ -2915,7 +2915,7 @@ let png_vectors : Array[PngVector] = [
       #|t2zZQoJKx7a4h5ffiyYnJ0ngaPJQ0ohBbbx3716aLfTy2bNnL12+pJvd8+fPL1++TEObGNTGtIPO
       #|zs6lLFwqYM7GxsY0Gg1V19wV5PUDyGZnZ+mG+kpL3vjt+i9V6lTMZgDHHwAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 da2c8f863ad0a1aa6a483fe1f84f8aa8837dc5e7c01b13279a1078ac8b60a494",
+    reference: "ok 32x32 da2c8f863ad0a1aa6a483fe1f84f8aa8837dc5e7c01b13279a1078ac8b60a494; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "tp0n3p08",
@@ -2947,7 +2947,7 @@ let png_vectors : Array[PngVector] = [
       #|1PVj41MDoxcYiTag4+jlQkMJsRVu3sUl7zqxJfvybSGLZkusOeRVpBWKPV9c75o/b7apx+Guk9jy
       #|BQgcey8/z+YQE7IQetZ7Md2sQhmfAuWEB8r4FWAAANxEPMkO1rmYAAAAAElFTkSuQmCC
     ),
-    reference: "ok 32x32 2d999250ca97f36405b4565a0614799262823820f2b724f37039642385c89a1f",
+    reference: "ok 32x32 2d999250ca97f36405b4565a0614799262823820f2b724f37039642385c89a1f; gAMA 100000; text 0 e3b0c44298fc1c14",
   },
   {
     name: "tp1n3p08",
@@ -2980,7 +2980,7 @@ let png_vectors : Array[PngVector] = [
       #|NX/ebFOPw10nscsDwXv5eTaHmHBKA8GL6WYV+OQZGBIe4JfHBAANrv+RnZXbwAAAAABJRU5ErkJg
       #|gg==
     ),
-    reference: "ok 32x32 696a923fe74f240d4d76495bc3413a39d0a1cd8d0708fa08fea26e4abb255a85",
+    reference: "ok 32x32 696a923fe74f240d4d76495bc3413a39d0a1cd8d0708fa08fea26e4abb255a85; gAMA 100000; alpha 0,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255; text 0 e3b0c44298fc1c14",
   },
   {
     name: "xc1n0g08",
@@ -3167,7 +3167,7 @@ let png_vectors : Array[PngVector] = [
       #|AAkAAAgAAAgAAAgAAAgAAAkAAAgAAAgAAAgAAAkAAAgAAAgAAAgAAAkAAAgAAAgAAAgAAAgAAAkA
       #|AAgAAAgAAAgAAAkAAAgAAAhVk05uHxPwlQAAAABJRU5ErkJggg==
     ),
-    reference: "ok 32x32 2d2e86be37826088a285f0420d94744c522bdb162202ab5ea5fc3c14a1fb3aae",
+    reference: "ok 32x32 2d2e86be37826088a285f0420d94744c522bdb162202ab5ea5fc3c14a1fb3aae; text 0 e3b0c44298fc1c14",
   },
   {
     name: "z03n2c08",
@@ -3178,7 +3178,7 @@ let png_vectors : Array[PngVector] = [
       #|XZesyKUPA7w6HwDQmZIxeq9kmN5cEVL/B4D1Twd4ve4gRL9XFKXngANVk05u39tDGQAAAABJRU5E
       #|rkJggg==
     ),
-    reference: "ok 32x32 2d2e86be37826088a285f0420d94744c522bdb162202ab5ea5fc3c14a1fb3aae",
+    reference: "ok 32x32 2d2e86be37826088a285f0420d94744c522bdb162202ab5ea5fc3c14a1fb3aae; text 0 e3b0c44298fc1c14",
   },
   {
     name: "z06n2c08",
@@ -3188,7 +3188,7 @@ let png_vectors : Array[PngVector] = [
       #|g4FOrGisswJ+dUrATPePvNCdI691T0Ui3Rwg1W0bKHTDBjpdW5FaVwVYdPkGRl24gV2XVOTSlwFe
       #|fR5A0Ccjc/S/kWn6sCKm/g0g690GfP25QYh+VRSlA/kAVZNObjFSwSwAAAAASUVORK5CYII=
     ),
-    reference: "ok 32x32 2d2e86be37826088a285f0420d94744c522bdb162202ab5ea5fc3c14a1fb3aae",
+    reference: "ok 32x32 2d2e86be37826088a285f0420d94744c522bdb162202ab5ea5fc3c14a1fb3aae; text 0 e3b0c44298fc1c14",
   },
   {
     name: "z09n2c08",
@@ -3198,6 +3198,6 @@ let png_vectors : Array[PngVector] = [
       #|g4FOrGisswJ+dUrATPePvNCdI691T0Ui3Rwg1W0bKHTDBjpdW5FaVwVYdPkGRl24gV2XVOTSlwFe
       #|fR5A0Ccjc/S/kWn6sCKm/g0g690GfP25QYh+VRSlA/kAVZNObtYRvvUAAAAASUVORK5CYII=
     ),
-    reference: "ok 32x32 2d2e86be37826088a285f0420d94744c522bdb162202ab5ea5fc3c14a1fb3aae",
+    reference: "ok 32x32 2d2e86be37826088a285f0420d94744c522bdb162202ab5ea5fc3c14a1fb3aae; text 0 e3b0c44298fc1c14",
   },
 ]

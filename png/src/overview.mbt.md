@@ -2,7 +2,7 @@
 
 A streaming PNG decoder in pure MoonBit, for Native, JS, Wasm and Wasm GC. It takes input in chunks of any size, writes whole rows into output slices you provide, checks every CRC and the zlib stream's Adler-32, and holds two rows and a zlib decoder, whatever the image's height.
 
-The module is being written. The decoder reads every color type and bit depth, interlaced or not, and skips ancillary chunks; reading them, APNG, and functions that convert rows to RGBA come later.
+The module is being written. The decoder reads every color type and bit depth, interlaced or not, with the ancillary chunks of the specification's third edition; APNG, and functions that convert rows to RGBA, come later.
 
 ## Install
 
@@ -62,11 +62,47 @@ An interlaced image comes out in Adam7's seven passes, each a lattice of the ima
 
 An index past the end of the palette is left in the row as it is; the specification shows such a pixel as opaque black.
 
+## Ancillary chunks
+
+The fixed-length chunks are read as they come, and their values returned from `Frame` on: `transparency()` (tRNS), `significant_bits()` (sBIT), `gamma()` (gAMA), `chromaticities()` (cHRM), `srgb_intent()` (sRGB), `coding_points()` (cICP), `mastering_display()` (mDCV), `light_level()` (cLLI), `physical_size()` (pHYs) and `background()` (bKGD). The decoder does not apply them: gamma, color spaces and which of cICP, iCCP, sRGB and cHRM wins are the caller's.
+
+The others are reported only when asked for: `Decoder(report=["iCCP", "eXIf", "tEXt", "zTXt", "iTXt"])` hands out each chunk of those types as one block of `Metadata`, once its CRC has passed, with `metadata_type()` naming it. iCCP's profile, zTXt's text and iTXt's compressed text come out inflated: iCCP's block is the profile's name, a NUL and the profile; zTXt's is the keyword, a NUL and the text, as tEXt's is; iTXt's has its compression flag and method set to 0. Any ancillary type can be asked for, unknown ones too; a fixed-length chunk asked for is both read and reported.
+
+```mbt check
+///|
+test "report the text chunks" {
+  let png = b"\x89\x50\x4e\x47\x0d\x0a\x1a\x0a\x00\x00\x00\x0d\x49\x48\x44\x52\x00\x00\x00\x01\x00\x00\x00\x01\x08\x00\x00\x00\x00\x3a\x7e\x9b\x55\x00\x00\x00\x0e\x74\x45\x58\x74\x41\x75\x74\x68\x6f\x72\x00\x73\x6f\x6d\x65\x6f\x6e\x65\xbf\x83\xd1\xc0\x00\x00\x00\x0a\x49\x44\x41\x54\x78\xda\x63\x60\x00\x00\x00\x02\x00\x01\xe5\x27\xde\xfc\x00\x00\x00\x00\x49\x45\x4e\x44\xae\x42\x60\x82"
+  let decoder = @png.Decoder(report=["tEXt"])
+  let out = FixedArray::make(256, b'\x00')
+  let mut rest = png[:]
+  let texts = []
+  for ;; {
+    match decoder.step_into(rest, out, end=true) {
+      Metadata =>
+        texts.push(
+          "\{decoder.metadata_type()}: \{Bytes::from_array(out[:decoder.last_produced()])}",
+        )
+      Done => break
+      _ => ()
+    }
+    rest = rest[decoder.last_consumed():]
+  }
+  inspect(
+    texts.join("\n"),
+    content=(
+      #|tEXt: b"Author\x00someone"
+    ),
+  )
+}
+```
+
 ## Limits
 
 `Decoder(max_row_bytes=...)` bounds a row's bytes: 8,000,000 by default (a million pixels of 16-bit RGBA), at most 1,000,000,000. An image with longer rows raises `LimitExceeded` with `resource: Memory` and the row's bytes, at the step after `Header`, before anything is allocated for it, so you can look at the size first. The height is not bounded: rows are handed out as they come.
 
 `memory_usage()` is 47,360 bytes (the zlib decoder and the palette) until the step after `Header`, then 47,360 + 2 × (1 + row bytes).
+
+A reported chunk is held until its CRC has passed, so `Decoder(max_chunk_bytes=...)` bounds it: 1 MiB by default, at most 100,000,000. A reported chunk longer than that raises `LimitExceeded` with `resource: Memory` and the chunk's length, and one that inflates to more raises it with no length. Asking for iCCP, zTXt or iTXt adds a second zlib decoder, 46,592 bytes, which the decoder holds only then: APNG allows text between the image data chunks of one frame, in the middle of their zlib stream. Chunks that are not asked for are only read through their CRC, whatever their size.
 
 ## Errors
 
@@ -79,7 +115,7 @@ A step raises [`gaato/codec`](https://mooncakes.io/docs/gaato/codec)'s `CodecErr
 - `TrailingData`: bytes after IEND. With `until=EndOfMember` the decoder stops right after IEND instead, and what follows is `input[last_consumed():]`.
 - An error inside the zlib stream keeps its kind, with `IDAT` in the message: `Corrupt` for malformed data, and `DictionaryRequired` for a stream that names a preset dictionary.
 
-An ancillary chunk out of the place the specification gives it, a second copy of one that may come once, or one whose CRC does not match is left out, and `ignored_chunks()` counts it. So is a PLTE that a grayscale image cannot use, a PLTE out of place in a truecolor image, and the data of an IEND that has some. Entries of a palette beyond what the bit depth can index are dropped. Inflated data past the last row, and bytes after the zlib stream, are dropped.
+An ancillary chunk out of the place the specification gives it, a second copy of one that may come once, one whose CRC does not match, or one whose values the specification does not allow (a gAMA of 0, a cICP with matrix coefficients, a tRNS longer than the palette, a zTXt whose keyword is empty or whose zlib stream is broken, and so on, as libpng judges them) is left out, and `ignored_chunks()` counts it; a later valid copy is still read. The bits of tRNS's samples above the bit depth are dropped, as browsers and image-rs show such images, where libpng keeps them and warns. So is a PLTE that a grayscale image cannot use, a PLTE out of place in a truecolor image, and the data of an IEND that has some. Entries of a palette beyond what the bit depth can index are dropped. Inflated data past the last row, and bytes after the zlib stream, are dropped.
 
 Rows come out as soon as they are decoded, before the CRCs and the Adler-32 that cover them, so `ChecksumMismatch` can follow rows you already have; `FrameEnd` comes once they have passed. A step that raises writes nothing: the rows before the error came out in the steps before it. Errors stick until `reset`.
 

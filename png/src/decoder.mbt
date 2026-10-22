@@ -46,6 +46,11 @@ priv enum State {
   ImageData
   /// The bytes of a chunk that is read only through its CRC.
   Skip
+  /// The bytes of an ancillary chunk read into fields, or into a block to
+  /// report, or both.
+  Collect
+  /// A reported chunk's block, waiting for room.
+  Emit
   /// A chunk's CRC.
   Crc
   /// IEND is checked; under `EndOfInput`, `Done` waits for `end`.
@@ -75,6 +80,10 @@ const MAX_LENGTH : UInt32 = 0x7FFFFFFF
 /// The most `max_row_bytes` can be, so that two rows and the zlib decoder fit
 /// in what `memory_usage` can count.
 const MAX_ROW_BYTES : Int32 = 1_000_000_000
+
+///|
+/// The most `max_chunk_bytes` can be, for the same reason.
+const MAX_CHUNK_BYTES : Int32 = 100_000_000
 
 ///|
 /// The color type of an image (table 11): how its pixels' samples are laid
@@ -163,6 +172,18 @@ pub struct Decoder {
   priv mut rows_count : Int32
   priv mut rows_bytes : Int32
   priv mut failure : @codec.CodecError?
+  // The fixed-length ancillary chunks read so far, the current one's bytes,
+  // and whether it is read into fields.
+  priv fields : Fields
+  priv scratch : FixedArray[Byte]
+  priv mut scratch_len : Int32
+  priv mut field : Bool
+  // The ancillary chunk types to report, and the current block.
+  priv reported : FixedArray[UInt32]
+  priv max_chunk_bytes : Int32
+  priv block : Block
+  priv mut reporting : Bool
+  priv mut metadata_chunk : UInt32
   // The caller's array, during a `step_into`.
   priv mut fixed_out : FixedArray[Byte]?
 }
@@ -177,15 +198,46 @@ pub struct Decoder {
 /// `Header`, before anything is allocated for it. Its height is not bounded,
 /// since rows are handed out as they come.
 ///
+/// `report` names the ancillary chunk types to hand out, each as one block
+/// of `Metadata` once its CRC has passed (see `metadata_type`); by default
+/// none. A name that is not an ancillary chunk type matches nothing. Their
+/// data is held until then, so a reported chunk of more than
+/// `max_chunk_bytes` bytes (1 MiB by default, at most 100,000,000) raises
+/// `LimitExceeded(Memory)` with its length, and so does one that inflates to
+/// more. iCCP's profile, zTXt's text and iTXt's compressed text come out
+/// inflated, through a second zlib decoder, which the decoder holds only
+/// when one of them is asked for.
+///
 /// `until` says where the image ends. `EndOfInput`, the default, decodes the
 /// image up to the end of the input, and bytes after IEND raise
 /// `TrailingData`. `EndOfMember` stops right after IEND and consumes nothing
 /// past it, so that `input[last_consumed():]` is what follows.
 pub fn Decoder::Decoder(
   max_row_bytes~ : Int32 = 8_000_000,
+  report~ : Array[String] = [],
+  max_chunk_bytes~ : Int32 = 1 << 20,
   until~ : @codec_image.Until = EndOfInput,
 ) -> Decoder {
   let none = FixedArray::make(0, b'\x00')
+  let max_chunk_bytes = max_chunk_bytes.max(0).min(MAX_CHUNK_BYTES)
+  let reported = FixedArray::from_array(
+    report.filter_map(name => {
+      guard name.length() == 4 && name.iter().all(c => c.to_int() < 128) else {
+        return None
+      }
+      let t = @rules.chunk_type(
+        name[0].to_byte(),
+        name[1].to_byte(),
+        name[2].to_byte(),
+        name[3].to_byte(),
+      )
+      if @rules.is_valid_type(t) && !@rules.is_critical(t) {
+        Some(t)
+      } else {
+        None
+      }
+    }),
+  )
   {
     max_row_bytes: max_row_bytes.max(0).min(MAX_ROW_BYTES),
     until,
@@ -235,6 +287,20 @@ pub fn Decoder::Decoder(
     rows_bytes: 0,
     failure: None,
     fixed_out: None,
+    fields: Fields::new(),
+    scratch: FixedArray::make(FIELD_BYTES, b'\x00'),
+    scratch_len: 0,
+    field: false,
+    reported,
+    max_chunk_bytes,
+    block: Block::new(
+      max_chunk_bytes,
+      reported
+      .iter()
+      .any(t => @rules.known(t) is (@rules.ICCP | @rules.ZTXT | @rules.ITXT)),
+    ),
+    reporting: false,
+    metadata_chunk: 0,
   }
 }
 
@@ -279,19 +345,28 @@ pub fn Decoder::reset(self : Decoder) -> Unit {
   self.consumed = 0
   self.rows_count = 0
   self.failure = None
+  self.fields.reset()
+  self.scratch_len = 0
+  self.field = false
+  self.block.release()
+  self.reporting = false
 }
 
 ///|
 /// Bytes held for the image: the zlib decoder's 46,592 (see
 /// `@zlib.Decoder::memory_usage`), the 768 of the palette, and from the step
 /// after `Header` two rows of 1 + `row_bytes` bytes each, for the image's
-/// full width. The signature, chunk heads and CRCs (8 bytes at a time) and
-/// IHDR's 13 bytes are not counted.
+/// full width. With chunks to report, the block of the one being read, and
+/// the second zlib decoder's 46,592 when iCCP, zTXt or iTXt is reported. The
+/// signature, chunk heads and CRCs (8 bytes at a time), IHDR's 13 bytes and
+/// the 256 into which a fixed-length ancillary chunk is read are not
+/// counted.
 pub fn Decoder::memory_usage(self : Decoder) -> Int32 {
   self.inflater.memory_usage() +
   self.plte.length() +
   self.prev.length() +
-  self.cur.length()
+  self.cur.length() +
+  self.block.memory()
 }
 
 ///|
@@ -311,10 +386,13 @@ pub fn Decoder::last_produced(self : Decoder) -> Int32 {
 }
 
 ///|
-/// The smallest output slice the next step can write a row into: the bytes
-/// of the current pass's rows while the frame has rows to come, else zero.
+/// The smallest output slice the next step can write into: a reported
+/// chunk's block when one waits, the bytes of the current pass's rows while
+/// the frame has rows to come, else zero.
 pub fn Decoder::room_needed(self : Decoder) -> Int32 {
-  if self.in_frame && !self.rows_done {
+  if self.state is Emit {
+    self.block.len
+  } else if self.in_frame && !self.rows_done {
     self.pass_bytes
   } else {
     0
@@ -639,6 +717,44 @@ fn Decoder::run(
         }
         self.state = Crc
       }
+      Collect => {
+        let n = self.left.min(input.length() - self.pos)
+        let data = input[self.pos:self.pos + n]
+        self.crc = @crc32.update_bytes(self.crc, data)
+        if self.field {
+          self.scratch.blit_from_bytesview(self.scratch_len, data)
+          self.scratch_len += n
+        }
+        if self.reporting {
+          self.block.feed(data)
+        }
+        self.pos += n
+        self.left -= n
+        if self.left > 0 {
+          raise NeedInput
+        }
+        self.state = Crc
+      }
+      Emit => {
+        let n = self.block.len
+        if n > output.length() - self.produced {
+          return if self.produced > 0 { Rows } else { NeedMoreOutput }
+        }
+        // SAFETY: `n <= output.length()` was checked above, and the block
+        // holds `n` bytes.
+        match self.fixed_out {
+          Some(out) => blit(out, 0, self.block.data, 0, n)
+          None =>
+            for i in 0..<n {
+              output.unsafe_set(i, self.block.data.unsafe_get(i))
+            }
+        }
+        self.produced = n
+        self.metadata_chunk = self.block.chunk
+        self.block.release()
+        self.state = Head
+        return Metadata
+      }
       Crc => {
         self.gather(input, 4)
         let h = self.held
@@ -764,9 +880,43 @@ fn Decoder::dispatch(self : Decoder) -> Status? raise Stop {
       }
     }
     @rules.IEND => self.ignoring = self.left > 0
-    _ => ()
+    _ => if !self.ignoring { self.begin_ancillary(t, index) }
   }
   None
+}
+
+///|
+/// Begins an ancillary chunk that table 7 places where it is: read into
+/// fields, reported, or both, or only skipped through its CRC. A chunk to
+/// read into fields that is longer than any of their kind is left out.
+fn Decoder::begin_ancillary(
+  self : Decoder,
+  t : UInt32,
+  index : Int32,
+) -> Unit raise Stop {
+  self.field = is_field(index) && self.left <= FIELD_BYTES
+  if is_field(index) && !self.field {
+    self.ignoring = true
+    return
+  }
+  self.reporting = self.reported.contains(t)
+  if self.reporting && self.left > self.max_chunk_bytes {
+    raise Fail(
+      LimitExceeded({
+        resource: Memory,
+        needed: Some(self.left.to_uint64()),
+        limit: self.max_chunk_bytes.to_uint64(),
+      }),
+      "a \{@rules.type_name(t)} of \{self.left} bytes, over max_chunk_bytes",
+    )
+  }
+  if self.reporting {
+    self.block.start(t, index, self.left)
+  }
+  if self.field || self.reporting {
+    self.scratch_len = 0
+    self.state = Collect
+  }
 }
 
 ///|
@@ -783,11 +933,37 @@ fn Decoder::close_chunk(self : Decoder, checked : Bool) -> Status? raise Stop {
       "the CRC of \{@rules.type_name(self.chunk)} does not match",
     )
   }
-  let used = checked && !self.ignoring
+  let mut used = checked && !self.ignoring
+  if used && self.field {
+    used = self.fields.read(
+      self.index,
+      self.scratch,
+      self.scratch_len,
+      self.color_type,
+      self.bit_depth,
+      self.entries,
+    )
+  }
+  if used && self.reporting {
+    used = self.block.finish()
+  }
   if !used {
     self.ignored += 1
+    // A later valid copy of a chunk left out may still be read.
+    if self.index > @rules.IEND {
+      self.seen = self.seen & (1U << self.index).lnot()
+    }
   }
+  self.field = false
   self.state = Head
+  if self.reporting {
+    self.reporting = false
+    if used {
+      self.state = Emit
+      return None
+    }
+    self.block.release()
+  }
   match self.index {
     @rules.IHDR => {
       self.read_header()
@@ -975,7 +1151,7 @@ fn Decoder::write_row(self : Decoder, output : MutArrayView[Byte]) -> Bool {
   // SAFETY: `produced + n <= output.length()` was checked above, and `row`
   // holds 1 + the bytes of a full row, at least `1 + n`.
   match self.fixed_out {
-    Some(out) => FixedArray::unsafe_blit(out, self.produced, row, 1, n)
+    Some(out) => blit(out, self.produced, row, 1, n)
     None =>
       for i in 0..<n {
         output.unsafe_set(self.produced + i, row.unsafe_get(1 + i))
@@ -994,6 +1170,38 @@ fn Decoder::write_row(self : Decoder, output : MutArrayView[Byte]) -> Bool {
     self.start_pass(self.pass + 1)
   }
   true
+}
+
+///|
+/// Copies `n` bytes of `src` from `at` into `dst` from `to`, which the
+/// caller has checked both arrays hold, in one block copy: native and Wasm
+/// decode the benchmarks' image 10 to 15% faster with it than byte by byte.
+#cfg(not(target="js"))
+fn blit(
+  dst : FixedArray[Byte],
+  to : Int32,
+  src : FixedArray[Byte],
+  at : Int32,
+  n : Int32,
+) -> Unit {
+  FixedArray::unsafe_blit(dst, to, src, at, n)
+}
+
+///|
+/// The same, byte by byte: on JS the block copy is a loop that checks every
+/// index, and decoded the benchmarks' image 10% slower than this one
+/// (bench/, 2026-10-22).
+#cfg(target="js")
+fn blit(
+  dst : FixedArray[Byte],
+  to : Int32,
+  src : FixedArray[Byte],
+  at : Int32,
+  n : Int32,
+) -> Unit {
+  for i in 0..<n {
+    dst.unsafe_set(to + i, src.unsafe_get(at + i))
+  }
 }
 
 ///|

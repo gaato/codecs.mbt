@@ -61,7 +61,41 @@ test "corrupted images raise errors or decode, the same under every split, withi
     image(9, 7, 1, 0, interlaced=true).0,
     image(5, 11, 4, 3, idat_size=17).0,
     image(6, 6, 16, 6, interlaced=true, idat_size=40).0,
+    with_chunks(
+      3,
+      4,
+      [
+        chunk("gAMA", Bytes::from_array(be32(45455))),
+        chunk("tRNS", b"\x00\x80"),
+        chunk("bKGD", b"\x01"),
+        chunk(
+          "iCCP",
+          Bytes::from_array(
+            [..b"p\x00\x00", ..@zlib.compress(Bytes::make(300, b'i'))],
+          ),
+        ),
+      ],
+      after=[
+        chunk("tEXt", b"Author\x00someone"),
+        chunk(
+          "zTXt",
+          Bytes::from_array(
+            [..b"Comment\x00\x00", ..@zlib.compress(b"text, text")],
+          ),
+        ),
+        chunk(
+          "iTXt",
+          Bytes::from_array(
+            [..b"T\x00\x01\x00en\x00T\x00", ..@zlib.compress(b"x")],
+          ),
+        ),
+      ],
+    ),
   ]
+  // Reporting the variable-length chunks, with a block of at most 4 KiB.
+  let make = () => {
+    Decoder(report=["iCCP", "tEXt", "zTXt", "iTXt"], max_chunk_bytes=4096)
+  }
   let outcomes : Map[String, Int32] = Map([])
   for round in 0..<600 {
     let input = match round % 3 {
@@ -69,17 +103,18 @@ test "corrupted images raise errors or decode, the same under every split, withi
       1 => edited_data(noise, 9, 7, 8, 2, false)
       _ => edited_data(noise, 6, 6, 16, 6, true)
     }
-    let whole = run(Decoder(), input)
+    let whole = run(make(), input)
     for split in [(1, 1), (3, 5), (64, 7)] {
-      let again = run(Decoder(), input, chunk=split.0, room=split.1)
+      let again = run(make(), input, chunk=split.0, room=split.1)
       if again.output != whole.output ||
         again.error.map(e => e.0) != whole.error.map(e => e.0) {
         fail("round \{round}, split \{split.0}/\{split.1}: another outcome")
       }
     }
-    // Every row the image can have is at most 6 pixels of 64 bits wide,
-    // unless the edit made IHDR say otherwise, which the CRC catches.
-    if whole.peak_memory > BASE_MEMORY + 2 * (1 + 48) {
+    // Every row the images can have is at most 48 bytes, unless the edit
+    // made IHDR say otherwise, which the CRC catches; and a block and the
+    // second zlib decoder.
+    if whole.peak_memory > BASE_MEMORY + 2 * (1 + 48) + 4096 + 46_592 {
       fail("round \{round}: memory \{whole.peak_memory}")
     }
     let name = match whole.error {

@@ -8,8 +8,10 @@
 // pypng, a pure-Python decoder: for each image, `ok <width>x<height>
 // <sha256>`, the digest of the image's samples row by row as pypng's `read`
 // gives them (the image deinterlaced, one byte a sample up to 8 bits, palette
-// indices as they are, 16-bit samples big-endian), or `error <exception>`,
-// a warning counting as an error.
+// indices as they are, 16-bit samples big-endian), with what pypng reads of
+// the fixed-length chunks and a digest of the text and profile chunks as
+// Python's zlib inflates them; or `error <exception>`, a warning counting as
+// an error.
 // The conformance tests hold gaato/png to it; the file names pypng's version,
 // so that --check notices another one.
 //
@@ -59,17 +61,64 @@ let pypng_pin : String = "pypng @ git+https://gitlab.com/drj11/pypng@pypng-0.202
 ///|
 /// Decodes every `.png` of the directory it is given with pypng, its warnings
 /// (a CRC that does not match, since 0.20231004.0) taken as errors, and prints
-/// `pypng <version>`, then one line an image: `<file> ok <w>x<h> <sha256>`
-/// or `<file> error <exception>`.
+/// `pypng <version>`, then one line an image: `<file> ok <w>x<h> <sha256>`,
+/// then, separated by `; `, the fixed-length chunks pypng reads (gAMA, tRNS
+/// with the palette's alpha, bKGD, pHYs, sBIT) and `text <count> <digest>`
+/// of the text and profile chunks, inflated by Python's zlib; or `<file>
+/// error <exception>`.
 let reference : String =
-  #|import sys, os, hashlib, array, warnings, png
+  #|import sys, os, hashlib, array, struct, warnings, zlib, png
   #|warnings.simplefilter("error")
+  #|def blocks(data):
+  #|    # The text and profile chunks as blocks: inflated, the bytes that said
+  #|    # they were compressed left out (iCCP, zTXt) or set to 0 (iTXt).
+  #|    digest, count, at = hashlib.sha256(), 0, 8
+  #|    while at + 8 <= len(data):
+  #|        n, kind = struct.unpack(">I4s", data[at:at + 8])
+  #|        body = data[at + 8:at + 8 + n]
+  #|        at += 12 + n
+  #|        if kind == b"tEXt":
+  #|            block = body
+  #|        elif kind in (b"zTXt", b"iCCP"):
+  #|            k = body.index(b"\0")
+  #|            block = body[:k + 1] + zlib.decompress(body[k + 2:])
+  #|        elif kind == b"iTXt":
+  #|            k = body.index(b"\0")
+  #|            l = body.index(b"\0", k + 3)
+  #|            t = body.index(b"\0", l + 1)
+  #|            text = body[t + 1:]
+  #|            if body[k + 1] == 1:
+  #|                text = zlib.decompress(text)
+  #|            block = body[:k + 1] + b"\0\0" + body[k + 3:t + 1] + text
+  #|        else:
+  #|            continue
+  #|        digest.update(kind + struct.pack(">I", len(block)) + block)
+  #|        count += 1
+  #|    return "text %d %s" % (count, digest.hexdigest()[:16])
+  #|def fields(reader, info):
+  #|    out = []
+  #|    if "gamma" in info:
+  #|        out.append("gAMA %d" % round(info["gamma"] * 100000))
+  #|    if "transparent" in info:
+  #|        out.append("tRNS " + ",".join(map(str, info["transparent"])))
+  #|    palette = info.get("palette")
+  #|    if palette and len(palette[0]) == 4:
+  #|        out.append("alpha " + ",".join(str(p[3]) for p in palette))
+  #|    if "background" in info:
+  #|        out.append("bKGD " + ",".join(map(str, info["background"])))
+  #|    if "physical" in info:
+  #|        x, y, metre = info["physical"]
+  #|        out.append("pHYs %d,%d,%d" % (x, y, metre))
+  #|    if getattr(reader, "sbit", None):
+  #|        out.append("sBIT " + ",".join(str(b) for b in reader.sbit))
+  #|    return out
   #|d = sys.argv[1]
   #|print("pypng", png.__version__)
   #|for name in sorted(f for f in os.listdir(d) if f.endswith(".png")):
   #|    data = open(os.path.join(d, name), "rb").read()
   #|    try:
-  #|        w, h, rows, info = png.Reader(bytes=data).read()
+  #|        reader = png.Reader(bytes=data)
+  #|        w, h, rows, info = reader.read()
   #|        digest = hashlib.sha256()
   #|        for row in rows:
   #|            if info["bitdepth"] > 8:
@@ -79,7 +128,9 @@ let reference : String =
   #|                digest.update(a.tobytes())
   #|            else:
   #|                digest.update(bytes(row))
-  #|        print(name, "ok", "%dx%d" % (w, h), digest.hexdigest())
+  #|        line = ["ok", "%dx%d" % (w, h), digest.hexdigest()]
+  #|        line += fields(reader, info) + [blocks(data)]
+  #|        print(name, "; ".join([" ".join(line[:3])] + line[3:]))
   #|    except Exception as e:
   #|        print(name, "error", type(e).__name__)
 

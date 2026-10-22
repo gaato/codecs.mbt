@@ -12,6 +12,39 @@ import {
 // Errors
 
 // Types and methods
+pub(all) enum Background {
+  Gray(Int32)
+  Rgb(Int32, Int32, Int32)
+  Index(Int32)
+} derive(Eq, @debug.Debug)
+pub fn Background::equal(Self, Self) -> Bool
+pub fn Background::not_equal(Self, Self) -> Bool
+pub fn Background::to_repr(Self) -> @debug.Repr
+
+pub(all) struct Chromaticities {
+  white_x : UInt32
+  white_y : UInt32
+  red_x : UInt32
+  red_y : UInt32
+  green_x : UInt32
+  green_y : UInt32
+  blue_x : UInt32
+  blue_y : UInt32
+} derive(Eq, @debug.Debug)
+pub fn Chromaticities::equal(Self, Self) -> Bool
+pub fn Chromaticities::not_equal(Self, Self) -> Bool
+pub fn Chromaticities::to_repr(Self) -> @debug.Repr
+
+pub(all) struct CodingPoints {
+  color_primaries : Int32
+  transfer_function : Int32
+  matrix_coefficients : Int32
+  full_range : Bool
+} derive(Eq, @debug.Debug)
+pub fn CodingPoints::equal(Self, Self) -> Bool
+pub fn CodingPoints::not_equal(Self, Self) -> Bool
+pub fn CodingPoints::to_repr(Self) -> @debug.Repr
+
 pub(all) enum ColorType {
   Grayscale
   Truecolor
@@ -26,34 +59,87 @@ pub fn ColorType::to_repr(Self) -> @debug.Repr
 pub struct Decoder {
   // private fields
 }
-pub fn Decoder::Decoder(max_row_bytes? : Int32, until? : @codec_image.Until) -> Self
+pub fn Decoder::Decoder(max_row_bytes? : Int32, report? : Array[String], max_chunk_bytes? : Int32, until? : @codec_image.Until) -> Self
+pub fn Decoder::background(Self) -> Background?
 pub fn Decoder::bit_depth(Self) -> Int32
+pub fn Decoder::chromaticities(Self) -> Chromaticities?
+pub fn Decoder::coding_points(Self) -> CodingPoints?
 pub fn Decoder::color_type(Self) -> ColorType
 pub fn Decoder::frame_height(Self) -> Int32
 pub fn Decoder::frame_width(Self) -> Int32
 pub fn Decoder::frame_x(Self) -> Int32
 pub fn Decoder::frame_y(Self) -> Int32
+pub fn Decoder::gamma(Self) -> UInt32?
 pub fn Decoder::height(Self) -> Int32
 pub fn Decoder::ignored_chunks(Self) -> Int32
 pub fn Decoder::interlaced(Self) -> Bool
 pub fn Decoder::last_consumed(Self) -> Int32
 pub fn Decoder::last_produced(Self) -> Int32
+pub fn Decoder::light_level(Self) -> LightLevel?
+pub fn Decoder::mastering_display(Self) -> MasteringDisplay?
 pub fn Decoder::memory_usage(Self) -> Int32
+pub fn Decoder::metadata_type(Self) -> String
 pub fn Decoder::palette(Self) -> ArrayView[Byte]
 pub fn Decoder::pass(Self) -> Int32
 pub fn Decoder::pass_dx(Self) -> Int32
 pub fn Decoder::pass_dy(Self) -> Int32
 pub fn Decoder::pass_x(Self) -> Int32
 pub fn Decoder::pass_y(Self) -> Int32
+pub fn Decoder::physical_size(Self) -> PhysicalSize?
 pub fn Decoder::reset(Self) -> Unit
 pub fn Decoder::room_needed(Self) -> Int32
 pub fn Decoder::row_bytes(Self) -> Int32
 pub fn Decoder::rows_count(Self) -> Int32
 pub fn Decoder::rows_first(Self) -> Int32
+pub fn Decoder::significant_bits(Self) -> ArrayView[Byte]
+pub fn Decoder::srgb_intent(Self) -> Int32?
 pub fn Decoder::step(Self, BytesView, MutArrayView[Byte], end~ : Bool) -> @codec_image.Status raise @codec.CodecError
 pub fn Decoder::step_into(Self, BytesView, FixedArray[Byte], end~ : Bool) -> @codec_image.Status raise @codec.CodecError
+pub fn Decoder::transparency(Self) -> Transparency?
 pub fn Decoder::width(Self) -> Int32
 pub impl @codec_image.Decode for Decoder
+
+pub(all) struct LightLevel {
+  max_content : UInt32
+  max_frame_average : UInt32
+} derive(Eq, @debug.Debug)
+pub fn LightLevel::equal(Self, Self) -> Bool
+pub fn LightLevel::not_equal(Self, Self) -> Bool
+pub fn LightLevel::to_repr(Self) -> @debug.Repr
+
+pub(all) struct MasteringDisplay {
+  red_x : Int32
+  red_y : Int32
+  green_x : Int32
+  green_y : Int32
+  blue_x : Int32
+  blue_y : Int32
+  white_x : Int32
+  white_y : Int32
+  max_luminance : UInt32
+  min_luminance : UInt32
+} derive(Eq, @debug.Debug)
+pub fn MasteringDisplay::equal(Self, Self) -> Bool
+pub fn MasteringDisplay::not_equal(Self, Self) -> Bool
+pub fn MasteringDisplay::to_repr(Self) -> @debug.Repr
+
+pub(all) struct PhysicalSize {
+  x : UInt32
+  y : UInt32
+  per_meter : Bool
+} derive(Eq, @debug.Debug)
+pub fn PhysicalSize::equal(Self, Self) -> Bool
+pub fn PhysicalSize::not_equal(Self, Self) -> Bool
+pub fn PhysicalSize::to_repr(Self) -> @debug.Repr
+
+pub(all) enum Transparency {
+  Gray(Int32)
+  Rgb(Int32, Int32, Int32)
+  Alpha(ArrayView[Byte])
+} derive(Eq, @debug.Debug)
+pub fn Transparency::equal(Self, Self) -> Bool
+pub fn Transparency::not_equal(Self, Self) -> Bool
+pub fn Transparency::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 pub using @codec_image {type Status}

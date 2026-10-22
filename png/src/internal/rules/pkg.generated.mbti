@@ -7,13 +7,55 @@ import {
 }
 
 // Values
+pub const ACTL : Int32 = 15
+
+pub const BKGD : Int32 = 12
+
+pub const CHRM : Int32 = 4
+
+pub const CICP : Int32 = 5
+
+pub const CLLI : Int32 = 9
+
+pub const EXIF : Int32 = 16
+
+pub const FCTL : Int32 = 23
+
+pub const FDAT : Int32 = 24
+
+pub const GAMA : Int32 = 6
+
+pub const HIST : Int32 = 14
+
+pub const ICCP : Int32 = 7
+
 pub const IDAT : Int32 = 2
 
 pub const IEND : Int32 = 3
 
 pub const IHDR : Int32 = 0
 
+pub const ITXT : Int32 = 20
+
+pub const MDCV : Int32 = 8
+
+pub const PHYS : Int32 = 17
+
 pub const PLTE : Int32 = 1
+
+pub const SBIT : Int32 = 10
+
+pub const SPLT : Int32 = 18
+
+pub const SRGB : Int32 = 11
+
+pub const TEXT : Int32 = 21
+
+pub const TIME : Int32 = 19
+
+pub const TRNS : Int32 = 13
+
+pub const ZTXT : Int32 = 22
 
 pub fn after(Position, UInt32, Verdict) -> Position
 

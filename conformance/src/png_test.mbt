@@ -1,6 +1,7 @@
 // gaato/png over PngSuite (png_vectors_test.mbt): every image against
-// pypng's samples and typst's decode_png, and under the harness's checks
-// through the image adapter.
+// pypng's samples and fixed-length chunks, its text chunks against Python's
+// zlib, against typst's decode_png, and under the harness's checks through
+// the image adapter, with the text and profile chunks reported.
 
 ///|
 /// A PngSuite image, and what pypng makes of it: `ok <w>x<h> <sha256>` of
@@ -51,6 +52,14 @@ struct Decoded {
   color_type : @png.ColorType
   interlaced : Bool
   palette : Bytes
+  /// What the decoder read of the fixed-length chunks pypng also reads, as
+  /// the reference writes it.
+  fields : Array[String]
+  /// The blocks of the text and profile chunks, each with its type.
+  blocks : Array[(String, Bytes)]
+  /// The rows and the blocks, in the order the decoder wrote them.
+  output : Bytes
+  transparency : @png.Transparency?
 }
 
 ///|
@@ -71,9 +80,16 @@ fn packed_bytes(pixels : Int32, bits : Int32) -> Int32 {
 }
 
 ///|
-/// Decodes `input` whole with a fresh decoder.
+/// The chunk types the tests report.
+let reported : Array[String] = ["tEXt", "zTXt", "iTXt", "iCCP"]
+
+///|
+/// Decodes `input` whole with a fresh decoder that reports the text and
+/// profile chunks.
 fn decode_png(input : Bytes) -> Decoded raise {
-  let decoder = @png.Decoder()
+  let decoder = @png.Decoder(report=reported)
+  let blocks = []
+  let output = Buffer()
   let rows = Buffer()
   let mut out = FixedArray::make(0, b'\x00')
   let mut rest = input[:]
@@ -83,8 +99,16 @@ fn decode_png(input : Bytes) -> Decoded raise {
     }
     let status = decoder.step(rest, out.mut_view(), end=true)
     rest = rest[decoder.last_consumed():]
+    output.write_bytes(Bytes::from_array(out[:decoder.last_produced()]))
     match status {
       Rows => rows.write_bytes(Bytes::from_array(out[:decoder.last_produced()]))
+      Metadata =>
+        blocks.push(
+          (
+            decoder.metadata_type(),
+            Bytes::from_array(out[:decoder.last_produced()]),
+          ),
+        )
       Done => break
       _ => ()
     }
@@ -97,7 +121,78 @@ fn decode_png(input : Bytes) -> Decoded raise {
     color_type: decoder.color_type(),
     interlaced: decoder.interlaced(),
     palette: Bytes::from_array(decoder.palette()),
+    fields: fields_of(decoder),
+    blocks,
+    output: output.to_bytes(),
+    transparency: decoder.transparency(),
   }
+}
+
+///|
+fn joined(values : Array[Int32]) -> String {
+  values.map(v => v.to_string()).join(",")
+}
+
+///|
+/// The fixed-length chunks as the reference writes what pypng reads of
+/// them: gAMA, tRNS (for indexed-color, the alpha of every palette entry),
+/// bKGD, pHYs, sBIT.
+fn fields_of(decoder : @png.Decoder) -> Array[String] {
+  let out = []
+  if decoder.gamma() is Some(gamma) {
+    out.push("gAMA \{gamma}")
+  }
+  match decoder.transparency() {
+    Some(Gray(v)) => out.push("tRNS \{v}")
+    Some(Rgb(r, g, b)) => out.push("tRNS \{joined([r, g, b])}")
+    Some(Alpha(alpha)) => {
+      let entries = decoder.palette().length() / 3
+      let all = Array::makei(entries, i => {
+        if i < alpha.length() {
+          alpha[i].to_int()
+        } else {
+          255
+        }
+      })
+      out.push("alpha \{joined(all)}")
+    }
+    None => ()
+  }
+  match decoder.background() {
+    Some(Gray(v)) | Some(Index(v)) => out.push("bKGD \{v}")
+    Some(Rgb(r, g, b)) => out.push("bKGD \{joined([r, g, b])}")
+    None => ()
+  }
+  if decoder.physical_size() is Some(size) {
+    let metre = if size.per_meter { 1 } else { 0 }
+    out.push("pHYs \{size.x},\{size.y},\{metre}")
+  }
+  let sbit = decoder.significant_bits()
+  if sbit.length() > 0 {
+    out.push("sBIT \{joined(sbit.to_owned().map(b => b.to_int()))}")
+  }
+  out
+}
+
+///|
+/// `text <count> <digest>` of `blocks`, as the reference writes it: the
+/// first 16 hex digits of the SHA-256 of each block's type, length and
+/// bytes, one after another.
+fn text_digest(blocks : Array[(String, Bytes)]) -> String {
+  let all = Buffer()
+  for block in blocks {
+    let (kind, bytes) = block
+    for c in kind {
+      all.write_byte(c.to_int().to_byte())
+    }
+    let n = bytes.length()
+    for shift in [24, 16, 8, 0] {
+      all.write_byte((n >> shift).to_byte())
+    }
+    all.write_bytes(bytes)
+  }
+  let digest = @codec_harness.sha256(all.to_bytes())
+  "text \{blocks.length()} \{digest.view(end_offset=16)}"
 }
 
 ///|
@@ -167,37 +262,13 @@ fn pypng_shape(d : Decoded, image : FixedArray[Int32]) -> Bytes {
 }
 
 ///|
-/// The data of the first chunk of type `name` in `png`.
-fn chunk_data(png : Bytes, name : String) -> Bytes? {
-  let mut at = 8
-  while at + 8 <= png.length() {
-    let length = (png[at].to_int() << 24) |
-      (png[at + 1].to_int() << 16) |
-      (png[at + 2].to_int() << 8) |
-      png[at + 3].to_int()
-    let mut found = true
-    for i in 0..<4 {
-      found = found && png[at + 4 + i] == name[i].to_byte()
-    }
-    if found {
-      return Some(png[at + 8:at + 8 + length].to_owned())
-    }
-    at += 12 + length
-  }
-  None
-}
-
-///|
 /// The image as typst's `decode_png` gives it, the shape of the `png`
-/// crate's `EXPAND`: a palette applied (with tRNS as alpha), gray of fewer
-/// than 8 bits scaled to 8, tRNS turned into an alpha channel, and 16-bit
-/// samples little-endian when `swap16`, as typst gives them. The one place
-/// the comparison converts.
-fn expand(
-  d : Decoded,
-  trns : Bytes?,
-  swap16~ : Bool = true,
-) -> (@codecs.ColorType, Bytes) {
+/// crate's `EXPAND`: a palette applied (with the decoder's tRNS as alpha),
+/// gray of fewer than 8 bits scaled to 8, tRNS turned into an alpha channel,
+/// and 16-bit samples little-endian when `swap16`, as typst gives them. The
+/// one place the comparison converts.
+fn expand(d : Decoded, swap16~ : Bool = true) -> (@codecs.ColorType, Bytes) {
+  let trns = d.transparency
   let image = samples(d)
   let n = channels(d.color_type)
   let out = Buffer()
@@ -233,7 +304,7 @@ fn expand(
             },
           )
         }
-        if trns is Some(alpha) {
+        if trns is Some(Alpha(alpha)) {
           out.write_byte(
             if index < alpha.length() {
               alpha[index]
@@ -243,20 +314,14 @@ fn expand(
           )
         }
       }
-      (if trns is Some(_) { Rgba8 } else { Rgb8 }, out.to_bytes())
+      (if trns is Some(Alpha(_)) { Rgba8 } else { Rgb8 }, out.to_bytes())
     }
     _ => {
-      // tRNS for gray and truecolor: the one gray level or color, in 16-bit
-      // fields, that is transparent.
+      // tRNS for gray and truecolor: the one gray level or color that is
+      // transparent.
       let key = match trns {
-        Some(t) if n == 1 && t.length() >= 2 =>
-          Some([(t[0].to_int() << 8) | t[1].to_int()])
-        Some(t) if n == 3 && t.length() >= 6 =>
-          Some([
-            (t[0].to_int() << 8) | t[1].to_int(),
-            (t[2].to_int() << 8) | t[3].to_int(),
-            (t[4].to_int() << 8) | t[5].to_int(),
-          ])
+        Some(Gray(v)) => Some([v])
+        Some(Rgb(r, g, b)) => Some([r, g, b])
         _ => None
       }
       for p in 0..<pixels {
@@ -300,11 +365,13 @@ fn expand(
 /// The format of the image after `Header`, so that a decoder that reports
 /// another under some split fails the checks.
 fn describe_png(decoder : @png.Decoder, status : @codec_image.Status) -> String {
-  if status is Header {
-    let interlaced = if decoder.interlaced() { " interlaced" } else { "" }
-    "\{@debug.to_string(decoder.color_type())} \{decoder.bit_depth()}\{interlaced}"
-  } else {
-    ""
+  match status {
+    Header => {
+      let interlaced = if decoder.interlaced() { " interlaced" } else { "" }
+      "\{@debug.to_string(decoder.color_type())} \{decoder.bit_depth()}\{interlaced}"
+    }
+    Metadata => decoder.metadata_type()
+    _ => ""
   }
 }
 
@@ -312,15 +379,23 @@ fn describe_png(decoder : @png.Decoder, status : @codec_image.Status) -> String 
 fn png_stepper(
   until~ : @codec_image.Until = EndOfInput,
 ) -> @codec_harness.ImageDecoder[@png.Decoder] {
-  @codec_harness.ImageDecoder::new(@png.Decoder(until~), describe=describe_png)
+  @codec_harness.ImageDecoder::new(
+    @png.Decoder(report=reported, until~),
+    describe=describe_png,
+  )
 }
 
 ///|
-/// What the decoder may hold for `d`: the zlib decoder and the palette, and
-/// two rows of the image's width.
-fn png_memory(d : Decoded) -> Int32 {
+/// What the decoder may hold for `d`: the two zlib decoders and the
+/// palette, two rows of the image's width, and the buffer of its largest
+/// block, which grows by doubling from 256 bytes, or is the chunk's length.
+fn png_memory(d : Decoded, input : Bytes) -> Int32 {
   let bits = channels(d.color_type) * d.bit_depth
-  47_360 + 2 * (1 + packed_bytes(d.width, bits))
+  let block = d.blocks.fold(init=0, (most, b) => most.max(b.1.length()))
+  47_360 +
+  46_592 +
+  2 * (1 + packed_bytes(d.width, bits)) +
+  (2 * block).max(256).max(input.length())
 }
 
 ///|
@@ -336,11 +411,15 @@ test "PngSuite: the reference is pypng, and every image is there" {
 }
 
 ///|
-test "PngSuite: every valid image's samples are pypng's" {
+test "PngSuite: every valid image's samples, fixed-length chunks and text are what the reference says" {
   for v in png_vectors {
     guard v.reference.strip_prefix("ok ") is Some(expected) else { continue }
     let d = decode_png(v.input())
-    let got = "\{d.width}x\{d.height} \{@codec_harness.sha256(pypng_shape(d, samples(d)))}"
+    let got = [
+      "\{d.width}x\{d.height} \{@codec_harness.sha256(pypng_shape(d, samples(d)))}",
+      ..d.fields,
+      text_digest(d.blocks),
+    ].join("; ")
     if got != expected.to_owned() {
       fail("\{v.name}: \{got}, pypng: \{expected}")
     }
@@ -353,7 +432,7 @@ test "PngSuite: every valid image under the harness's checks" {
     guard v.reference.has_prefix("ok ") else { continue }
     let input = v.input()
     let d = decode_png(input)
-    let memory_limit = Some(png_memory(d))
+    let memory_limit = Some(png_memory(d, input))
     let label = v.name
     let whole = @codec_harness.check_splits(
       () => png_stepper(),
@@ -362,7 +441,7 @@ test "PngSuite: every valid image under the harness's checks" {
     ) catch {
       e => fail("\{label}: \{e}")
     }
-    if whole.error is Some(_) || whole.output != d.rows {
+    if whole.error is Some(_) || whole.output != d.output {
       fail("\{label}: the harness's run gives other rows")
     }
     @codec_harness.check_truncation(
@@ -410,7 +489,7 @@ test "PngSuite: every broken image raises the kind its name says, under every sp
       () => png_stepper(),
       v.input(),
       seed=i.reinterpret_as_uint(),
-      memory_limit=Some(47_360 + 2 * (1 + 256)),
+      memory_limit=Some(47_360 + 46_592 + 2 * (1 + 256) + 256),
     ) catch {
       e => fail("\{v.name}: \{e}")
     }
@@ -431,7 +510,7 @@ test "PngSuite: corrupted images keep the contract" {
       v.input(),
       seed=i.reinterpret_as_uint(),
       rounds=12,
-      memory_limit=Some(47_360 + 2 * (1 + 768)),
+      memory_limit=Some(47_360 + 46_592 + 2 * (1 + 768) + (1 << 20)),
     ) catch {
       e => fail("\{v.name}: \{e}")
     }
@@ -458,7 +537,7 @@ test "PngSuite: typst's decode_png agrees, after EXPAND" {
       fail("\{v.name}: typst refuses it")
     }
     let d = decode_png(input)
-    let (color, ours) = expand(d, chunk_data(input, "tRNS"))
+    let (color, ours) = expand(d)
     if info.width != d.width.reinterpret_as_uint() ||
       info.height != d.height.reinterpret_as_uint() ||
       info.color != color ||
@@ -482,8 +561,8 @@ test "PngSuite: without swapping 16-bit samples, no 16-bit image agrees with typ
     let d = decode_png(input)
     guard d.bit_depth == 16 else { continue }
     let (_, pixels) = @codecs.decode_png(input)
-    let (_, swapped) = expand(d, chunk_data(input, "tRNS"))
-    let (_, unswapped) = expand(d, chunk_data(input, "tRNS"), swap16=false)
+    let (_, swapped) = expand(d)
+    let (_, unswapped) = expand(d, swap16=false)
     // An image whose every sample has two equal bytes (8-bit levels times
     // 257) reads the same either way, and tells nothing.
     if swapped == unswapped {
