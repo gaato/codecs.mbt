@@ -127,7 +127,7 @@ unqualified; elsewhere, qualify a constructor by its type, as in
 `@codec_bytes.CodecError::CodecError(kind, _)`.
 
 A step that raises first writes the output that comes before the error, and
-`last_taken()` and `last_written()` count what it took and wrote. Errors
+`last_consumed()` and `last_produced()` count what it took and wrote. Errors
 stick: later steps raise the same kind until `reset`.
 
 ## Links
