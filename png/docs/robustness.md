@@ -23,12 +23,18 @@ its memory checked against the formula of
 `Decoder(report=[...])`, asked for the text and metadata chunks, so that their
 blocks and the second zlib decoder are counted too; and by `decode`, whose
 image, converted to the png crate's EXPAND shape, is compared with what
-typst 0.1.7's `decode_png` (a port of the png crate 0.18.1) gives.
+typst 0.1.9's `decode_png` (a port of the png crate 0.18.1) gives.
 
 ## Results
 
-No file crashed a decoder, made one hang, or took memory past the formula.
-Every step either went on or raised one of the contract's errors.
+Run under a 2 GiB limit on the address space, no file crashed a decoder, made
+one hang, or took memory past the formula. Every step either went on or raised
+one of the contract's errors.
+
+`decode`, whose `max_output` is 512 MiB by default, refuses 356 of the files
+(350 damaged seeds and 6 of image-png's) at the header with
+`LimitExceeded(Output)`: their IHDR claims more rows than that, and nothing is
+allocated for them. Each of these runs peaks at 5.3 MiB at most.
 
 The streaming decoder's outcomes:
 

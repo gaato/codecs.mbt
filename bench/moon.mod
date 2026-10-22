@@ -20,6 +20,10 @@ import {
   "gaato/brotli@0.4.1",
   "gaato/deflate@0.1.0",
   "gaato/png@0.1.0",
-  "moonbitlang/typst@0.1.7",
+  "moonbitlang/typst@0.1.9",
+  "gmlewis/image@0.17.18",
+  "gmlewis/io@0.23.20",
+  "mizchi/image@0.4.3",
   "moonbitlang/x@0.5.6",
+  "moonbitlang/async@0.22.5",
 }

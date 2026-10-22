@@ -336,7 +336,7 @@ fn main {
     let seeds = seeds_of(path) catch { e => abort("\{path}: \{e}") }
     for index, seed in seeds {
       let (name, data) = seed
-      for case in png_damage(data, index) {
+      for case in @damage.png_damage(data, index) {
         tally.add(case.data, category(case.desc), "\{name} \{case.desc}")
       }
     }

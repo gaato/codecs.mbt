@@ -1,0 +1,9 @@
+// The damaged PNGs of typst.mbt's PNG oracle (see damage.mbt): a package of
+// their own, so that png_corpus and compare_png/corpus decode the same cases.
+
+import {
+  "moonbitlang/typst/codecs",
+  "moonbitlang/core/encoding/utf8",
+}
+
+supported_targets = "native"

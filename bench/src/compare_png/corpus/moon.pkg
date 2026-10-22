@@ -1,0 +1,20 @@
+// Runs one of compare_png's decoders over files (PngSuite, the APNG vectors,
+// the broken-input corpora of png/docs/robustness.md) and the damaged seeds
+// of png_corpus, and prints what it makes of each, for the comparison in
+// png/src/overview.mbt.md. A decoder that crashes takes the process with it,
+// so each case's line goes to stderr, which is not buffered: a driver can
+// start again after the last line (`--from`).
+
+import {
+  "gaato/codec_bench/compare_png",
+  "gaato/codec_bench/png_corpus/damage",
+  "moonbitlang/core/encoding/base64",
+  "moonbitlang/core/debug",
+  "moonbitlang/core/env",
+  "moonbitlang/core/string",
+  "moonbitlang/x/fs",
+}
+
+pkgtype(kind: "executable")
+
+supported_targets = "native"

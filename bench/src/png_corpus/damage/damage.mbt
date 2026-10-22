@@ -31,7 +31,8 @@ priv struct PngDamageChunk {
 }
 
 ///|
-priv struct PngDamageCase {
+/// A damaged file, and what was done to it: `flip 3.2`, `trunc 40`, ...
+pub struct PngDamageCase {
   desc : String
   data : Bytes
 }
@@ -113,7 +114,7 @@ fn png_damage_with(
 
 ///|
 /// The damaged files of a seed, in the order of the expectations.
-fn png_damage(seed : Bytes, seed_index : Int32) -> Array[PngDamageCase] {
+pub fn png_damage(seed : Bytes, seed_index : Int32) -> Array[PngDamageCase] {
   let cases : Array[PngDamageCase] = []
   fn add(desc : String, data : Bytes) {
     cases.push({ desc, data, })

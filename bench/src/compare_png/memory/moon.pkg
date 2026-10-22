@@ -1,0 +1,19 @@
+// Decodes one PNG file with one decoder, so that the process's peak memory
+// can be measured for each (`/usr/bin/time -f %M`). gaato/png reads the file
+// in 64 KiB pieces and writes rows into a 64 KiB slice; the others take the
+// whole file, as their APIs do. `read` only reads the file whole, and `none`
+// does nothing: the baselines.
+
+import {
+  "gaato/png",
+  "gaato/codec_bench/compare_png",
+  "moonbitlang/async",
+  "moonbitlang/async/fs" @afs,
+  "moonbitlang/core/debug",
+  "moonbitlang/core/env",
+  "moonbitlang/core/string",
+}
+
+pkgtype(kind: "executable")
+
+supported_targets = "native"

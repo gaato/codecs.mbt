@@ -354,8 +354,9 @@ test "scatter: packed pixels go bit by bit, and the other bits stay" {
 
 ///|
 test "decode: an image larger than an array holds is refused at its header" {
+  // `max_output` at its largest, what an array holds.
   let huge = png_of([chunk("IHDR", ihdr_data(65535, 65535, 8, 0))])
-  let refused = try decode(huge) catch {
+  let refused = try decode(huge, max_output=0x7FFFFFFF) catch {
     CodecError(LimitExceeded(limit), _) => Some(limit)
     _ => None
   } noraise {
@@ -364,5 +365,46 @@ test "decode: an image larger than an array holds is refused at its header" {
   debug_inspect(
     refused,
     content="Some({ resource: Output, needed: Some(4294836225), limit: 2147483647 })",
+  )
+}
+
+///|
+/// What `decode` makes of `input`: the limit it raises, or the error's kind.
+fn decode_refusal(input : Bytes, max_output? : Int32) -> String {
+  try decode(input, max_output?) catch {
+    CodecError(LimitExceeded(limit), _) => @debug.to_string(limit)
+    CodecError(kind, _) => @debug.to_string(kind)
+  } noraise {
+    _ => "decoded"
+  }
+}
+
+///|
+test "decode: 512 MiB of rows by default, checked at the header" {
+  // Headers alone, so that an image allocated before the check would end in
+  // `Truncated` instead. 23171 x 23171 gray is 536,895,241 bytes of rows,
+  // over 2^29.
+  let over = png_of([chunk("IHDR", ihdr_data(23171, 23171, 8, 0))])
+  inspect(
+    decode_refusal(over),
+    content="{ resource: Output, needed: Some(536895241), limit: 536870912 }",
+  )
+  // Rows of 2^23 bytes, past max_row_bytes, so that the next check refuses
+  // the image without allocating it: 64 rows are 2^29 bytes, the default,
+  // and pass it; 65 do not.
+  let at = png_of([chunk("IHDR", ihdr_data(8388608, 64, 8, 0))])
+  inspect(
+    decode_refusal(at),
+    content="{ resource: Memory, needed: Some(8388608), limit: 8000000 }",
+  )
+  let past = png_of([chunk("IHDR", ihdr_data(8388608, 65, 8, 0))])
+  inspect(
+    decode_refusal(past),
+    content="{ resource: Output, needed: Some(545259520), limit: 536870912 }",
+  )
+  // A larger max_output lets the claim through, to the row limit.
+  inspect(
+    decode_refusal(past, max_output=1 << 30),
+    content="{ resource: Memory, needed: Some(8388608), limit: 8000000 }",
   )
 }

@@ -1,0 +1,31 @@
+// The other MoonBit PNG decoders on mooncakes.io, behind one shape, for the
+// comparison in png/src/overview.mbt.md: each decodes a whole file and gives
+// the image as straight RGBA, 16 bits a sample, so that their outputs can be
+// compared with each other and with gaato/png's. The benchmarks
+// (`bench_test.mbt`) time each decoder in its own output format.
+
+import {
+  "gaato/png",
+  "moonbitlang/typst/codecs",
+  "gmlewis/image/png" @gpng,
+  "gmlewis/io",
+  "moonbitlang/core/debug",
+  "mizchi/image" @mimage,
+}
+
+import {
+  "gaato/codec_bench/png_data",
+  "moonbitlang/core/bench",
+  "moonbitlang/core/encoding/base64",
+} for "test"
+
+supported_targets = "js + native + wasm + wasm-gc"
+
+// The inflater gmlewis/image uses (gmlewis/flate) recurses for every match:
+// `read_literal` and `copy_history` call each other until its 32 KiB window
+// fills. On JS and Wasm the stack runs out on the benchmarks' image, so its
+// benchmark runs only where it finishes.
+
+options(
+  targets: { "gmlewis_bench_test.mbt": [ "native", "wasm-gc" ] },
+)

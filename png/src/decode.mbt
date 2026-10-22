@@ -42,12 +42,18 @@ pub fn Image::row(self : Image, y : Int32) -> ArrayView[Byte] {
 ///
 /// `max_output` bounds the bytes of the rows, from what IHDR says, before
 /// anything is allocated for them: an image of more raises
-/// `LimitExceeded(Output)` with their size. Unbounded by default; the
-/// decoder's own limits (`max_row_bytes`) apply either way. Ancillary chunks
-/// are read as the streaming decoder reads them, and none is reported.
+/// `LimitExceeded(Output)` with their size. It is 512 MiB (536,870,912
+/// bytes) by default, as the image crate's `Limits::max_alloc` is, because
+/// the header alone can claim gigabytes: a file of a few dozen bytes would
+/// otherwise have the whole image allocated before its data is found
+/// missing. Pass a larger `max_output` for larger images you trust, up to
+/// 2^31 − 1 bytes, what an array holds; the streaming `Decoder` hands out
+/// rows without holding the image. The decoder's own limits
+/// (`max_row_bytes`) apply either way. Ancillary chunks are read as the
+/// streaming decoder reads them, and none is reported.
 pub fn decode(
   input : BytesView,
-  max_output? : Int32,
+  max_output~ : Int32 = 536_870_912,
 ) -> Image raise @codec.CodecError {
   let decoder = Decoder(animation=false)
   let mut out = FixedArray::make(0, b'\x00')
@@ -66,30 +72,22 @@ pub fn decode(
         bits = @rules.channels(decoder.color_type) * decoder.bit_depth
         let wide = (decoder.width.to_int64() * bits.to_int64() + 7L) / 8L
         let needed = wide * decoder.height.to_int64()
-        if max_output is Some(limit) && needed > limit.to_int64() {
+        if needed > max_output.to_int64() {
           raise @codec.CodecError(
             LimitExceeded({
               resource: Output,
               needed: Some(needed.reinterpret_as_uint64()),
-              limit: limit.max(0).to_uint64(),
+              limit: max_output.max(0).to_uint64(),
             }),
             "an image of \{needed} bytes, over max_output",
           )
         }
-        // Row sizes beyond the decoder's limit raise at the next step,
-        // before this is allocated.
-        if wide <= decoder.max_row_bytes.to_int64() && needed <= 0x7FFFFFFFL {
+        // `needed` is at most `max_output`, so an array holds it. Row sizes
+        // beyond the decoder's limit raise at the next step, before this is
+        // allocated.
+        if wide <= decoder.max_row_bytes.to_int64() {
           row_bytes = wide.to_int()
           image = FixedArray::make(needed.to_int(), b'\x00')
-        } else if wide <= decoder.max_row_bytes.to_int64() {
-          raise @codec.CodecError(
-            LimitExceeded({
-              resource: Output,
-              needed: Some(needed.reinterpret_as_uint64()),
-              limit: 0x7FFFFFFFUL,
-            }),
-            "an image of \{needed} bytes, more than an array holds",
-          )
         }
       }
       Rows => {

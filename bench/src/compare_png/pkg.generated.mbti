@@ -1,0 +1,36 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/codec_bench/compare_png"
+
+// Values
+pub fn decode_native(String, Bytes) -> (Int32, Int32, Int32) raise Refused
+
+pub fn decode_with(String, Bytes) -> Rgba16 raise Refused
+
+pub let decoders : Array[String]
+
+pub fn gaato(Bytes, max_output? : Int32) -> Rgba16 raise Refused
+
+pub fn gaato_stream(Bytes) -> Rgba16 raise Refused
+
+pub fn gmlewis(Bytes) -> Rgba16 raise Refused
+
+pub fn mizchi(Bytes) -> Rgba16 raise Refused
+
+pub fn typst(Bytes) -> Rgba16 raise Refused
+
+// Errors
+pub(all) suberror Refused {
+  Refused(String)
+}
+
+// Types and methods
+pub(all) struct Rgba16 {
+  width : Int32
+  height : Int32
+  pixels : Bytes
+}
+pub fn Rgba16::same(Self, Self) -> Bool
+
+// Type aliases
+
+// Traits

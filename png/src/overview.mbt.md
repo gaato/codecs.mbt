@@ -66,7 +66,7 @@ To put a pass's rows in your image, `scatter(row, pixels, bits, pass_x, pass_dx,
 
 ## Whole images and RGBA
 
-`decode` reads a whole image held in memory and returns it deinterlaced, in PNG's own layout, once every check has passed; `max_output` bounds its bytes before anything is allocated for them. An APNG gives its default image. `is_signature` tells a PNG from its first eight bytes.
+`decode` reads a whole image held in memory and returns it deinterlaced, in PNG's own layout, once every check has passed; `max_output` bounds its bytes before anything is allocated for them, 512 MiB by default. An APNG gives its default image. `is_signature` tells a PNG from its first eight bytes.
 
 A `Converter` turns rows of PNG's layout into other layouts, the palette and tRNS applied: `rgba8` (samples below 8 bits widened by repeating their bits, 16-bit ones rounded to 8), `rgba16` (big-endian), and `expanded`, the shape of the png crate's and libpng's EXPAND (palette to RGB or RGBA, gray widened to 8 bits, tRNS as an alpha channel, 16 bits kept). `Decoder::converter()` makes one for a streaming decoder, and `decode`'s image carries one.
 
@@ -129,7 +129,7 @@ The default image (IDAT) is the first `Frame`; `in_animation()` says whether it 
 
 `memory_usage()` is 47,360 bytes (the zlib decoder and the palette) until the step after `Header`, then 47,360 + 2 × (1 + row bytes).
 
-`decode` holds the whole image: `max_output` bounds its bytes, and an image larger than an array holds (2^31 − 1 bytes) raises `LimitExceeded` with `resource: Output` either way.
+`decode` holds the whole image, so `max_output` bounds its bytes: 536,870,912 (512 MiB) by default, as the image crate's `Limits::max_alloc` is, since a header of a few dozen bytes can claim gigabytes. An image of more raises `LimitExceeded` with `resource: Output` from IHDR, before anything is allocated. Raise it for larger images you trust, up to 2^31 − 1 bytes, what an array holds, or read them with `Decoder`.
 
 A reported chunk is held until its CRC has passed, so `Decoder(max_chunk_bytes=...)` bounds it: 1 MiB by default, at most 100,000,000. A reported chunk longer than that raises `LimitExceeded` with `resource: Memory` and the chunk's length, and one that inflates to more raises it with no length. Asking for iCCP, zTXt or iTXt adds a second zlib decoder, 46,592 bytes, which the decoder holds only then: APNG allows text between the image data chunks of one frame, in the middle of their zlib stream. Chunks that are not asked for are only read through their CRC, whatever their size.
 
@@ -152,6 +152,32 @@ An ancillary chunk out of the place the specification gives it, a second copy of
 Rows come out as soon as they are decoded, before the CRCs and the Adler-32 that cover them, so `ChecksumMismatch` can follow rows you already have; `FrameEnd` comes once they have passed. A step that raises writes nothing: the rows before the error came out in the steps before it. Errors stick until `reset`.
 
 The Paeth predictor, Adam7's pass sizes, a row's bytes, an fcTL's rectangle and the sample arithmetic of the conversions are proved against the specification, and the reversal of the filters to read and write only inside its rows; [PROOFS.md](https://github.com/gaato/codecs.mbt/blob/main/png/PROOFS.md) lists what is proved and what is trusted.
+
+## Other MoonBit implementations
+
+Pick gaato/png when the input arrives in pieces, when images can be large or come from anyone (`Decoder` holds two rows, and `decode` refuses more than 512 MiB of rows by default), when you need APNG's frames or the ancillary chunks, or on JS. When the whole file is already in memory and comes from a source you trust, [moonbitlang/typst](https://mooncakes.io/docs/moonbitlang/typst)'s `decode_png` decodes faster on Native and Wasm, though it does not check the Adler-32 and sets no limit on memory.
+
+As of 2026-10-23, each measured on one machine with MoonBit 0.10.16:
+
+| Package | Streaming | Memory for 8192 × 8192 RGBA, limit | Formats | CRC, Adler-32 | Targets | Time, ours = 1 (Native / Wasm / Wasm GC / JS) |
+|---|---|---|---|---|---|---|
+| [gaato/png](https://mooncakes.io/docs/gaato/png) 0.1.0 | Yes | `Decoder` 6.5 MiB; `decode` 262.6 MiB, 512 MiB by default | All, Adam7, APNG frames | All chunks (a bad ancillary one is skipped), yes | All four | 1 |
+| [moonbitlang/typst](https://mooncakes.io/docs/moonbitlang/typst) 0.1.9 | No | 262.5 MiB, none | All, Adam7, APNG's default image | Not IEND's, no | All four | 0.66 / 0.82 / 1.0 / 6.4 |
+| [gmlewis/image](https://mooncakes.io/docs/gmlewis/image) 0.17.18 | Input only | 264.2 MiB, 2^28 pixels | All, Adam7, APNG's default image | All chunks, yes | All four¹ | 8.8 / – / 6.8 / – |
+| [bikallem/image](https://mooncakes.io/docs/bikallem/image) 0.1.0 | No | 526.1 MiB, 2^28 pixels | All, Adam7, APNG's default image | All chunks, yes | None as published² | 1.5 / 2.2 / 1.9 / 6.2 |
+| [mizchi/image](https://mooncakes.io/docs/mizchi/image) 0.4.3 | Rows, once all inflated | Refused: 256 MiB inflated | 8-bit, no Adam7, APNG's default image | All chunks, yes | All four | 2.1 / 2.3 / 2.8 / 9.4 |
+
+¹ On JS and Wasm the stack runs out on a 512 × 384 image. ² MoonBit 0.10.16's moon no longer reads its `moon.mod.json`, nor its dependency's; with them migrated, all four.
+
+The times are for a 512 × 384 RGB image: each package's time over ours, below 1 when it is faster. Ours hands out rows in PNG's layout, the others an RGB or RGBA image; converting our rows to RGBA takes 1.6 (Native) to 2.0 (JS) times as long as the rows alone. The broken files below ran under a 2 GiB limit on the address space.
+
+- **gaato/png**: input in pieces of any size, whole rows into your slices. `Decoder` holds two rows and a zlib decoder, with limits on a row's and a reported chunk's bytes; `decode` holds the whole image and checks its size from IHDR against `max_output` before allocating it. Every fixed-length chunk; text, iCCP, eXIf and any other on request. Every chunk's CRC: a bad one refuses the file in IHDR, PLTE, IDAT, IEND and an APNG's fcTL and fdAT, and leaves out an ancillary chunk; the Adler-32. PngSuite: 162 of 162 images as pypng reads them, 14 of 14 broken ones refused; APNG frames against the png crate; proofs. On 30,590 broken files neither `Decoder` nor `decode` crashes or hangs; `decode` refuses 356 at the header, whose IHDR claims more than 512 MiB.
+- **moonbitlang/typst** (`codecs`): the whole file in, the whole image out. `decode_png` sets no limit: a 1 MB file of a 16384 × 16384 image needed more than 4 GiB of address space. tRNS, pHYs, iCCP and eXIf. The CRC of IHDR, PLTE and IDAT. PngSuite: 162 of 162, 14 of 14; the default image of 45 of 45 APNG vectors; neither crashes nor hangs on 30,590 broken files.
+- **gmlewis/image** (`png`): input from a reader, the whole image out, with no limit but 2^28 pixels, where its sizes would overflow. No ancillary chunk; tRNS applied. Every chunk's CRC, ancillary ones too. PngSuite: 162 of 162, 14 of 14; 45 of 45 APNG vectors. Of 30,590 broken files, hangs on 893, most of them cut short, crashes on 8, and gives for 192 an image whose `at` aborts.
+- **bikallem/image** (`png`): the whole file in, the whole image and its inflated data held, with no limit but 2^28 pixels. No ancillary chunk; tRNS applied. Every chunk's CRC, ancillary ones too. PngSuite: 162 of 162, 14 of 14; 45 of 45 APNG vectors. Crashes on 38 of 30,590 broken files, 34 of them damaged copies of a 1.5 KB image for which its buffer of inflated data grew past 3 GiB.
+- **mizchi/image**: rows to a callback, once the whole image data is inflated; the inflated data and the RGBA image held, 777 MiB for 8191 × 8191. At most 256 MiB inflated, so 8192 × 8192 RGBA is refused; it allocates the image before inflating, 1.3 GiB for a 79-byte file. 8-bit only, tRNS only for indexed color. No ancillary chunk. Every chunk's CRC, ancillary ones too; IEND not required. PngSuite: 53 of 162 (108 refused, 1 other image), 14 of 14; 41 of 45 APNG vectors. Crashes on 173 of 30,590 broken files.
+
+[The benchmarks' README](https://github.com/gaato/codecs.mbt/blob/main/bench/README.md#other-moonbit-png-decoders) has the absolute numbers, the interlaced image, memory, files that claim more than they hold, and the broken files.
 
 ## Links
 

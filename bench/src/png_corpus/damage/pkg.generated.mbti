@@ -1,0 +1,17 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/codec_bench/png_corpus/damage"
+
+// Values
+pub fn png_damage(Bytes, Int32) -> Array[PngDamageCase]
+
+// Errors
+
+// Types and methods
+pub struct PngDamageCase {
+  desc : String
+  data : Bytes
+}
+
+// Type aliases
+
+// Traits
