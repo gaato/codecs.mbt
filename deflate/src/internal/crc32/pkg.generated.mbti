@@ -1,0 +1,17 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/deflate/internal/crc32"
+
+// Values
+pub const INITIAL : UInt = 0
+
+pub fn update(UInt, ArrayView[Byte]) -> UInt
+
+pub fn update_bytes(UInt, BytesView) -> UInt
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+
+// Traits

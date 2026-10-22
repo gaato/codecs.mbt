@@ -1,5 +1,5 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "gaato/deflate/gzip/internal/crc32"
+package "gaato/codec_parts/crc32"
 
 // Values
 pub const INITIAL : UInt = 0

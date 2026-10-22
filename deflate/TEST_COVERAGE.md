@@ -27,11 +27,11 @@ streams built bit by bit, and seeded pseudo-random splits and corruptions.
 - Sources: every non-test `.mbt` of the three library packages, `src/`,
   `src/zlib/` and `src/gzip/`, and of their internal packages: the raw
   DEFLATE decoder `src/internal/inflate/` and encoder `src/internal/deflate/`,
-  the copies of the shared parts `src/internal/huffman/` and
-  `src/internal/lz77/` (generated from `parts/`, with their tests), the
+  the copies of the shared parts `src/internal/crc32/`,
+  `src/internal/huffman/` and `src/internal/lz77/` (generated from `parts/`, with their tests), the
   proof packages `src/internal/proof_bits/` and `src/internal/proof_codes/`,
-  `src/zlib/internal/adler32/`, `src/zlib/internal/header/`,
-  `src/gzip/internal/crc32/` and `src/gzip/internal/header/`. The test-only
+  `src/zlib/internal/adler32/`, `src/zlib/internal/header/` and
+  `src/gzip/internal/header/`. The test-only
   package `src/internal/fixtures/` and the cross-check tool
   `src/internal/crosscheck/` are not measured.
 - Counts are Coveralls lines: lines with at least one instrumented point,

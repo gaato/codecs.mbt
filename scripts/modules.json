@@ -35,8 +35,8 @@
       "src/zlib/internal/adler32",
       "src/zlib/internal/header",
       "src/gzip",
-      "src/gzip/internal/crc32",
       "src/gzip/internal/header",
+      "src/internal/crc32",
       "src/internal/huffman",
       "src/internal/inflate",
       "src/internal/lz77",
@@ -61,6 +61,10 @@
       "proof_codes": ["codes.mbt", "codes.mbtp", "codes_test.mbt"]
     },
     "deflate": {
+      "crc32": [
+        "crc32.mbt",
+        "crc32_test.mbt"
+      ],
       "huffman": [
         "huffman.mbt",
         "huffman.mbtp",
