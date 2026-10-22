@@ -149,13 +149,15 @@ An ancillary chunk out of the place the specification gives it, a second copy of
 
 Rows come out as soon as they are decoded, before the CRCs and the Adler-32 that cover them, so `ChecksumMismatch` can follow rows you already have; `FrameEnd` comes once they have passed. A step that raises writes nothing: the rows before the error came out in the steps before it. Errors stick until `reset`.
 
+The Paeth predictor, Adam7's pass sizes, a row's bytes, an fcTL's rectangle and the sample arithmetic of the conversions are proved against the specification, and the reversal of the filters to read and write only inside its rows; [PROOFS.md](https://github.com/gaato/codecs.mbt/blob/main/png/PROOFS.md) lists what is proved and what is trusted.
+
 ## Links
 
 - [Changelog](https://github.com/gaato/codecs.mbt/blob/main/png/CHANGELOG.md)
 - [Repository](https://github.com/gaato/codecs.mbt)
 - [The image contract](https://github.com/gaato/codecs.mbt/blob/main/CONTRACT.md#images) that `Decoder` keeps
 - [Resource bounds](https://github.com/gaato/codecs.mbt/blob/main/png/RESOURCE_BOUNDS.md): every limit and the tests that hold it
-- [Test coverage](https://github.com/gaato/codecs.mbt/blob/main/png/TEST_COVERAGE.md)
+- [Proofs](https://github.com/gaato/codecs.mbt/blob/main/png/PROOFS.md) and [test coverage](https://github.com/gaato/codecs.mbt/blob/main/png/TEST_COVERAGE.md)
 
 ## License
 

@@ -1,0 +1,47 @@
+// The bits of a pixel PNG has (table 11 with table 12): 1, 2, 4, 8, 16, 24,
+// 32, 48 or 64.
+predicate pixel_bits(bits : Int) {
+  bits == 1 || bits == 2 || bits == 4 || bits == 8 || bits == 16 || bits == 24 || bits == 32 || bits == 48 || bits == 64
+}
+
+predicate row_pre(width : Int, bits : Int, limit : Int) {
+  1 <= width && int32(width) && pixel_bits(bits) && 0 <= limit && int32(limit)
+}
+
+// ceil(width × bits / 8).
+fn row_bytes_of(width : Int, bits : Int) -> Int {
+  (width * bits + 7) / 8
+}
+
+// A value a 32-bit Int holds, of those the code computes, which are not
+// negative.
+predicate int32(v : Int) {
+  0 <= v && v <= 2147483647
+}
+
+predicate within_post(n : Int, limit : Int, r : Int) {
+  if n <= limit { r == n } else { r == -1 }
+}
+
+// The row's bytes when they are within the limit, else -1.
+predicate row_post(width : Int, bits : Int, limit : Int, r : Int) {
+  if row_bytes_of(width, bits) <= limit { r == row_bytes_of(width, bits) } else { r == -1 }
+}
+
+// A field of 32 bits, unsigned.
+predicate field(v : Int64) {
+  0L <= v && v <= 4294967295L
+}
+
+predicate fields_pre(width : Int64, height : Int64, frame_width : Int64, frame_height : Int64, x : Int64, y : Int64) {
+  field(width) && field(height) && field(frame_width) && field(frame_height) && field(x) && field(y)
+}
+
+predicate inside(width : Int64, height : Int64, frame_width : Int64, frame_height : Int64, x : Int64, y : Int64) {
+  x + frame_width <= width && y + frame_height <= height
+}
+
+// The sum of two 32-bit fields is far inside Int64.
+predicate sum_fits(a : Int64, b : Int64) {
+  a + b <= 8589934590L
+}

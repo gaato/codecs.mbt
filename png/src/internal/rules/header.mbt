@@ -72,8 +72,9 @@ pub fn row_bytes(
   bits : Int32,
   limit : Int32,
 ) -> Int32 raise @codec.CodecError {
-  let needed = (width.to_uint64() * bits.to_uint64() + 7UL) / 8UL
-  if needed > limit.to_uint64() {
+  let bytes = @sizes.row_size(width.reinterpret_as_int(), bits, limit)
+  if bytes < 0 {
+    let needed = (width.to_uint64() * bits.to_uint64() + 7UL) / 8UL
     raise @codec.CodecError(
       LimitExceeded({
         resource: Memory,
@@ -83,7 +84,7 @@ pub fn row_bytes(
       "a row of \{needed} bytes, over max_row_bytes",
     )
   }
-  needed.to_int()
+  bytes
 }
 
 ///|
@@ -156,22 +157,37 @@ pub fn pass_dy(interlaced : Bool, pass : Int32) -> Int32 {
 /// columns `x` below `width` with `x = pass_x + i × pass_dx`. Zero for a
 /// pass with none, which has no rows either, not even their filter bytes.
 pub fn pass_columns(interlaced : Bool, pass : Int32, width : Int32) -> Int32 {
-  let x0 = pass_x(interlaced, pass)
-  if width <= x0 {
-    0
-  } else {
-    (width - x0 - 1) / pass_dx(interlaced, pass) + 1
-  }
+  lattice_count(width, pass_x(interlaced, pass), pass_dx(interlaced, pass))
 }
 
 ///|
 /// The rows of pass `pass` of an image `height` pixels high.
 pub fn pass_rows(interlaced : Bool, pass : Int32, height : Int32) -> Int32 {
-  let y0 = pass_y(interlaced, pass)
-  if height <= y0 {
+  lattice_count(height, pass_y(interlaced, pass), pass_dy(interlaced, pass))
+}
+
+///|
+/// How many of `start`, `start + step`, `start + 2 × step`, ... are below
+/// `size`: the columns (or rows) of a pass whose lattice starts at `start`
+/// with steps of `step` (1, 2, 4 or 8, as Adam7's are).
+pub fn lattice_count(
+  size : Int32,
+  start : Int32,
+  step : Int32,
+) -> Int32 where {
+  proof_require: count_pre(size, start, step),
+  proof_ensure: result => count_post(size, start, step, result),
+} {
+  if size <= start {
     0
+  } else if step == 1 {
+    size - start
+  } else if step == 2 {
+    (size - start - 1) / 2 + 1
+  } else if step == 4 {
+    (size - start - 1) / 4 + 1
   } else {
-    (height - y0 - 1) / pass_dy(interlaced, pass) + 1
+    (size - start - 1) / 8 + 1
   }
 }
 
@@ -192,10 +208,17 @@ pub fn check_frame(
   blend : Int32,
   first~ : Bool,
 ) -> String? {
+  let inside = @sizes.frame_inside(
+    width.to_uint64().reinterpret_as_int64(),
+    height.to_uint64().reinterpret_as_int64(),
+    frame_width.to_uint64().reinterpret_as_int64(),
+    frame_height.to_uint64().reinterpret_as_int64(),
+    x.to_uint64().reinterpret_as_int64(),
+    y.to_uint64().reinterpret_as_int64(),
+  )
   if frame_width == 0 || frame_height == 0 {
     Some("a frame of \{frame_width}x\{frame_height} pixels")
-  } else if x.to_uint64() + frame_width.to_uint64() > width.to_uint64() ||
-    y.to_uint64() + frame_height.to_uint64() > height.to_uint64() {
+  } else if !inside {
     Some(
       "a frame of \{frame_width}x\{frame_height} at \{x},\{y} outside the image's \{width}x\{height}",
     )

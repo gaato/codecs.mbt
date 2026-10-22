@@ -1,0 +1,36 @@
+// What the sample functions compute, in integers.
+
+// A byte, a sample depth of 1, 2 or 4 bits, and a sample within the byte.
+predicate packed_pre(byte : Int, k : Int, depth : Int) {
+  @proof_bits.is_byte(byte) && small_depth(depth) && 0 <= k && depth * (k + 1) <= 8
+}
+
+predicate small_depth(depth : Int) {
+  depth == 1 || depth == 2 || depth == 4
+}
+
+// The sample is the byte's bits from 8 - depth * (k + 1) up, depth of them,
+// so less than 2^depth.
+predicate packed_post(byte : Int, k : Int, depth : Int, r : Int) {
+  r == byte / @proof_bits.pow2(8 - depth * (k + 1)) % @proof_bits.pow2(depth) &&
+  0 <= r && r < @proof_bits.pow2(depth)
+}
+
+predicate widen_depth(depth : Int) {
+  depth == 1 || depth == 2 || depth == 4 || depth == 8
+}
+
+predicate widen_pre(v : Int, depth : Int) {
+  widen_depth(depth) && 0 <= v && v < @proof_bits.pow2(depth)
+}
+
+// v × 255 / (2^depth − 1) exactly, from 0 to 255.
+predicate widen_post(v : Int, depth : Int, r : Int) {
+  r * (@proof_bits.pow2(depth) - 1) == v * 255 && 0 <= r && r <= 255
+}
+
+// The nearest 8-bit value: |257 × r − v| ≤ 128, which no other r meets, since
+// 257 is odd.
+predicate narrow_post(v : Int, r : Int) {
+  0 <= r && r <= 255 && 257 * r - v <= 128 && v - 257 * r <= 128
+}

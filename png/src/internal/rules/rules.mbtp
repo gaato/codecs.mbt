@@ -1,0 +1,26 @@
+// What the proved functions of this package compute, in integers.
+
+// Chunk type bytes (5.3): A to Z, or a to z.
+predicate letter(b : Int) {
+  65 <= b && b <= 90 || 97 <= b && b <= 122
+}
+
+// A lattice's size, a start within Adam7's 8 x 8 block, and a step of
+// Adam7's.
+predicate count_pre(size : Int, start : Int, step : Int) {
+  0 <= size && size <= 2147483647 && 0 <= start && start <= 7 && adam7_step(step)
+}
+
+predicate adam7_step(step : Int) {
+  step == 1 || step == 2 || step == 4 || step == 8
+}
+
+// The count of start + i × step below size, for i = 0, 1, ...: the last
+// counted is below size, the next is not.
+predicate count_post(size : Int, start : Int, step : Int, r : Int) {
+  0 <= r && last_below(size, start, step, r) && size <= start + r * step
+}
+
+predicate last_below(size : Int, start : Int, step : Int, r : Int) {
+  r == 0 || start + (r - 1) * step < size
+}

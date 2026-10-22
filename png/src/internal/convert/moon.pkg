@@ -8,4 +8,6 @@ import {
   "gaato/png/internal/proof_bits",
 }
 
+proof_enabled = true
+
 supported_targets = "js + native + wasm + wasm-gc"

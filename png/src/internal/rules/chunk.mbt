@@ -8,8 +8,7 @@ pub fn chunk_type(a : Byte, b : Byte, c : Byte, d : Byte) -> UInt32 {
 /// Whether every byte of chunk type `t` is a letter, A to Z or a to z (5.3).
 pub fn is_valid_type(t : UInt32) -> Bool {
   for shift = 0; shift < 32; shift = shift + 8 {
-    let c = (t >> shift) & 0xFF
-    if !((c >= 0x41 && c <= 0x5A) || (c >= 0x61 && c <= 0x7A)) {
+    if !is_letter(((t >> shift) & 0xFF).reinterpret_as_int()) {
       return false
     }
   }
@@ -21,7 +20,32 @@ pub fn is_valid_type(t : UInt32) -> Bool {
 /// uppercase letter (5.4). A decoder that does not know a critical chunk
 /// cannot show the image.
 pub fn is_critical(t : UInt32) -> Bool {
-  ((t >> 29) & 1) == 0
+  !property_bit((t >> 24).reinterpret_as_int())
+}
+
+///|
+/// A chunk type byte's property bit, bit 5 (5.4): set in a lowercase
+/// letter, clear in an uppercase one.
+pub fn property_bit(
+  byte : Int32,
+) -> Bool where {
+  proof_require: @proof_bits.is_byte(byte),
+  proof_ensure: result => result == (byte / 32 % 2 == 1),
+} {
+  @proof_bits.low_bits(@proof_bits.shr(byte, 5), 1) == 1
+}
+
+///|
+/// Whether a byte of a chunk type is a letter: with its property bit
+/// cleared, an uppercase letter from A to Z (5.3 and 5.4).
+pub fn is_letter(
+  byte : Int32,
+) -> Bool where {
+  proof_require: @proof_bits.is_byte(byte),
+  proof_ensure: result => result == letter(byte),
+} {
+  let upper = if property_bit(byte) { byte - 32 } else { byte }
+  upper >= 65 && upper <= 90
 }
 
 ///|

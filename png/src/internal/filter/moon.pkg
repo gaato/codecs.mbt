@@ -1,4 +1,10 @@
 // The reverse of PNG's five filter types (9.2 to 9.4) over one row, against
 // the row above it.
 
+import {
+  "gaato/png/internal/proof_bits",
+}
+
+proof_enabled = true
+
 supported_targets = "js + native + wasm + wasm-gc"

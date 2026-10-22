@@ -1,0 +1,8 @@
+// The sizes PNG's decoder computes from untrusted fields: a row's bytes
+// against the limit, and an fcTL's rectangle against the image, each proved
+// by `moon prove` to compute what the specification says without
+// overflowing (see PROOFS.md); internal/rules calls them.
+
+proof_enabled = true
+
+supported_targets = "js + native + wasm + wasm-gc"

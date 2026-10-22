@@ -28,8 +28,9 @@ ledger OK, 1 = an unexplained or over-budget file, 2 = the run itself failed
   APNG's frames, `decode`, the conversions and `scatter`), of its internal
   packages `src/internal/rules/` (chunk types and their order, IHDR's
   fields, row sizes, Adam7's passes, fcTL's rectangle),
-  `src/internal/filter/` (the filters' reverse) and `src/internal/convert/`
-  (a sample's arithmetic), and of the copies of the shared parts
+  `src/internal/filter/` (the filters' reverse and its bridges),
+  `src/internal/convert/` (a sample's arithmetic) and `src/internal/sizes/`
+  (a row's bytes and a frame's rectangle, proved), and of the copies of the shared parts
   `src/internal/crc32/` and `src/internal/proof_bits/` (generated from
   `parts/`, with their tests).
 - Counts are Coveralls lines: lines with at least one instrumented point,

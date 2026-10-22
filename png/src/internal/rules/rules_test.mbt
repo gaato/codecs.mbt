@@ -59,7 +59,7 @@ fn position_of(c : Char) -> @rules.Position {
 }
 
 ///|
-test "place: every ancillary chunk, at every position, once and twice, against table 7" {
+test "place, exhaustively: every ancillary chunk, at every position, once and twice, for every color type, against table 7" {
   for row in table_7 {
     let t = type_of(row.name)
     let index = @rules.known(t)
@@ -196,7 +196,7 @@ test "chunk types: letters, the critical bit, names" {
 }
 
 ///|
-test "check_header: the fields of table 11, the combinations of table 12" {
+test "check_header, exhaustively: every color type and bit depth against table 12, and the other fields of table 11" {
   let allowed = []
   for color_type in -1..<=7 {
     for bit_depth in 0..<=17 {
@@ -273,7 +273,12 @@ test "Adam7: each pass's columns and rows are those of its lattice, for every si
     assert_eq(@rules.pass_columns(false, 0, size), size)
     assert_eq(@rules.pass_rows(false, 0, size), size)
   }
-  // The 8 x 8 pattern of 8.2: every position falls in exactly one pass.
+  debug_inspect(@rules.passes(true), content="7")
+  debug_inspect(@rules.passes(false), content="1")
+}
+
+///|
+test "Adam7, exhaustively: every position of the 8 x 8 block is in exactly one pass, as 8.2 draws it" {
   let pattern = StringBuilder()
   for y in 0..<8 {
     for x in 0..<8 {
@@ -307,8 +312,6 @@ test "Adam7: each pass's columns and rows are those of its lattice, for every si
       #|
     ),
   )
-  debug_inspect(@rules.passes(true), content="7")
-  debug_inspect(@rules.passes(false), content="1")
 }
 
 ///|
@@ -329,5 +332,32 @@ test "check_frame: inside the image, without wrapping, whole for the default ima
       @rules.check_frame(10, 8, 10, 8, 0, 0, 0, 2, first=false),
     ] {
     assert_true(bad is Some(_))
+  }
+}
+
+///|
+test "lattice_count: every start and step of Adam7, every size up to 70, against counting" {
+  for step in [1, 2, 4, 8] {
+    for start in 0..<8 {
+      for size in 0..<=70 {
+        let mut n = 0
+        for x = start; x < size; x = x + step {
+          n += 1
+        }
+        assert_eq(@rules.lattice_count(size, start, step), n)
+      }
+    }
+  }
+  inspect(@rules.lattice_count(0x7FFFFFFF, 7, 8), content="268435455")
+}
+
+///|
+test "property_bit and is_letter: every byte" {
+  for b in 0..<256 {
+    assert_eq(@rules.property_bit(b), (b & 0x20) != 0)
+    assert_eq(
+      @rules.is_letter(b),
+      (b >= 0x41 && b <= 0x5A) || (b >= 0x61 && b <= 0x7A),
+    )
   }
 }

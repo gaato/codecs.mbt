@@ -1,11 +1,16 @@
 // The pure decisions of PNG (W3C PNG Third Edition): chunk types and the
 // order chunks may come in (table 7), the fields of IHDR (tables 11 and 12),
 // the size of a row, and the passes of Adam7 (8.2). The decoder's state
-// machine asks them; they hold no state.
+// machine asks them; they hold no state. `moon prove` checks the chunk type
+// bytes and the passes' counts (see PROOFS.md).
 
 import {
   "gaato/codec",
+  "gaato/png/internal/proof_bits",
+  "gaato/png/internal/sizes",
   "moonbitlang/core/debug",
 }
+
+proof_enabled = true
 
 supported_targets = "js + native + wasm + wasm-gc"

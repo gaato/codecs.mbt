@@ -1,0 +1,67 @@
+// PNG's Paeth predictor (W3C PNG, 9.4), as its pseudo-code writes it.
+
+predicate is_byte(x : Int) {
+  0 <= x && x <= 255
+}
+
+predicate bytes3(a : Int, b : Int, c : Int) {
+  is_byte(a) && is_byte(b) && is_byte(c)
+}
+
+fn spec_distance(x : Int, y : Int) -> Int {
+  if x >= y { x - y } else { y - x }
+}
+
+// p = a + b - c; pa, pb, pc its distances to a, b, c; the nearest, ties to
+// a, then b.
+fn spec_paeth(a : Int, b : Int, c : Int) -> Int {
+  if spec_distance(a + b - c, a) <= spec_distance(a + b - c, b) && spec_distance(a + b - c, a) <= spec_distance(a + b - c, c) { a } else { if spec_distance(a + b - c, b) <= spec_distance(a + b - c, c) { b } else { c } }
+}
+
+predicate one_of(a : Int, b : Int, c : Int, r : Int) {
+  r == a || r == b || r == c
+}
+
+// The pseudo-code's answer, which is one of a, b and c, so a byte.
+predicate paeth_post(a : Int, b : Int, c : Int, r : Int) {
+  r == spec_paeth(a, b, c) && one_of(a, b, c, r) && is_byte(r)
+}
+
+// A pixel's bytes: 1 to 8.
+predicate pixel_ok(pixel : Int) {
+  1 <= pixel && pixel <= 8
+}
+
+// The row's stop: at most len + 1, and within both arrays.
+predicate end_post(len : Int, cur : Int, prev : Int, r : Int) {
+  r <= len + 1 && r <= cur && r <= prev && r_floor(len, cur, prev, r)
+}
+
+predicate r_floor(len : Int, cur : Int, prev : Int, r : Int) {
+  r == len + 1 || r == cur || r == prev
+}
+
+// Where a row's loops run: the left neighbour from `first` on, the row up
+// to `stop`, within both arrays.
+predicate rows_pre(cur : Int, prev : Int, pixel : Int, first : Int, stop : Int) {
+  pixel_ok(pixel) && first_ok(pixel, first, stop) && first <= stop && stop <= cur && stop <= prev
+}
+
+// A pixel's bytes, and a length that is not negative.
+predicate unfilter_pre(pixel : Int, len : Int) {
+  pixel_ok(pixel) && 0 <= len
+}
+
+// `first` is pixel + 1, or the stop of a row that does not reach it.
+predicate first_ok(pixel : Int, first : Int, stop : Int) {
+  first == pixel + 1 || short_row(pixel, first, stop)
+}
+
+predicate short_row(pixel : Int, first : Int, stop : Int) {
+  first == stop && stop <= pixel + 1
+}
+
+// An index of the row: past the filter type's byte, inside the array.
+predicate in_row(i : Int, n : Int) {
+  1 <= i && i < n
+}

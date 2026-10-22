@@ -71,9 +71,13 @@ pub fn is_allowed(Int32, Int32) -> Bool
 
 pub fn is_critical(UInt32) -> Bool
 
+pub fn is_letter(Int32) -> Bool
+
 pub fn is_valid_type(UInt32) -> Bool
 
 pub fn known(UInt32) -> Int32
+
+pub fn lattice_count(Int32, Int32, Int32) -> Int32
 
 pub fn pass_columns(Bool, Int32, Int32) -> Int32
 
@@ -92,6 +96,8 @@ pub fn pass_y(Bool, Int32) -> Int32
 pub fn passes(Bool) -> Int32
 
 pub fn place(Position, UInt32, UInt32, Int32) -> Verdict
+
+pub fn property_bit(Int32) -> Bool
 
 pub fn row_bytes(UInt32, Int32, Int32) -> Int32 raise @codec.CodecError
 

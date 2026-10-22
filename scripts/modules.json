@@ -50,7 +50,8 @@
       "src/internal/crc32",
       "src/internal/filter",
       "src/internal/proof_bits",
-      "src/internal/rules"
+      "src/internal/rules",
+      "src/internal/sizes"
     ]
   },
   "copies": {
@@ -138,6 +139,12 @@
       "src/gzip/internal/header": { "prelude": "unbounded", "solvers": ["z3", "cvc5"] },
       "src/zlib/internal/adler32": { "prelude": "machine-int", "solvers": ["z3"] },
       "src/internal/inflate": { "prelude": "unbounded", "solvers": ["z3", "cvc5"] }
+    },
+    "png": {
+      "src/internal/convert": { "prelude": "unbounded", "solvers": ["z3", "cvc5"] },
+      "src/internal/filter": { "prelude": "unbounded", "solvers": ["z3", "cvc5"] },
+      "src/internal/rules": { "prelude": "unbounded", "solvers": ["z3", "cvc5"] },
+      "src/internal/sizes": { "prelude": "unbounded", "solvers": ["z3", "cvc5"] }
     }
   },
   "proof_controls": {
