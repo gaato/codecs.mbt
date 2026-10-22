@@ -1,0 +1,23 @@
+name: Canary
+
+# The setup installs what ci.yml installs before its gates: the reference
+# decoders and pypng the generators' checks use, and Z3 for moon prove.
+
+on:
+  schedule:
+    # 06:57 JST, after gaato/moonbit-docker rebuilds the latest and nightly images.
+    - cron: "57 21 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  canary:
+    uses: gaato/.github/.github/workflows/moonbit-canary.yml@main
+    with:
+      gates: moon run scripts/gates.mbtx
+      setup: >-
+        apt-get update &&
+        apt-get install -y --no-install-recommends zstd brotli gzip unzip python3 python3-png &&
+        scripts/install-z3.sh
