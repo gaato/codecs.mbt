@@ -99,10 +99,17 @@ In a `catch` on these functions, `CodecError(kind, _)` and the kinds match unqua
 
 A step that raises first hands out the output that comes before the error (answering `NeedMoreOutput` while it does not fit), and `last_consumed()` and `last_produced()` count what that step took and wrote: a corrupt stream gives the same output, then the same error, however it is split. On `TrailingData`, `last_consumed()` stops at the end of the stream.
 
+## When to use it
+
+gaato/zstd fits zstd that arrives in pieces or comes from anyone. `Decoder` takes input in pieces down to one byte, writes into your slices and holds the window you allow, 128 MiB by default (10.8 MiB at the peak for 256 MiB of output); it allocates nothing from a size a header claims. It agreed with `zstd -d` on all 36 valid and 318 invalid streams of the comparison, checks the content checksum, and its frame headers and Huffman tables are proved against RFC 8878. It runs on Native, JS, Wasm and Wasm GC; it does not compress and takes no dictionary.
+
+Milky2018/zstd, which also compresses and takes dictionaries, takes about 1.9 (Native), 2.1 (Wasm), 2.3 (Wasm GC) and 1.4 (JS) times as long as gaato/zstd on the benchmarks' text.
+
 ## Links
 
 - [Changelog](https://github.com/gaato/codecs.mbt/blob/main/zstd/CHANGELOG.md)
 - [Repository](https://github.com/gaato/codecs.mbt)
+- [Comparison with other MoonBit implementations](https://github.com/gaato/codecs.mbt/blob/main/bench/README.md#compression-codecs-against-other-implementations): what each supports, checks and holds, and how fast it decodes and encodes
 - [The byte-stream codec contract](https://github.com/gaato/codecs.mbt/blob/main/CONTRACT.md) that `Decoder` keeps
 - [Resource bounds](https://github.com/gaato/codecs.mbt/blob/main/zstd/RESOURCE_BOUNDS.md): every limit and the tests that hold it
 - [Proofs](https://github.com/gaato/codecs.mbt/blob/main/zstd/PROOFS.md) and [test coverage](https://github.com/gaato/codecs.mbt/blob/main/zstd/TEST_COVERAGE.md)

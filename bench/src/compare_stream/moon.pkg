@@ -1,0 +1,18 @@
+// Decodes one compressed file with one decoder and prints how much came out,
+// how much of it came out before the last half of the input went in, and how
+// long it took: an executable of its own, so that its peak memory can be
+// measured without the build that `moon run` also counts
+// (scripts/compare_codecs.mbtx stream and memory).
+
+import {
+  "gaato/codec_bench/compare",
+  "gaato/codec_bench/compare_async",
+  "moonbitlang/async",
+  "moonbitlang/core/env",
+  "moonbitlang/core/string",
+  "moonbitlang/x/fs",
+}
+
+pkgtype(kind: "executable")
+
+supported_targets = "native"

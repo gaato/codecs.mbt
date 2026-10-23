@@ -1,0 +1,68 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/codec_bench/compare"
+
+import {
+  "moonbitlang/core/ref",
+}
+
+// Values
+pub fn brotli_compress() -> Array[Compress]
+
+pub fn brotli_pieces() -> Array[Pieces]
+
+pub fn brotli_steps(BytesView, FixedArray[Byte]) -> Int32
+
+pub fn brotli_whole() -> Array[Whole]
+
+pub fn deflate_compress() -> Array[Compress]
+
+pub fn deflate_pieces() -> Array[Pieces]
+
+pub fn deflate_steps(BytesView, FixedArray[Byte]) -> Int32
+
+pub fn deflate_whole() -> Array[Whole]
+
+pub let fed : @ref.Ref[Int32]
+
+pub fn flate_steps(BytesView, FixedArray[Byte]) -> Int32
+
+pub fn gzip_pieces() -> Array[Pieces]
+
+pub fn gzip_whole() -> Array[Whole]
+
+pub fn zlib_dictionary() -> Array[(String, (Bytes, Bytes) -> Bytes raise)]
+
+pub fn zlib_pieces() -> Array[Pieces]
+
+pub fn zlib_whole() -> Array[Whole]
+
+pub fn zstd_pieces() -> Array[Pieces]
+
+pub fn zstd_steps(BytesView, FixedArray[Byte]) -> Int32
+
+pub fn zstd_whole() -> Array[Whole]
+
+// Errors
+
+// Types and methods
+pub(all) struct Compress {
+  name : String
+  default_level : Int32
+  max_level : Int32
+  encode : (Bytes, Int32) -> Bytes raise
+}
+
+pub(all) struct Pieces {
+  name : String
+  caller_buffer : Bool
+  run : (Bytes, Int32, Int32, (BytesView) -> Unit) -> Unit raise
+}
+
+pub(all) struct Whole {
+  name : String
+  decode : (Bytes) -> Bytes raise
+}
+
+// Type aliases
+
+// Traits

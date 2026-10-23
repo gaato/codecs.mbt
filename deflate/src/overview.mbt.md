@@ -300,10 +300,17 @@ A step that raises first writes the output that comes before the error, and `las
 
 The header checks, the decoder's verdict on a code's lengths and the canonical codes the encoder writes are proved against RFC 1950, 1951 and 1952; [PROOFS.md](https://github.com/gaato/codecs.mbt/blob/main/deflate/PROOFS.md) lists what is proved and what is trusted.
 
+## When to use it
+
+gaato/deflate fits DEFLATE, zlib and gzip that arrive in pieces or come from anyone. Its decoders take input in pieces down to one byte, write into your slices and hold about 46 KiB, check every checksum, and refuse what zlib refuses: they agreed with zlib on all 517 valid and 2,893 invalid streams of the comparison. Its header checks, code-length verdicts and the encoder's codes are proved against RFC 1950, 1951 and 1952. It runs on Native, JS, Wasm and Wasm GC.
+
+moonbit-community/flate's one-shot decoder takes about 1.3 (Native), 2.7 (Wasm), 1.5 (Wasm GC) and 0.63 (JS) times as long as gaato/deflate's `decompress` on the benchmarks' text; its streaming decoder 1.1 to 3.1. Its level-6 encoder takes 0.84 (Native), 0.53 (Wasm), 1.0 (Wasm GC) and 0.71 (JS) times as long as ours, for 1.5 % more output on the Silesia corpus.
+
 ## Links
 
 - [Changelog](https://github.com/gaato/codecs.mbt/blob/main/deflate/CHANGELOG.md)
 - [Repository](https://github.com/gaato/codecs.mbt)
+- [Comparison with other MoonBit implementations](https://github.com/gaato/codecs.mbt/blob/main/bench/README.md#compression-codecs-against-other-implementations): what each supports, checks and holds, and how fast it decodes and encodes
 - [The byte-stream codec contract](https://github.com/gaato/codecs.mbt/blob/main/CONTRACT.md) that every `Decoder` and `Encoder` keeps
 - [Compression levels and ratio](https://github.com/gaato/codecs.mbt/blob/main/deflate/docs/compression.md): how the levels work, and sizes against zlib
 - [Resource bounds](https://github.com/gaato/codecs.mbt/blob/main/deflate/RESOURCE_BOUNDS.md): every limit and the tests that hold it

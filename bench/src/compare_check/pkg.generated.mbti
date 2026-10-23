@@ -1,0 +1,13 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/codec_bench/compare_check"
+
+// Values
+
+// Errors
+
+// Types and methods
+type Case
+
+// Type aliases
+
+// Traits

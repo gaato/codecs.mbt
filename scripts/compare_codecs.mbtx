@@ -1,0 +1,1657 @@
+///|
+// Runs the decoders of gaato/zstd, gaato/brotli and gaato/deflate and of the
+// other MoonBit implementations on mooncakes over the same streams, and counts
+// how often each agrees with the reference implementation (bench/README.md,
+// "Compression codecs against other implementations").
+//
+// The streams are the conformance suite's vectors (conformance/src), the
+// crafted streams and seeded corruptions of the formats' vector files, with
+// zlib's verdict on each, the zstd frames the reference decoder refuses, the
+// malformed Brotli streams of brotli/src/crafted_wbtest.mbt, and streams made
+// here from the vectors: each cut short twice, with a checksum or length
+// field broken, and (zstd and Brotli) seeded corruptions. What the reference
+// makes of every stream made here is asked of it: `zstd -d`, `brotli -d`, or
+// Node's zlib (inflateRawSync, inflateSync, gunzipSync). Streams that zlib
+// decodes with bytes left over are left out, since what follows a stream is a
+// matter of policy (some decoders ignore it, others refuse it).
+//
+// check writes the streams to DIR (default _build/compare). Each decoder then
+// runs in bench/src/compare_check, built for Native in release mode, over
+// every stream of its format; a decoder that aborts or runs past --timeout
+// seconds on a stream is recorded as crashing or hanging on it, and the run
+// resumes after it. It prints, for each format and decoder: valid streams
+// decoded to the reference's output, invalid streams refused (in all and by
+// kind), crashes and hangs, and then every disagreement.
+//
+// Usage, from the repository root (needs the zstd, brotli, gzip and node
+// commands, /usr/bin/time for memory and claims, and prlimit for claims):
+//   moon run scripts/compare_codecs.mbtx -- [check] [--pieces P O [--invalid]] [--timeout S] [--only NAME]
+//   moon run scripts/compare_codecs.mbtx -- stream [--timeout S] [--only NAME]
+//   moon run scripts/compare_codecs.mbtx -- memory [--timeout S] [--only NAME]
+//   moon run scripts/compare_codecs.mbtx -- claims [--fixtures FILE] [--limit MIB] [--timeout S] [--only NAME]
+//   moon run scripts/compare_codecs.mbtx -- ratio --format brotli|deflate [--time MS] [--corpus DIR]...
+//   moon run scripts/compare_codecs.mbtx -- speed [--runs N] [--out DIR]
+// check   (the default) as above; with --pieces, the decoders that take
+//         input in pieces run over the valid streams fed P bytes at a time,
+//         into an output buffer of O bytes (where they write into the
+//         caller's); with --invalid too, over the invalid streams as well,
+//         since a decoder can refuse a stream whole and accept it in pieces.
+// stream  decodes the benchmarks' text (512 KiB, bench/src/data_test.mbt),
+//         as the reference encoders compress it, whole, in 4 KiB pieces and
+//         1 byte at a time, with bench/src/compare_stream: the bytes out,
+//         the share of them out before the second half of the input went
+//         in, and the time (the mean of 20 runs; of one, 1 byte at a time).
+// memory  decodes 256 MiB (the same text 512 times), whole and in 64 KiB
+//         pieces, and prints the peak resident memory of compare_stream,
+//         with the sizes of the compressed inputs it reads whole and the
+//         peak of a 512 KiB decode, which is mostly the runtime's: process
+//         memory alone does not say what the decoder holds.
+// claims  decodes the small inputs of --fixtures (default
+//         bench/compare/fixtures.tsv: name, format,
+//         byte count, hex), whose headers claim large sizes, with the
+//         reference and with each decoder, whole and in 4 KiB pieces, each
+//         run alone under prlimit --as (default 1024 MiB) and --timeout: its
+//         outcome and peak memory. A run that ends abnormally runs again
+//         under 8192 MiB, telling a failed allocation at the limit from an
+//         abort that happens anyway.
+// ratio   compresses the benchmarks' text and binary, and the regular files
+//         of each --corpus DIR, with each encoder at its default and highest
+//         level (bench/src/compare_ratio): sizes and MB/s over at least
+//         --time ms (default 1000; 0 gives the sizes only). Every stream is
+//         also decoded by the reference, so that no size counts for a stream
+//         only the package's own decoder reads back.
+// speed   runs `moon bench --release` on src/compare_speed N times (default
+//         3) on each of native, wasm, wasm-gc and js, taking the targets in
+//         turn so that a slow spell of the machine does not land on one of
+//         them; keeps each run's output in --out (default
+//         _build/compare/speed) and prints each benchmark's mean over the
+//         runs, then the runs, in milliseconds.
+// --dir     where the streams go (default _build/compare)
+// --only    runs the decoders or encoders whose name contains NAME
+// --timeout seconds before a decoder counts as hanging (default 60)
+// Pin the run to one idle CPU for steady times: one the process may use
+// (taskset -pc $$ lists them; a cloud VM may not have the CPU a local
+// machine had), as in taskset -c N moon run ....
+// Exit status: 0 = ran, 2 = setup failure.
+
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/core/encoding/base64",
+  "moonbitlang/core/env",
+  "moonbitlang/core/string",
+  "moonbitlang/x@0.5.6/crypto",
+  "moonbitlang/x@0.5.6/sys",
+}
+
+///|
+/// The malformed streams of brotli/src/crafted_wbtest.mbt ("malformed
+/// streams raise the error the RFC calls for"), as base64.
+let brotli_malformed : Array[(String, String)] = [
+  ("large-window header", "EQ=="),
+  ("window over max_window_bits", "Dw=="),
+  ("reserved metadata bit", "HA=="),
+  ("metadata length with a zero last byte", "zAIA"),
+  ("meta-block length with a zero last nibble", "BAAA"),
+  ("padding before an uncompressed meta-block", "AADw"),
+  ("padding after the last meta-block", "Dg=="),
+  ("simple code symbol past the alphabet", "YgAAAARAoA8="),
+  ("simple code with a repeated symbol", "YgAAAFRYGA=="),
+  ("code length code with no lengths", "YgAAAAAAAAAA"),
+  (
+    "incomplete prefix code", "YgAAAHDABQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  ),
+  ("code length repeat past the alphabet", "YgAAAHAA3P8D"),
+  ("context map run past its end", "YgAAALHCAQ=="),
+  ("insert past the end of the meta-block", "AgAAAARAQBIQ"),
+  ("copy past the end of the meta-block", "QgAAAARAKBIQ"),
+  ("distance below one", "IgEAAARAIFIEFA=="),
+  ("dictionary reference of length 2", "ggAAAARAABIQ"),
+  ("dictionary transform 127", "ggAAAARACBIuAAA="),
+  ("dictionary word past the end of the meta-block", "QgAAAARACBIQ"),
+  ("data after the end", "BgA="),
+]
+
+///|
+/// What zlib makes of each line of stdin, `<format> <base64> [<dictionary>]`:
+/// `ok <consumed> <sha256>` or `err <kind>` (as scripts/gen_deflate_vectors.mbtx
+/// asks it).
+let node_decode : String =
+  #|const zlib = require("node:zlib");
+  #|const crypto = require("node:crypto");
+  #|const lines = require("node:fs").readFileSync(0, "latin1").split("\n");
+  #|lines.pop();
+  #|const decode = { deflate: zlib.inflateRawSync, zlib: zlib.inflateSync, gzip: zlib.gunzipSync };
+  #|for (const line of lines) {
+  #|  const [format, b64, dictionary] = line.split(" ");
+  #|  const options = { info: true };
+  #|  if (dictionary !== undefined && dictionary !== "") options.dictionary = Buffer.from(dictionary, "base64");
+  #|  try {
+  #|    const { buffer, engine } = decode[format](Buffer.from(b64, "base64"), options);
+  #|    const digest = crypto.createHash("sha256").update(buffer).digest("hex");
+  #|    console.log(`ok ${engine.bytesWritten} ${digest}`);
+  #|  } catch (err) {
+  #|    console.log(`err ${err.code}`);
+  #|  }
+  #|}
+
+///|
+fn setup_failure(message : String) -> Unit {
+  println(message)
+  @sys.exit(2)
+}
+
+///|
+fn hex(digest : FixedArray[Byte]) -> String {
+  let out = StringBuilder()
+  for b in digest {
+    let s = b.to_int().to_string(radix=16)
+    if s.length() < 2 {
+      out.write_char('0')
+    }
+    out.write_string(s)
+  }
+  out.to_string()
+}
+
+///|
+fn sha256(data : Bytes) -> String {
+  hex(@crypto.sha256(data))
+}
+
+///|
+fn decode64(s : String) -> Bytes raise {
+  @base64.decode(s, ignore_whitespace=true)
+}
+
+// ---------------------------------------------------------------------------
+// Reading the generated vector files.
+
+///|
+/// The records of `let <list>` in a generated vectors file: each a map from
+/// field to value. Strings lose their quotes, `#|` blocks (base64) are joined,
+/// and a block with no field of its own (the dictionary of
+/// `dictionary_vectors`) is `dict`. A record starts at its first field,
+/// `name` or `source`.
+fn records(text : String, list : String) -> Array[Map[String, String]] {
+  let out : Array[Map[String, String]] = []
+  let mut inside = false
+  let mut current : Map[String, String] = Map([])
+  let mut pending = ""
+  let block = StringBuilder()
+  for raw in text.split("\n") {
+    let line = raw.trim(chars=" ")
+    if !inside {
+      if raw.has_prefix("let \{list} ") {
+        inside = true
+      }
+      continue
+    }
+    if raw == "]" {
+      break
+    }
+    if line.strip_prefix("#|") is Some(rest) {
+      block.write_string(rest.to_owned())
+      continue
+    }
+    if line.has_prefix(")") && pending != "" {
+      current[pending] = block.to_string()
+      block.reset()
+      pending = ""
+      continue
+    }
+    if line == "(" {
+      if pending == "" {
+        pending = "dict"
+        block.reset()
+      }
+      continue
+    }
+    // `key: value` pairs, one or several on the line.
+    let s = line.to_owned()
+    let mut i = 0
+    while i < s.length() {
+      let start = i
+      while i < s.length() &&
+            (
+              s[i] == '_' ||
+              (s[i] >= 'a' && s[i] <= 'z') ||
+              (s[i] >= '0' && s[i] <= '9')
+            ) {
+        i += 1
+      }
+      if i == start || i + 1 >= s.length() || s[i] != ':' || s[i + 1] != ' ' {
+        i = if i == start { i + 1 } else { i }
+        continue
+      }
+      let key = s[start:i].to_owned()
+      i += 2
+      let value = if s[i] == '"' {
+        let close = s[i + 1:].find("\"").unwrap() + i + 1
+        let v = s[i + 1:close].to_owned()
+        i = close + 1
+        Some(v)
+      } else if s[i:].has_prefix("(") || s[i:].has_prefix("Some(") {
+        pending = key
+        block.reset()
+        i = s.length()
+        None
+      } else {
+        let vstart = i
+        while i < s.length() && s[i] != ',' && s[i] != ' ' {
+          i += 1
+        }
+        Some(s[vstart:i].to_owned())
+      }
+      if key == "name" || key == "source" {
+        if !current.is_empty() {
+          out.push(current)
+        }
+        current = Map([])
+      }
+      if value is Some(v) {
+        current[key] = v
+      }
+    }
+  }
+  if !current.is_empty() {
+    out.push(current)
+  }
+  out
+}
+
+///|
+async fn read_text(path : String) -> String {
+  @fs.read_file(path).text()
+}
+
+// ---------------------------------------------------------------------------
+// The cases.
+
+///|
+/// A stream for the decoders of `format`, and what the reference makes of it:
+/// `ok <sha256>`, `err`, `any <sha256>` (reported, not counted) or `skip`.
+struct Case {
+  format : String
+  name : String
+  input : Bytes
+  mut expect : String
+  dictionary : Bytes?
+}
+
+///|
+/// A seeded 32-bit LCG.
+struct Rng {
+  mut state : UInt32
+}
+
+///|
+fn Rng::below(self : Rng, bound : Int32) -> Int32 {
+  self.state = self.state * 1664525 + 1013904223
+  (self.state >> 8).reinterpret_as_int() % bound
+}
+
+///|
+/// `input` with one seeded change: a bit flipped, a byte replaced, a byte
+/// inserted or a byte removed.
+fn mutate(rng : Rng, input : Bytes) -> (String, Bytes) {
+  let bytes = input.to_array()
+  let at = rng.below(bytes.length())
+  match rng.below(4) {
+    0 => {
+      let bit = rng.below(8)
+      bytes[at] = bytes[at] ^ (1 << bit).to_byte()
+      ("bit \{bit} of byte \{at} flipped", Bytes::from_array(bytes))
+    }
+    1 => {
+      let v = rng.below(256)
+      bytes[at] = v.to_byte()
+      ("byte \{at} set to \{v}", Bytes::from_array(bytes))
+    }
+    2 => {
+      let v = rng.below(256)
+      bytes.insert(at, v.to_byte())
+      ("byte \{v} inserted at \{at}", Bytes::from_array(bytes))
+    }
+    _ => {
+      bytes.remove(at) |> ignore
+      ("byte \{at} removed", Bytes::from_array(bytes))
+    }
+  }
+}
+
+///|
+/// gaato/deflate's `corrupt` (deflate/src/internal/fixtures): what the
+/// oracle's corruptions were made with.
+fn corrupt(op : Int32, at : Int32, value : Int32, input : Bytes) -> Bytes {
+  let bytes = input.to_array()
+  match op {
+    0 => bytes[at] = bytes[at] ^ (1 << value).to_byte()
+    1 => bytes[at] = value.to_byte()
+    2 => bytes.insert(at, value.to_byte())
+    3 => bytes.remove(at) |> ignore
+    _ => bytes.truncate(at)
+  }
+  Bytes::from_array(bytes)
+}
+
+///|
+/// `input` with the byte at `at` (from the end when negative) flipped.
+fn flip(input : Bytes, at : Int32) -> Bytes {
+  let bytes = input.to_array()
+  let i = if at < 0 { bytes.length() + at } else { at }
+  bytes[i] = bytes[i] ^ b'\x01'
+  Bytes::from_array(bytes)
+}
+
+///|
+/// The two prefixes of `input` that every case list cuts.
+fn cuts(input : Bytes) -> Array[(String, Bytes)] {
+  let n = input.length()
+  let out = []
+  if n >= 2 {
+    out.push(("cut to \{n / 2} of \{n} bytes", input[:n / 2].to_owned()))
+  }
+  if n >= 1 {
+    out.push(("cut to \{n - 1} of \{n} bytes", input[:n - 1].to_owned()))
+  }
+  out
+}
+
+///|
+/// What `zstd -d` or `brotli -d` makes of `input`.
+async fn command_verdict(program : String, input : Bytes) -> String {
+  let output = @shell.Cmd(program, ["-d", "-c"], stdin=Binary(input)).output(
+    max_output_bytes=1 << 28,
+  )
+  if output.exit_code() == 0 {
+    "ok \{sha256(output.stdout_bytes())}"
+  } else {
+    "err"
+  }
+}
+
+///|
+/// What zlib makes of each case, in our terms: a stream it decodes whole is
+/// `ok`, one it decodes with bytes left over is `skip`.
+async fn zlib_verdicts(cases : Array[Case]) -> Unit {
+  let lines = StringBuilder()
+  for c in cases {
+    let dict = match c.dictionary {
+      Some(d) => " \{@base64.encode(d)}"
+      None => ""
+    }
+    let format = if c.format == "zlib-dict" { "zlib" } else { c.format }
+    lines.write_string("\{format} \{@base64.encode(c.input)}\{dict}\n")
+  }
+  let output = @shell.Cmd(
+    "node",
+    ["-e", node_decode],
+    stdin=Text(lines.to_string()),
+  ).output(max_output_bytes=1 << 26)
+  if output.exit_code() != 0 {
+    fail("node: \{output.stderr()}")
+  }
+  let answers = output.stdout().split("\n").collect()
+  for i, c in cases {
+    let a = answers[i].split(" ").map(s => s.to_owned()).collect()
+    c.expect = match a {
+      ["ok", consumed, digest] =>
+        if @string.parse_int(consumed) == c.input.length() {
+          "ok \{digest}"
+        } else {
+          "skip"
+        }
+      _ => "err"
+    }
+  }
+}
+
+///|
+/// The conformance suite's vectors of a format.
+async fn conformance(format : String) -> Array[(String, Bytes, String)] {
+  let text = read_text("conformance/src/\{format}_vectors_test.mbt")
+  records(text, "\{format}_vectors").map(r => {
+    (r["name"], decode64(r["compressed"]), r["sha256"])
+  })
+}
+
+///|
+/// The zstd cases.
+async fn zstd_cases() -> Array[Case] {
+  let out = []
+  let vectors = conformance("zstd")
+  for v in vectors {
+    // A frame whose window the reference decoder refuses at its default
+    // limit (128 MiB) is reported, not counted.
+    let reference = command_verdict("zstd", v.1)
+    out.push({
+      format: "zstd",
+      name: v.0,
+      input: v.1,
+      expect: if reference == "err" {
+        "any \{v.2}"
+      } else {
+        "ok \{v.2}"
+      },
+      dictionary: None,
+    })
+  }
+  let file_text = read_text("zstd/src/vectors_wbtest.mbt")
+  // `corrupt_vectors` is a list of pairs: the names, then the streams.
+  let lines = file_text.split("\n").collect()
+  let mut inside = false
+  let mut name = ""
+  let block = StringBuilder()
+  for line in lines {
+    let t = line.trim(chars=" ")
+    if line.has_prefix("let corrupt_vectors") {
+      inside = true
+    } else if inside && line == "]" {
+      break
+    } else if inside && t.has_prefix("\"") {
+      name = t.trim(chars="\",").to_owned()
+    } else if inside && t.strip_prefix("#|") is Some(rest) {
+      block.write_string(rest.to_owned())
+    } else if inside && t.has_prefix("),") && block.to_string() != "" {
+      out.push({
+        format: "zstd",
+        name: "refused by zstd: \{name}",
+        input: decode64(block.to_string()),
+        expect: "err",
+        dictionary: None,
+      })
+      block.reset()
+    }
+  }
+  let made = []
+  for v in vectors {
+    for cut in cuts(v.1) {
+      made.push({
+        format: "zstd",
+        name: "\{v.0} \{cut.0}",
+        input: cut.1,
+        expect: "",
+        dictionary: None,
+      })
+    }
+    // The frame header descriptor's checksum flag; the checksum is the last
+    // 4 bytes of a stream of one frame.
+    if v.1.length() > 5 && v.1[0] == b'\x28' && (v.1[4].to_int() & 4) != 0 {
+      made.push({
+        format: "zstd",
+        name: "\{v.0} with its last checksum byte flipped",
+        input: flip(v.1, -1),
+        expect: "",
+        dictionary: None,
+      })
+    }
+  }
+  let rng = { state: 8878, }
+  for _ in 0..<300 {
+    let v = vectors[rng.below(vectors.length())]
+    if v.1.length() == 0 {
+      continue
+    }
+    let (what, input) = mutate(rng, v.1)
+    made.push({
+      format: "zstd",
+      name: "\{v.0} \{what}",
+      input,
+      expect: "",
+      dictionary: None,
+    })
+  }
+  for c in made {
+    c.expect = command_verdict("zstd", c.input)
+  }
+  [..out, ..made]
+}
+
+///|
+/// The Brotli cases.
+async fn brotli_cases() -> Array[Case] {
+  let out = []
+  let vectors = conformance("brotli")
+  for v in vectors {
+    out.push({
+      format: "brotli",
+      name: v.0,
+      input: v.1,
+      expect: "ok \{v.2}",
+      dictionary: None,
+    })
+  }
+  // The stream with the largest window of the module's vectors, too large
+  // for the conformance suite.
+  let file_text = records(read_text("brotli/src/vectors_wbtest.mbt"), "vectors")
+  for r in file_text {
+    if r["name"] == "gen/window24_far" {
+      out.push({
+        format: "brotli",
+        name: r["name"],
+        input: decode64(r["compressed"]),
+        expect: "ok \{r["sha256"]}",
+        dictionary: None,
+      })
+    }
+  }
+  let made = []
+  for m in brotli_malformed {
+    made.push({
+      format: "brotli",
+      name: "malformed: \{m.0}",
+      input: decode64(m.1),
+      expect: "",
+      dictionary: None,
+    })
+  }
+  for v in vectors {
+    for cut in cuts(v.1) {
+      made.push({
+        format: "brotli",
+        name: "\{v.0} \{cut.0}",
+        input: cut.1,
+        expect: "",
+        dictionary: None,
+      })
+    }
+  }
+  let rng = { state: 7932, }
+  for _ in 0..<300 {
+    let v = vectors[rng.below(vectors.length())]
+    if v.1.length() == 0 {
+      continue
+    }
+    let (what, input) = mutate(rng, v.1)
+    made.push({
+      format: "brotli",
+      name: "\{v.0} \{what}",
+      input,
+      expect: "",
+      dictionary: None,
+    })
+  }
+  for c in made {
+    c.expect = command_verdict("brotli", c.input)
+  }
+  // A large-window stream (not RFC 7932; `brotli -d` takes it): reported,
+  // not counted.
+  let text = b"large-window brotli is an extension to RFC 7932. ".repeat(20)
+  let large = @shell.Cmd(
+    "brotli",
+    ["--large_window=25", "-c"],
+    stdin=Binary(text),
+  ).output()
+  large.check()
+  out.push({
+    format: "brotli-large",
+    name: "large-window stream (brotli --large_window=25)",
+    input: large.stdout_bytes(),
+    expect: "any \{sha256(text)}",
+    dictionary: None,
+  })
+  [..out, ..made]
+}
+
+///|
+/// The cases of DEFLATE (`deflate`), zlib and gzip.
+async fn deflate_cases(format : String) -> Array[Case] {
+  let out = []
+  let vectors = conformance(format)
+  for v in vectors {
+    out.push({
+      format,
+      name: v.0,
+      input: v.1,
+      expect: "ok \{v.2}",
+      dictionary: None,
+    })
+  }
+  let file = if format == "deflate" {
+    "deflate/src/vectors_wbtest.mbt"
+  } else {
+    "deflate/src/\{format}/vectors_wbtest.mbt"
+  }
+  let file_text = read_text(file)
+  let made = []
+  // The crafted streams, with zlib's answer asked again: the files record it
+  // in other terms.
+  for r in records(file_text, "crafted") {
+    let input = decode64(r["input"])
+    // A dictionary goes with the streams that name one (FDICT); for the
+    // others zlib ignores it, and decoders differ in whether they refuse it.
+    let fdict = format == "zlib" &&
+      input.length() >= 2 &&
+      (input[1].to_int() & 0x20) != 0
+    let dictionary = match r.get("dictionary") {
+      Some(d) if d != "" && fdict => Some(decode64(d))
+      _ => None
+    }
+    made.push({
+      format: if dictionary is Some(_) {
+        "zlib-dict"
+      } else {
+        format
+      },
+      name: "crafted: \{r["name"]}",
+      input,
+      expect: "",
+      dictionary,
+    })
+  }
+  // The seeded corruptions of the module's vectors.
+  let sources : Map[String, Bytes] = Map([])
+  for r in records(file_text, "vectors") {
+    sources[r["name"]] = decode64(r["compressed"])
+  }
+  for r in records(file_text, "oracle") {
+    let source = sources[r["source"]]
+    let op = @string.parse_int(r["op"])
+    let at = @string.parse_int(r["at"])
+    let value = @string.parse_int(r["value"])
+    made.push({
+      format,
+      name: "corrupted \{r["source"]}: op \{op} at \{at} value \{value}",
+      input: corrupt(op, at, value, source),
+      expect: "",
+      dictionary: None,
+    })
+  }
+  for v in vectors {
+    for cut in cuts(v.1) {
+      made.push({
+        format,
+        name: "\{v.0} \{cut.0}",
+        input: cut.1,
+        expect: "",
+        dictionary: None,
+      })
+    }
+    if v.1.length() >= 8 && format == "gzip" {
+      made.push({
+        format,
+        name: "\{v.0} with a CRC-32 byte flipped",
+        input: flip(v.1, -8),
+        expect: "",
+        dictionary: None,
+      })
+      made.push({
+        format,
+        name: "\{v.0} with an ISIZE byte flipped",
+        input: flip(v.1, -1),
+        expect: "",
+        dictionary: None,
+      })
+    }
+    if v.1.length() >= 6 && format == "zlib" {
+      made.push({
+        format,
+        name: "\{v.0} with an Adler-32 byte flipped",
+        input: flip(v.1, -1),
+        expect: "",
+        dictionary: None,
+      })
+    }
+    // The header CRC of a gzip header with FHCRC: the 2 bytes before the
+    // DEFLATE data of header_hcrc, whose header is 12 bytes.
+    if format == "gzip" && v.0 == "header_hcrc" {
+      made.push({
+        format,
+        name: "header_hcrc with its header CRC flipped",
+        input: flip(v.1, 10),
+        expect: "",
+        dictionary: None,
+      })
+    }
+  }
+  if format == "zlib" {
+    for r in records(file_text, "dictionary_vectors") {
+      let input = decode64(r["compressed"])
+      made.push({
+        format: "zlib-dict",
+        name: "\{r["name"]} with its dictionary",
+        input,
+        expect: "",
+        dictionary: Some(decode64(r["dict"])),
+      })
+      made.push({
+        format,
+        name: "\{r["name"]} without its dictionary (FDICT)",
+        input,
+        expect: "",
+        dictionary: None,
+      })
+    }
+  }
+  zlib_verdicts(made)
+  [..out, ..made.filter(c => c.expect != "skip")]
+}
+
+///|
+/// What a case tests, from its name: `cut` (a stream cut short), `check` (a
+/// checksum, length or header CRC broken, or a dictionary left out),
+/// `crafted` (built by hand, or a frame the reference refuses), `seeded` (a
+/// seeded corruption), or `vector`.
+fn kind(name : String) -> String {
+  if name.contains(" cut to ") {
+    "cut"
+  } else if name.has_suffix(" flipped") &&
+    (
+      name.contains("checksum") ||
+      name.contains("CRC") ||
+      name.contains("ISIZE") ||
+      name.contains("Adler")
+    ) {
+    "check"
+  } else if name.contains("(FDICT)") {
+    "check"
+  } else if name.has_prefix("crafted: ") ||
+    name.has_prefix("malformed: ") ||
+    name.has_prefix("refused by zstd: ") {
+    "crafted"
+  } else if name.has_prefix("corrupted ") ||
+    name.contains(" flipped") ||
+    name.contains(" set to ") ||
+    name.contains(" inserted at ") ||
+    name.has_suffix(" removed") {
+    "seeded"
+  } else {
+    "vector"
+  }
+}
+
+///|
+/// Writes the cases to `dir`: the streams under `files/`, and `cases.tsv`.
+async fn write_cases(dir : String, cases : Array[Case]) -> Unit {
+  if @fs.exists("\{dir}/files") {
+    @fs.rmdir("\{dir}/files", recursive=true)
+  }
+  @fs.mkdir("\{dir}/files", recursive=true)
+  let index = StringBuilder()
+  for i, c in cases {
+    let input = "files/\{i}.bin"
+    @fs.write_file("\{dir}/\{input}", c.input)
+    let dict = match c.dictionary {
+      Some(d) => {
+        let path = "files/\{i}.dict"
+        @fs.write_file("\{dir}/\{path}", d)
+        path
+      }
+      None => ""
+    }
+    index.write_string(
+      "\{c.format}\t\{c.name}\t\{input}\t\{c.expect}\t\{dict}\n",
+    )
+  }
+  @fs.write_file("\{dir}/cases.tsv", index.to_string())
+}
+
+// ---------------------------------------------------------------------------
+// The correctness runs.
+
+///|
+let checker : String = "_build/native/release/build/gaato/codec_bench/compare_check/compare_check.exe"
+
+///|
+/// What a decoder made of a case: `pass`, `fail`, `note`, `crash` or `hang`,
+/// and what it did.
+struct Result {
+  verdict : String
+  what : String
+}
+
+///|
+/// Runs `name` over the cases of `format` from `first` to `end` (with
+/// `pieces`, fed in pieces): fills `results`, and says the case it stopped
+/// on if it aborted or ran out of time, whether it ran out of time, and what
+/// it wrote besides its results.
+async fn run_batch(
+  dir : String,
+  format : String,
+  name : String,
+  first : Int32,
+  end : Int32,
+  pieces : Array[String],
+  timeout_s : Int32,
+  results : Map[Int32, Result],
+) -> (Int32?, Bool, String) {
+  let log = "\{dir}/run.log"
+  let mut timed_out = false
+  let code = @shell.Cmd(
+    checker,
+    [dir, format, name, first.to_string(), end.to_string(), ..pieces],
+    stdout=Discard,
+    stderr=ToFile(log),
+  ).status(timeout_ms=timeout_s * 1000) catch {
+    _ => {
+      timed_out = true
+      -1
+    }
+  }
+  let mut started : Int32? = None
+  let mut ended = false
+  // What else the decoder wrote: an abort's message.
+  let other = StringBuilder()
+  for line in read_text(log).split("\n") {
+    let f = line.split("\t").map(s => s.to_owned()).collect()
+    match f {
+      ["S", i] => started = Some(@string.parse_int(i))
+      ["R", i, verdict, what] => {
+        results[@string.parse_int(i)] = { verdict, what, }
+        started = None
+      }
+      ["E"] => ended = true
+      _ =>
+        if started is Some(_) && line != "" && other.to_string().length() < 200 {
+          other.write_string("\{line.trim(chars=" ")} ")
+        }
+    }
+  }
+  let message = other.to_string().trim(chars=" ").to_owned()
+  if ended && code == 0 {
+    (None, false, "")
+  } else if timed_out {
+    (started, true, message)
+  } else {
+    (started, false, "exit status \{code}; \{message}")
+  }
+}
+
+///|
+/// The decoders compare_check knows: format, name, and whether it takes its
+/// input in pieces.
+async fn listed() -> Array[(String, String, Bool)] {
+  let out = @shell.Cmd(checker, ["--list"]).output()
+  out.check()
+  let list = []
+  for line in out.stdout().split("\n") {
+    if line.split("\t").map(s => s.to_owned()).collect()
+      is [format, name, streams] {
+      list.push((format, name, streams == "true"))
+    }
+  }
+  list
+}
+
+///|
+/// `check`: every decoder over every case (with `pieces`, the streaming
+/// decoders over the valid cases, fed in pieces).
+async fn check(
+  dir : String,
+  timeout_s : Int32,
+  only : String,
+  pieces : Array[String],
+) -> Unit {
+  let cases = [
+    ..zstd_cases(),
+    ..brotli_cases(),
+    ..deflate_cases("deflate"),
+    ..deflate_cases("zlib"),
+    ..deflate_cases("gzip"),
+  ]
+  write_cases(dir, cases)
+  @shell.Cmd("moon", [
+    "build", "--release", "--target", "native", "bench/src/compare_check",
+  ]).run()
+  let report = StringBuilder()
+  let details = StringBuilder()
+  report.write_string(
+    "format\tdecoder\tvalid decoded\tinvalid refused\tcrashes\thangs\tcut short\tchecks\tcrafted\tseeded\n",
+  )
+  for decoder in listed() {
+    let (format, name, streams) = decoder
+    if (only != "" && !name.contains(only)) || (pieces != [] && !streams) {
+      continue
+    }
+    let results : Map[Int32, Result] = Map([])
+    let mut first = 0
+    for ;; {
+      let (stopped, timed_out, message) = run_batch(
+        dir,
+        format,
+        name,
+        first,
+        cases.length(),
+        pieces,
+        timeout_s,
+        results,
+      )
+      guard stopped is Some(at) else { break }
+      // A batch's time runs over all its cases: the case it ran out on runs
+      // again alone, and hangs only if it runs out of time by itself.
+      let (alone, still, message) = if timed_out {
+        run_batch(dir, format, name, at, at + 1, pieces, timeout_s, results)
+      } else {
+        (Some(at), false, message)
+      }
+      if alone is Some(_) {
+        results[at] = if still {
+          { verdict: "hang", what: "no answer within \{timeout_s} s", }
+        } else {
+          { verdict: "crash", what: "aborted: \{message}", }
+        }
+      }
+      first = at + 1
+    }
+    let mut valid = 0
+    let mut valid_ok = 0
+    let mut invalid = 0
+    let mut refused = 0
+    let mut crashes = 0
+    let mut hangs = 0
+    // Invalid streams refused, and seen, by kind.
+    let by_kind : Map[String, (Int32, Int32)] = Map([])
+    for index, c in cases {
+      let matches = c.format == format ||
+        (format == "brotli" && c.format == "brotli-large")
+      guard matches && results.get(index) is Some(r) else { continue }
+      let is_valid = c.expect.has_prefix("ok")
+      if is_valid {
+        valid += 1
+      } else if c.expect == "err" {
+        invalid += 1
+        let (r0, n0) = by_kind.get(kind(c.name)).unwrap_or((0, 0))
+        by_kind[kind(c.name)] = (
+          if r.verdict == "pass" {
+            r0 + 1
+          } else {
+            r0
+          },
+          n0 + 1,
+        )
+      }
+      match r.verdict {
+        "pass" => if is_valid { valid_ok += 1 } else { refused += 1 }
+        "crash" => crashes += 1
+        "hang" => hangs += 1
+        _ => ()
+      }
+      if r.verdict != "pass" {
+        details.write_string(
+          "\{format}\t\{name}\t\{c.name}\t\{c.expect.split(" ").next().unwrap()}\t\{r.verdict}\t\{r.what}\n",
+        )
+      }
+    }
+    let kinds = ["cut", "check", "crafted", "seeded"].map(k => {
+      match by_kind.get(k) {
+        Some((r, n)) => "\{r} of \{n}"
+        None => "-"
+      }
+    })
+    report.write_string(
+      "\{format}\t\{name}\t\{valid_ok} of \{valid}\t\{refused} of \{invalid}\t\{crashes}\t\{hangs}\t\{kinds.join("\t")}\n",
+    )
+  }
+  println(report.to_string())
+  println("format\tdecoder\tcase\treference\tverdict\twhat the decoder did")
+  println(details.to_string())
+}
+
+// ---------------------------------------------------------------------------
+// Streaming, memory and ratio.
+
+///|
+let streamer : String = "_build/native/release/build/gaato/codec_bench/compare_stream/compare_stream.exe"
+
+///|
+let ratio_tool : String = "_build/native/release/build/gaato/codec_bench/compare_ratio/compare_ratio.exe"
+
+///|
+/// The base64 string `let <name> : String =` of bench/src/data_test.mbt.
+async fn bench_data(name : String) -> Bytes {
+  let text = read_text("bench/src/data_test.mbt")
+  let out = StringBuilder()
+  let mut inside = false
+  for line in text.split("\n") {
+    let t = line.trim(chars=" ")
+    if line.has_prefix("let \{name} : String") {
+      inside = true
+    } else if inside && t.strip_prefix("#|") is Some(rest) {
+      out.write_string(rest.to_owned())
+    } else if inside {
+      break
+    }
+  }
+  decode64(out.to_string())
+}
+
+///|
+/// What `program` writes for `input`.
+async fn filter(program : String, args : Array[String], input : Bytes) -> Bytes {
+  let out = @shell.Cmd(program, args, stdin=Binary(input)).output(
+    max_output_bytes=1 << 30,
+  )
+  out.check()
+  out.stdout_bytes()
+}
+
+///|
+/// A raw DEFLATE and a zlib stream of `input`, from Node's zlib at level 6.
+async fn node_deflate(input : Bytes, dir : String) -> (String, String) {
+  @fs.write_file("\{dir}/plain", input)
+  let script =
+    $|const zlib = require("node:zlib"); const fs = require("node:fs");
+    $|const input = fs.readFileSync("\{dir}/plain");
+    $|fs.writeFileSync("\{dir}/deflate", zlib.deflateRawSync(input, { level: 6 }));
+    $|fs.writeFileSync("\{dir}/zlib", zlib.deflateSync(input, { level: 6 }));
+  @shell.Cmd("node", ["-e", script]).run()
+  ("\{dir}/deflate", "\{dir}/zlib")
+}
+
+///|
+/// Writes the streams of `input` for each format into `dir`: zstd -3,
+/// brotli -q 9 -w 22, raw DEFLATE and zlib at level 6, gzip -6 -n.
+async fn streams_of(input : Bytes, dir : String) -> Map[String, String] {
+  if @fs.exists(dir) {
+    @fs.rmdir(dir, recursive=true)
+  }
+  @fs.mkdir(dir, recursive=true)
+  let (deflate, zlib) = node_deflate(input, dir)
+  let files : Map[String, String] = {
+    "zstd": "\{dir}/zstd",
+    "brotli": "\{dir}/brotli",
+    "gzip": "\{dir}/gzip",
+    "deflate": deflate,
+    "zlib": zlib,
+  }
+  @fs.write_file(files["zstd"], filter("zstd", ["-3", "-c"], input))
+  @fs.write_file(
+    files["brotli"],
+    filter("brotli", ["-q", "9", "-w", "22", "-c"], input),
+  )
+  @fs.write_file(files["gzip"], filter("gzip", ["-6", "-n", "-c"], input))
+  @fs.remove("\{dir}/plain")
+  files
+}
+
+///|
+/// The bench text: 512 KiB, as the benchmarks decode it.
+async fn bench_text() -> Bytes {
+  filter("zstd", ["-d", "-c"], bench_data("zstd_text"))
+}
+
+///|
+/// Runs compare_stream; `None` if it fails or runs out of time.
+async fn run_stream(
+  args : Array[String],
+  timeout_s : Int32,
+  measure : Bool,
+  repeat~ : Int32 = 1,
+) -> (String, String)? {
+  let (program, all) = if measure {
+    ("/usr/bin/time", ["-f", "%M", streamer, ..args])
+  } else {
+    (streamer, args)
+  }
+  let out = @shell.Cmd(program, all, env={ "REPEAT": repeat.to_string() }).output(
+    timeout_ms=timeout_s * 1000,
+  ) catch {
+    _ => return Some(("timeout", ""))
+  }
+  if out.exit_code() != 0 {
+    return Some(("failed", out.stderr().trim(chars="\n ").to_owned()))
+  }
+  Some((out.stdout().trim(chars="\n").to_owned(), out.stderr()))
+}
+
+///|
+/// `stream`: each streaming decoder over the bench text's streams, fed in
+/// pieces of 1 byte (output buffer 1 byte) and of 4 KiB (output 4 KiB), and
+/// whole: bytes out, the share out before the second half of the input went
+/// in, and the time.
+async fn stream(dir : String, timeout_s : Int32, only : String) -> Unit {
+  @shell.Cmd("moon", [
+    "build", "--release", "--target", "native", "bench/src/compare_stream",
+  ]).run()
+  let files = streams_of(bench_text(), "\{dir}/stream")
+  println("format\tdecoder\tmode\tbytes out\tout before the second half\tms")
+  let list = @shell.Cmd(streamer, ["--list"]).output()
+  for line in list.stdout().split("\n") {
+    guard line.split("\t").map(s => s.to_owned()).collect()
+      is [format, name, streams] else {
+      continue
+    }
+    if only != "" && !name.contains(only) {
+      continue
+    }
+    let modes = if streams == "true" {
+      [("whole", "0", "0"), ("4 KiB", "4096", "4096"), ("1 byte", "1", "1")]
+    } else {
+      [("whole", "0", "0")]
+    }
+    for m in modes {
+      // The time is the mean of 20 runs, but over 1-byte pieces, of one.
+      let result = run_stream(
+        [format, name, files[format], m.1, m.2],
+        timeout_s,
+        false,
+        repeat=if m.1 == "1" { 1 } else { 20 },
+      )
+      let text = match result {
+        Some((out, err)) =>
+          if out == "timeout" {
+            "did not finish within \{timeout_s} s"
+          } else if out == "failed" {
+            "failed: \{err}"
+          } else {
+            match out.split("\t").map(s => s.to_owned()).collect() {
+              ["refused", total, message] =>
+                "refused after \{total} bytes out: \{message}"
+              [total, early, hash, ms] => {
+                let share = if total == "0" {
+                  "0"
+                } else {
+                  let t = @string.parse_double(total)
+                  let e = @string.parse_double(early)
+                  "\{(e / t * 100.0).round()}%"
+                }
+                "\{total}\t\{share}\t\{ms}\thash \{hash}"
+              }
+              _ => out
+            }
+          }
+        None => "?"
+      }
+      println("\{format}\t\{name}\t\{m.0}\t\{text}")
+    }
+  }
+}
+
+///|
+/// `memory`: each decoder over 256 MiB of output (the bench text 512 times),
+/// whole and (if it streams) in 64 KiB pieces: the peak resident memory of
+/// compare_stream, measured by /usr/bin/time. First the sizes of the
+/// compressed inputs, which compare_stream reads whole, and each decoder's
+/// peak over the 512 KiB text, whole: what the runtime and a small decode
+/// take, to set against the 256 MiB figures.
+async fn memory(dir : String, timeout_s : Int32, only : String) -> Unit {
+  @shell.Cmd("moon", [
+    "build", "--release", "--target", "native", "bench/src/compare_stream",
+  ]).run()
+  let text = bench_text()
+  let big = Buffer()
+  for _ in 0..<512 {
+    big.write_bytes(text)
+  }
+  let files = streams_of(big.to_bytes(), "\{dir}/memory")
+  let small = streams_of(text, "\{dir}/memory-small")
+  println("format\tcompressed input of 256 MiB (bytes)")
+  for format in ["zstd", "brotli", "deflate", "zlib", "gzip"] {
+    let size = @fs.read_file(files[format]).binary().length()
+    println("\{format}\t\{size}")
+  }
+  println("")
+  println("format\tdecoder\tmode\tbytes out\tpeak RSS (KiB)")
+  let list = @shell.Cmd(streamer, ["--list"]).output()
+  for line in list.stdout().split("\n") {
+    guard line.split("\t").map(s => s.to_owned()).collect()
+      is [format, name, streams] else {
+      continue
+    }
+    if only != "" && !name.contains(only) {
+      continue
+    }
+    let modes = [("512 KiB, whole", small[format], "0")]
+    modes.push(("whole", files[format], "0"))
+    if streams == "true" {
+      modes.push(("64 KiB pieces", files[format], "65536"))
+    }
+    for m in modes {
+      let result = run_stream([format, name, m.1, m.2, m.2], timeout_s, true)
+      let text = match result {
+        Some((out, err)) =>
+          if out == "timeout" {
+            "did not finish within \{timeout_s} s"
+          } else if out == "failed" {
+            "failed: \{err.split("\n").filter(l => !l.is_empty()).collect().join(" | ")}"
+          } else if out.split("\t").map(s => s.to_owned()).collect()
+            is ["refused", total, message] {
+            "refused after \{total} bytes out: \{message}\t\{err.trim(chars="\n ")}"
+          } else {
+            let total = out.split("\t").next().unwrap_or("")
+            "\{total}\t\{err.trim(chars="\n ")}"
+          }
+        None => "?"
+      }
+      println("\{format}\t\{name}\t\{m.0}\t\{text}")
+    }
+  }
+}
+
+///|
+/// `ratio`: each encoder at its default and highest level over the bench
+/// text and binary, and over the files of the directories given: sizes and
+/// speed. The bench streams are also checked with the reference decoders.
+async fn ratio(
+  dir : String,
+  format : String,
+  min_ms : Int32,
+  only : String,
+  dirs : Array[String],
+) -> Unit {
+  @shell.Cmd("moon", [
+    "build", "--release", "--target", "native", "bench/src/compare_ratio",
+  ]).run()
+  let work = "\{dir}/ratio"
+  if @fs.exists(work) {
+    @fs.rmdir(work, recursive=true)
+  }
+  @fs.mkdir("\{work}/dump", recursive=true)
+  let text = bench_text()
+  let binary = filter("zstd", ["-d", "-c"], bench_data("zstd_binary"))
+  @fs.write_file("\{work}/bench_text", text)
+  @fs.write_file("\{work}/bench_binary", binary)
+  let paths = ["\{work}/bench_text", "\{work}/bench_binary"]
+  for d in dirs {
+    let names = @fs.readdir(d)
+    names.sort()
+    for n in names {
+      if @fs.kind("\{d}/\{n}") is Regular {
+        paths.push("\{d}/\{n}")
+      }
+    }
+  }
+  // One run per encoder and file, so that an encoder that aborts on a file
+  // costs that file alone.
+  let list = @shell.Cmd(ratio_tool, ["--list", format]).output()
+  list.check()
+  println("encoder\tlevel\tvalue\tfile\tsize\tcompressed\tMB/s\tchecked")
+  for name in list.stdout().split("\n") {
+    let name = name.to_owned()
+    if name == "" || (only != "" && !name.contains(only)) {
+      continue
+    }
+    for path in paths {
+      let out = @shell.Cmd(ratio_tool, [format, min_ms.to_string(), path], env={
+        "ONLY": name,
+        "DUMP": "\{work}/dump",
+      }).output(max_output_bytes=1 << 24)
+      if out.exit_code() != 0 {
+        println(
+          "\{name}\t\t\t\{path}\t\t\t\taborted (exit status \{out.exit_code()}) \{out.stderr().trim(chars="\n ")}",
+        )
+      } else {
+        println(out.stdout().trim(chars="\n").to_owned())
+      }
+    }
+  }
+  // The reference encoder at three settings, for scale (Brotli only: the
+  // DEFLATE table has no reference row). The file is named, not piped, as
+  // brotli then knows its size, which changes some streams.
+  if format == "brotli" && only == "" {
+    for args in [["-q", "4"], ["-q", "9", "-w", "22"], ["-q", "11"]] {
+      for path in paths {
+        let out = @shell.Cmd("brotli", [..args, "-c", path]).output(
+          max_output_bytes=1 << 28,
+        )
+        out.check()
+        let size = @fs.read_file(path).binary().length()
+        println(
+          "brotli \{args.join(" ")}\treference\t\t\{path}\t\{size}\t\{out.stdout_bytes().length()}\t0\t",
+        )
+      }
+    }
+  }
+  // Every stream, decoded by the reference: a stream counts only if it gives
+  // its file back. The dump names end in -<file name>.
+  let names = @fs.readdir("\{work}/dump")
+  names.sort()
+  for n in names {
+    guard paths.search_by(p => n.has_suffix("-\{p.split("/").last().unwrap()}"))
+      is Some(at) else {
+      println("\{n}: no input file of that name")
+      continue
+    }
+    let original = @fs.read_file(paths[at]).binary()
+    let cmd = if format == "brotli" {
+      @shell.Cmd("brotli", ["-d", "-c", "\{work}/dump/\{n}"])
+    } else {
+      @shell.Cmd("node", [
+        "-e",
+        "process.stdout.write(require('node:zlib').inflateRawSync(require('node:fs').readFileSync(process.argv[1])))",
+        "\{work}/dump/\{n}",
+      ])
+    }
+    let out = cmd.output(max_output_bytes=1 << 28)
+    let verdict = if out.exit_code() != 0 {
+      "refuses the stream"
+    } else if out.stdout_bytes() == original {
+      "gives the input back"
+    } else {
+      "gives other bytes"
+    }
+    println("\{n}: the reference decoder \{verdict}")
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Claimed sizes and speed.
+
+///|
+/// The bytes of a string of hexadecimal digits.
+fn of_hex(s : String) -> Bytes {
+  let digits = s.to_array()
+  let value = (c : Char) => {
+    let n = c.to_int()
+    if n >= 'a'.to_int() {
+      n - 'a'.to_int() + 10
+    } else if n >= 'A'.to_int() {
+      n - 'A'.to_int() + 10
+    } else {
+      n - '0'.to_int()
+    }
+  }
+  let out = Buffer()
+  for i = 0; i + 1 < digits.length(); i = i + 2 {
+    out.write_byte((value(digits[i]) * 16 + value(digits[i + 1])).to_byte())
+  }
+  out.to_bytes()
+}
+
+///|
+/// Runs `program` alone under /usr/bin/time and, unless `limit_mib` is 0, an
+/// address-space limit of `limit_mib` MiB: its exit status (-1 if it ran out
+/// of `timeout_s`), its standard output, and its standard error, whose last
+/// line is its peak resident memory in KiB.
+async fn run_limited(
+  program : String,
+  args : Array[String],
+  limit_mib : Int32,
+  timeout_s : Int32,
+) -> (Int32, String, String) {
+  let timed = ["/usr/bin/time", "-f", "%M", program, ..args]
+  let cmd = if limit_mib == 0 {
+    @shell.Cmd(timed[0], timed[1:].to_owned())
+  } else {
+    let limit = limit_mib.to_int64() * 1024L * 1024L
+    @shell.Cmd("prlimit", ["--as=\{limit}", ..timed])
+  }
+  let out = cmd.output(timeout_ms=timeout_s * 1000, max_output_bytes=1 << 30) catch {
+    _ => return (-1, "", "")
+  }
+  (out.exit_code(), out.stdout(), out.stderr())
+}
+
+///|
+/// The lines of a run's standard error that are not empty, joined, and its
+/// peak memory: the last of them.
+fn peak_and_message(err : String) -> (String, String) {
+  let lines = err
+    .split("\n")
+    .filter(l => !l.is_empty())
+    .map(l => l.to_owned())
+    .collect()
+  match lines.last() {
+    Some(peak) => (peak, lines[:lines.length() - 1].join(" | "))
+    None => ("?", "")
+  }
+}
+
+///|
+/// `claims`: the reference and each decoder of the fixture's format over
+/// each fixture, whole and in 4 KiB pieces, alone and under a memory limit.
+async fn claims(
+  dir : String,
+  fixtures : String,
+  limit_mib : Int32,
+  timeout_s : Int32,
+  only : String,
+) -> Unit {
+  @shell.Cmd("moon", [
+    "build", "--release", "--target", "native", "bench/src/compare_stream",
+  ]).run()
+  let work = "\{dir}/claims"
+  if @fs.exists(work) {
+    @fs.rmdir(work, recursive=true)
+  }
+  @fs.mkdir(work, recursive=true)
+  let list = @shell.Cmd(streamer, ["--list"]).output()
+  list.check()
+  let decoders = list
+    .stdout()
+    .split("\n")
+    .map(l => l.split("\t").map(s => s.to_owned()).collect())
+    .filter(f => f.length() == 3)
+    .collect()
+  println(
+    "fixture\tformat\tdecoder\tmode\tlimit (MiB)\toutcome\tpeak RSS (KiB)",
+  )
+  for line in read_text(fixtures).split("\n") {
+    guard line.split("\t").map(s => s.to_owned()).collect()
+      is [name, format, size, digits] &&
+      name != "name" else {
+      continue
+    }
+    let input = of_hex(digits)
+    guard input.length().to_string() == size else {
+      println(
+        "\{name}\t\{format}\t\t\t\tfixture has \{input.length()} bytes, not \{size}",
+      )
+      continue
+    }
+    let path = "\{work}/\{name.replace_all(old="/", new="_")}"
+    @fs.write_file(path, input)
+    // The reference, with no limit: Node reserves more address space at
+    // start than the decoders are allowed.
+    let (program, args) = match format {
+      "zstd" => ("zstd", ["-d", "-c", "-q", path])
+      "brotli" => ("brotli", ["-d", "-c", path])
+      "gzip" => ("gzip", ["-d", "-c", path])
+      _ =>
+        (
+          "node",
+          [
+            "-e", "process.stdout.write(require('node:zlib').inflateRawSync(require('node:fs').readFileSync(process.argv[1])))",
+            path,
+          ],
+        )
+    }
+    let (code, out, err) = run_limited(program, args, 0, timeout_s)
+    let (peak, message) = peak_and_message(err)
+    let outcome = if code == -1 {
+      "no answer within \{timeout_s} s"
+    } else if code == 0 {
+      "decoded \{out.length()} bytes"
+    } else {
+      // Node's error is one line of a stack trace.
+      let parts = message
+        .split(" | ")
+        .map(l => l.trim(chars=" ").to_owned())
+        .collect()
+      let why = match parts.search_by(l => l.has_prefix("Error: ")) {
+        Some(i) => parts[i]
+        None => parts.get(0).unwrap_or("")
+      }
+      "refused: \{why}"
+    }
+    println(
+      "\{name}\t\{format}\treference (\{program})\twhole\tnone\t\{outcome}\t\{peak}",
+    )
+    for d in decoders {
+      guard d[0] == format && (only == "" || d[1].contains(only)) else {
+        continue
+      }
+      let modes = if d[2] == "true" {
+        [("whole", "0"), ("4 KiB pieces", "4096")]
+      } else {
+        [("whole", "0")]
+      }
+      for m in modes {
+        for limit in [limit_mib, 8192] {
+          let (code, out, err) = run_limited(
+            streamer,
+            [format, d[1], path, m.1, m.1],
+            limit,
+            timeout_s,
+          )
+          let (peak, message) = peak_and_message(err)
+          let fields = out
+            .trim(chars="\n")
+            .split("\t")
+            .map(s => s.to_owned())
+            .collect()
+          let (outcome, normal) = if code == -1 {
+            ("no answer within \{timeout_s} s", false)
+          } else if code != 0 {
+            ("ended abnormally: \{message}", false)
+          } else if fields is ["refused", total, why] {
+            ("refused after \{total} bytes out: \{why}", true)
+          } else if fields is [total, ..] {
+            ("decoded \{total} bytes", true)
+          } else {
+            ("printed nothing", false)
+          }
+          println(
+            "\{name}\t\{format}\t\{d[1]}\t\{m.0}\t\{limit}\t\{outcome}\t\{peak}",
+          )
+          if normal {
+            break
+          }
+        }
+      }
+    }
+  }
+}
+
+///|
+/// A benchmark line of `moon bench`: its name and mean in milliseconds.
+fn bench_line(line : String) -> (String, Double)? {
+  guard line.find(" ± ") is Some(end) else { return None }
+  let head = line[:end].trim(chars=" ").to_owned()
+  // The name, then two or more spaces, then the mean and its unit.
+  guard head.rev_find("  ") is Some(gap) else { return None }
+  let name = head[:gap].trim(chars=" ").to_owned()
+  let mean = head[gap:].trim(chars=" ").split(" ").collect()
+  guard mean is [value, unit] else { return None }
+  let scale = match unit.to_owned() {
+    "ns" => 1.0e-6
+    "µs" => 1.0e-3
+    "ms" => 1.0
+    "s" => 1000.0
+    _ => return None
+  }
+  let v = @string.parse_double(value) catch { _ => return None }
+  Some((name, v * scale))
+}
+
+///|
+/// `speed`: `runs` runs of src/compare_speed on each target, in turn; each
+/// run's output goes to `out`/<target>-<run>.txt.
+async fn speed(out : String, runs : Int32) -> Unit {
+  let targets = ["native", "wasm", "wasm-gc", "js"]
+  if !@fs.exists(out) {
+    @fs.mkdir(out, recursive=true)
+  }
+  for run in 1..<=runs {
+    for target in targets {
+      let result = @shell.Cmd(
+        "moon",
+        [
+          "bench", "--release", "--target", target, "-p", "gaato/codec_bench/compare_speed",
+        ],
+        env={ "MOON_CC": "cc" },
+      ).output(max_output_bytes=1 << 24)
+      @fs.write_file(
+        "\{out}/\{target}-\{run}.txt",
+        "\{result.stdout()}\{result.stderr()}",
+      )
+      if result.exit_code() != 0 {
+        println("\{target} run \{run}: exit status \{result.exit_code()}")
+      }
+    }
+  }
+  // Each benchmark's mean over the runs, and the runs.
+  for target in targets {
+    println("=== \{target}")
+    let order : Array[String] = []
+    let times : Map[String, Array[Double]] = Map([])
+    for run in 1..<=runs {
+      for line in read_text("\{out}/\{target}-\{run}.txt").split("\n") {
+        guard bench_line(line.to_owned()) is Some((name, ms)) else { continue }
+        match times.get(name) {
+          Some(list) => list.push(ms)
+          None => {
+            order.push(name)
+            times[name] = [ms]
+          }
+        }
+      }
+    }
+    for name in order {
+      let list = times[name]
+      let mean = list.fold(init=0.0, (a, b) => a + b) /
+        list.length().to_double()
+      let shown = list.map(t => t.to_string()).join(" ")
+      let note = if list.length() == runs {
+        ""
+      } else {
+        "\tin \{list.length()} of \{runs} runs"
+      }
+      println("\{name}\t\{mean}\t\{shown}\{note}")
+    }
+  }
+}
+
+///|
+async fn main {
+  let args = @env.args()
+  let mut command = "check"
+  let mut dir = "_build/compare"
+  let mut timeout_s = 60
+  let mut only = ""
+  let mut pieces : Array[String] = []
+  let mut invalid = false
+  let mut format = "deflate"
+  let mut min_ms = 1000
+  let mut fixtures = "bench/compare/fixtures.tsv"
+  let mut limit_mib = 1024
+  let mut runs = 3
+  let mut out = ""
+  let dirs = []
+  let mut i = 1
+  if args.get(1) is Some(c) && !c.has_prefix("--") {
+    command = c
+    i = 2
+  }
+  while i < args.length() {
+    match args[i] {
+      "--dir" => dir = args[i + 1]
+      "--timeout" => timeout_s = @string.parse_int(args[i + 1])
+      "--only" => only = args[i + 1]
+      "--format" => format = args[i + 1]
+      "--time" => min_ms = @string.parse_int(args[i + 1])
+      "--corpus" => dirs.push(args[i + 1])
+      "--fixtures" => fixtures = args[i + 1]
+      "--limit" => limit_mib = @string.parse_int(args[i + 1])
+      "--runs" => runs = @string.parse_int(args[i + 1])
+      "--out" => out = args[i + 1]
+      "--pieces" => {
+        pieces = [args[i + 1], args[i + 2]]
+        i += 1
+      }
+      "--invalid" => {
+        invalid = true
+        i -= 1
+      }
+      a => setup_failure("unknown option: \{a}")
+    }
+    i += 2
+  }
+  if invalid {
+    if pieces == [] {
+      setup_failure("--invalid needs --pieces")
+    }
+    pieces.push("all")
+  }
+  match command {
+    "check" => check(dir, timeout_s, only, pieces)
+    "stream" => stream(dir, timeout_s, only)
+    "memory" => memory(dir, timeout_s, only)
+    "claims" => claims(dir, fixtures, limit_mib, timeout_s, only)
+    "ratio" => ratio(dir, format, min_ms, only, dirs)
+    "speed" => speed(if out == "" { "\{dir}/speed" } else { out }, runs)
+    c => setup_failure("unknown command: \{c}")
+  }
+}

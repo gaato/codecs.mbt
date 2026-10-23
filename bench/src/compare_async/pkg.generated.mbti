@@ -1,0 +1,19 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/codec_bench/compare_async"
+
+// Values
+pub async fn gunzip(Bytes, Int32, Int32, (BytesView) -> Unit) -> Unit
+
+pub async fn gunzip_whole(Bytes) -> Bytes
+
+pub async fn gzip(Bytes) -> Bytes
+
+pub let name : String
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+
+// Traits

@@ -135,10 +135,17 @@ Every malformed stream raises `CodecError(kind, message)` with `Truncated`, `Cor
 
 A step that raises first hands out the output that comes before the error (answering `NeedMoreOutput` while it does not fit), and `last_consumed()` and `last_produced()` count what that step took and wrote: a corrupt stream gives the same output, then the same error, however it is split. On `TrailingData`, `last_consumed()` stops at the end of the stream.
 
+## When to use it
+
+gaato/brotli fits Brotli that arrives in pieces or comes from anyone. `Decoder` takes input in pieces down to one byte, writes into your slices and holds its window and at most 1.3 MiB of tables (12.9 MiB at the peak for 256 MiB of output). It agreed with `brotli -d` on all 81 valid and 359 invalid streams of the comparison, and its decoding rules and the encoder's codes are proved against RFC 7932. It runs on Native, JS, Wasm and Wasm GC; its encoder has one quality, about google/brotli's 4.
+
+A decoder that takes the whole stream at once can be faster: hustcer/fbr's takes about 0.89 (Native), 0.65 (Wasm), 0.96 (Wasm GC) and 1.1 (JS) times as long as gaato/brotli on the benchmarks' text. Its encoder at quality 11 writes 17 % less on that text and takes 135 to 192 times as long as ours.
+
 ## Links
 
 - [Changelog](https://github.com/gaato/codecs.mbt/blob/main/brotli/CHANGELOG.md)
 - [Repository](https://github.com/gaato/codecs.mbt)
+- [Comparison with other MoonBit implementations](https://github.com/gaato/codecs.mbt/blob/main/bench/README.md#compression-codecs-against-other-implementations): what each supports, checks and holds, and how fast it decodes and encodes
 - [The byte-stream codec contract](https://github.com/gaato/codecs.mbt/blob/main/CONTRACT.md) that `Decoder` and `Encoder` keep
 - [Resource bounds](https://github.com/gaato/codecs.mbt/blob/main/brotli/RESOURCE_BOUNDS.md): every limit and the tests that hold it
 - [Proofs](https://github.com/gaato/codecs.mbt/blob/main/brotli/PROOFS.md) and [test coverage](https://github.com/gaato/codecs.mbt/blob/main/brotli/TEST_COVERAGE.md)

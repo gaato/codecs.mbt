@@ -1,0 +1,18 @@
+// Runs one decoder over the cases scripts/compare_codecs.mbtx writes, and
+// says for each whether the decoder agrees with the reference: an executable
+// of its own, so that a decoder that aborts or hangs costs one case, not the
+// run (the script resumes after it).
+
+import {
+  "gaato/codec_bench/compare",
+  "gaato/codec_bench/compare_async",
+  "gaato/codec_harness",
+  "moonbitlang/async",
+  "moonbitlang/core/env",
+  "moonbitlang/core/string",
+  "moonbitlang/x/fs",
+}
+
+pkgtype(kind: "executable")
+
+supported_targets = "native"

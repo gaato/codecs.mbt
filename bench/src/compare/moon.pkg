@@ -1,0 +1,31 @@
+// The decoders and encoders of the comparison with other MoonBit
+// implementations, behind one shape per kind: whole input to whole output,
+// input in pieces with output in pieces, and compression at a level. The
+// benchmarks (compare_zstd, compare_brotli, compare_deflate), the correctness
+// run (compare_check) and the memory run (compare_memory) all go through
+// them, so each package is called the same way everywhere.
+
+supported_targets = "js + native + wasm + wasm-gc"
+
+import {
+  "gaato/codec_bytes",
+  "gaato/zstd",
+  "gaato/brotli",
+  "gaato/deflate",
+  "gaato/deflate/zlib",
+  "gaato/deflate/gzip",
+  "Milky2018/zstd" @milky_zstd,
+  "hustcer/fbr",
+  "hustcer/fbr/decode" @fbr_decode,
+  "hustcer/fbr/encode" @fbr_encode,
+  "mizchi/brotli" @mizchi_brotli,
+  "moonbit-community/flate",
+  "moonbit-community/flate/zlib" @flate_zlib,
+  "moonbit-community/flate/gzip" @flate_gzip,
+  "gmlewis/flate" @gm_flate,
+  "gmlewis/gzip" @gm_gzip,
+  "gmlewis/zlib" @gm_zlib,
+  "gmlewis/io" @gm_io,
+  "mizchi/zlib" @mizchi_zlib,
+  "hustcer/fzip",
+}

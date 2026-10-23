@@ -1,0 +1,16 @@
+// The benchmarks of the comparison with other MoonBit implementations, run
+// with `moon bench --release`: the same inputs as the package above (its
+// data_test.mbt, linked here), decoded and encoded by gaato/zstd,
+// gaato/brotli and gaato/deflate and by the other packages, one file per
+// format. The package holds only benchmarks: every import is a test import.
+
+import {
+  "gaato/brotli",
+  "gaato/deflate",
+  "gaato/codec_bench/compare",
+  "moonbitlang/core/bench",
+  "moonbitlang/core/env",
+  "moonbitlang/core/encoding/base64",
+} for "test"
+
+supported_targets = "js + native + wasm + wasm-gc"

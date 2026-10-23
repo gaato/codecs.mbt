@@ -1,0 +1,17 @@
+// Compresses files with each encoder of the comparison, at its default level
+// and at its highest, checks that the stream decodes back to the file, and
+// prints the sizes and the speed (scripts/compare_codecs.mbtx ratio). Not a
+// benchmark of the suite: its inputs are the caller's files.
+
+import {
+  "gaato/brotli",
+  "gaato/deflate",
+  "gaato/codec_bench/compare",
+  "moonbitlang/core/env",
+  "moonbitlang/core/string",
+  "moonbitlang/x/fs",
+}
+
+pkgtype(kind: "executable")
+
+supported_targets = "native"
