@@ -1,3 +1,13 @@
+----
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/core/encoding/base64",
+  "moonbitlang/core/env",
+}
+----
+
 // Generates bench/src/data_test.mbt: the inputs of the benchmarks.
 //
 // A deterministic text of 512 KiB (words drawn by a seeded generator, with
@@ -13,14 +23,6 @@
 // compressed data in the file must decompress, with the reference decoders, to
 // the regenerated inputs. It does not compress again, because another version
 // of an encoder may produce other, equally valid, bytes.
-
-import {
-  "moonbitlang/async@0.22.5",
-  "moonbitlang/async@0.22.5/fs",
-  "moonbitlang/async@0.22.5/shell",
-  "moonbitlang/core/encoding/base64",
-  "moonbitlang/core/env",
-}
 
 ///|
 let target : String = "bench/src/data_test.mbt"

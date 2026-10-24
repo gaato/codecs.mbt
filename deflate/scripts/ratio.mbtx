@@ -1,3 +1,15 @@
+----
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/async@0.22.5/stdio",
+  "moonbitlang/core/env",
+  "moonbitlang/core/string",
+  "moonbitlang/x@0.5.6/sys",
+}
+----
+
 // Measures the raw DEFLATE encoder on a directory of files: the size of each
 // file's stream and how fast it was made, at the levels asked for.
 //
@@ -17,16 +29,6 @@
 //   --target  the target to build for (default native)
 // Pin the run to one idle CPU (taskset -c N moon run ...) for steady times.
 // Exit status: 0 = measured, 2 = setup failure.
-
-import {
-  "moonbitlang/async@0.22.5",
-  "moonbitlang/async@0.22.5/fs",
-  "moonbitlang/async@0.22.5/shell",
-  "moonbitlang/async@0.22.5/stdio",
-  "moonbitlang/core/env",
-  "moonbitlang/core/string",
-  "moonbitlang/x@0.5.6/sys",
-}
 
 ///|
 let usage : String = "usage: moon run deflate/scripts/ratio.mbtx -- DIR [--levels 1,6,9] [--time MS] [--target native|js]"

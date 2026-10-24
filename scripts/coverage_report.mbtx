@@ -1,3 +1,16 @@
+----
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/async@0.22.5/stdio",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/core/string",
+  "moonbitlang/x@0.5.6/sys",
+}
+----
+
 // Test-coverage report for the modules of the workspace.
 //
 // Runs a module's native test suite with coverage instrumentation, writes a
@@ -29,17 +42,6 @@
 // - moon's bundled tcc cannot link on some hosts (openSUSE); use the system cc.
 // - The instrumentation can count the lines of a `proof_assert`, which the
 //   program does not run; they are left out.
-
-import {
-  "moonbitlang/async@0.22.5",
-  "moonbitlang/async@0.22.5/fs",
-  "moonbitlang/async@0.22.5/shell",
-  "moonbitlang/async@0.22.5/stdio",
-  "moonbitlang/core/env",
-  "moonbitlang/core/json",
-  "moonbitlang/core/string",
-  "moonbitlang/x@0.5.6/sys",
-}
 
 ///|
 let usage : String = "usage: moon run scripts/coverage_report.mbtx -- [MODULE [--from-json FILE]]"

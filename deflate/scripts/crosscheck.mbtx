@@ -1,3 +1,18 @@
+----
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/async@0.22.5/stdio",
+  "moonbitlang/core/encoding/base64",
+  "moonbitlang/core/encoding/hex",
+  "moonbitlang/core/env",
+  "moonbitlang/core/string",
+  "moonbitlang/x@0.5.6/crypto",
+  "moonbitlang/x@0.5.6/sys",
+}
+----
+
 // Decodes the encoders' streams with the reference decoders: zlib, through
 // Node's zlib module, and the gzip command.
 //
@@ -22,19 +37,6 @@
 //              sizes from Node's zlib (gzipSync) at the same level and from
 //              the gzip command (gzip -1, -6, -9 -n), for the ratio record.
 // Exit status: 0 = every stream decodes, 1 = one does not, 2 = setup failure.
-
-import {
-  "moonbitlang/async@0.22.5",
-  "moonbitlang/async@0.22.5/fs",
-  "moonbitlang/async@0.22.5/shell",
-  "moonbitlang/async@0.22.5/stdio",
-  "moonbitlang/core/encoding/base64",
-  "moonbitlang/core/encoding/hex",
-  "moonbitlang/core/env",
-  "moonbitlang/core/string",
-  "moonbitlang/x@0.5.6/crypto",
-  "moonbitlang/x@0.5.6/sys",
-}
 
 ///|
 /// Decodes each line of stdin (format, whether it was cut after a flush,

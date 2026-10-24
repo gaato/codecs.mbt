@@ -1,3 +1,12 @@
+----
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/core/env",
+}
+----
+
 ///|
 // Generates parts/proof_reverse/involution.mbt: the proof that reversing the
 // low `n` bits of a code twice gives the code back, for `n` from 1 to 15.
@@ -10,13 +19,6 @@
 // Usage, from the repository root (needs moonfmt, which comes with moon):
 //   moon run scripts/gen_proof_reverse.mbtx [--check]
 // --check fails unless the file is what this script writes.
-
-import {
-  "moonbitlang/async@0.22.5",
-  "moonbitlang/async@0.22.5/fs",
-  "moonbitlang/async@0.22.5/shell",
-  "moonbitlang/core/env",
-}
 
 ///|
 let target : String = "parts/proof_reverse/involution.mbt"

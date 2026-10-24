@@ -1,3 +1,15 @@
+----
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/async@0.22.5/stdio",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/x@0.5.6/sys",
+}
+----
+
 // Runs the repository validation suite.
 //
 // Usage, from the repository root:
@@ -9,16 +21,6 @@
 //
 // Each step is echoed as "+ <command>" and streams its output as it runs; the
 // first failing step ends the suite with that step's exit status.
-
-import {
-  "moonbitlang/async@0.22.5",
-  "moonbitlang/async@0.22.5/fs",
-  "moonbitlang/async@0.22.5/shell",
-  "moonbitlang/async@0.22.5/stdio",
-  "moonbitlang/core/env",
-  "moonbitlang/core/json",
-  "moonbitlang/x@0.5.6/sys",
-}
 
 ///|
 /// Prints `message` on stderr and exits with `code`.

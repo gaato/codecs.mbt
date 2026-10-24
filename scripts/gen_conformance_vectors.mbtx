@@ -1,3 +1,12 @@
+----
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/core/env",
+  "moonbitlang/core/string",
+}
+----
+
 // Generates conformance/src/<format>_vectors_test.mbt from each format's
 // vectors.
 //
@@ -12,13 +21,6 @@
 // Usage, from the repository root:
 //   moon run scripts/gen_conformance_vectors.mbtx [--check]
 // --check regenerates into memory and fails if a generated file differs.
-
-import {
-  "moonbitlang/async@0.22.5",
-  "moonbitlang/async@0.22.5/fs",
-  "moonbitlang/core/env",
-  "moonbitlang/core/string",
-}
 
 ///|
 /// Each format and the vectors file it takes its vectors from.

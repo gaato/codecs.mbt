@@ -1,0 +1,20 @@
+----
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/shell",
+}
+----
+
+// CI and canary need the same reference decoders, vector generators and
+// proof solver. Keeping setup here prevents a new gate dependency from
+// silently stopping only the canary, before it can test the toolchain.
+
+///|
+async fn main {
+  @shell.Cmd("apt-get", ["update"]).run()
+  @shell.Cmd("apt-get", [
+    "install", "-y", "--no-install-recommends",
+    "zstd", "brotli", "gzip", "unzip", "python3", "python3-png", "cargo",
+  ]).run()
+  @shell.Cmd("scripts/install-z3.sh", []).run()
+}

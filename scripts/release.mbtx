@@ -1,11 +1,4 @@
-// Release helper for the workspace: version bumps, CHANGELOG notes, the
-// CHANGELOG check of the gates, and publishing to mooncakes (see `usage`).
-//
-// Publishing is idempotent: a version already in the index is skipped, so the
-// job can run on every push to main and only a version bump releases anything.
-//
-// The modules, bottom-up, are those of scripts/modules.json.
-
+----
 import {
   "moonbitlang/async@0.22.5",
   "moonbitlang/async@0.22.5/fs",
@@ -16,6 +9,15 @@ import {
   "moonbitlang/core/json",
   "moonbitlang/x@0.5.6/sys",
 }
+----
+
+// Release helper for the workspace: version bumps, CHANGELOG notes, the
+// CHANGELOG check of the gates, and publishing to mooncakes (see `usage`).
+//
+// Publishing is idempotent: a version already in the index is skipped, so the
+// job can run on every push to main and only a version bump releases anything.
+//
+// The modules, bottom-up, are those of scripts/modules.json.
 
 ///|
 let usage : String =

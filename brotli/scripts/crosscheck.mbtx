@@ -1,3 +1,18 @@
+----
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/async@0.22.5/stdio",
+  "moonbitlang/core/encoding/base64",
+  "moonbitlang/core/encoding/hex",
+  "moonbitlang/core/env",
+  "moonbitlang/core/string",
+  "moonbitlang/x@0.5.6/crypto",
+  "moonbitlang/x@0.5.6/sys",
+}
+----
+
 // Decodes the encoder's streams with the reference decoder, google/brotli's.
 //
 // Runs src/internal/crosscheck, which prints one line per stream: a name, the
@@ -20,19 +35,6 @@
 //              google/brotli (Node's) at qualities 1, 4 and 11 with the same
 //              window, for the ratio record; it also needs gzip.
 // Exit status: 0 = every stream decodes, 1 = one does not, 2 = setup failure.
-
-import {
-  "moonbitlang/async@0.22.5",
-  "moonbitlang/async@0.22.5/fs",
-  "moonbitlang/async@0.22.5/shell",
-  "moonbitlang/async@0.22.5/stdio",
-  "moonbitlang/core/encoding/base64",
-  "moonbitlang/core/encoding/hex",
-  "moonbitlang/core/env",
-  "moonbitlang/core/string",
-  "moonbitlang/x@0.5.6/crypto",
-  "moonbitlang/x@0.5.6/sys",
-}
 
 ///|
 /// Decodes each line of stdin (the base64 of a stream cut after a flush) and

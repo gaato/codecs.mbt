@@ -1,3 +1,14 @@
+----
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/async@0.22.5/stdio",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/x@0.5.6/sys",
+}
+----
+
 // Checks a module's proof ledger, PROOFS.md, against its code.
 //
 // The ledger has two tables and a budget line:
@@ -45,15 +56,6 @@
 //
 // Exit status: 0 = the ledger agrees with the code, 1 = it does not, 2 = the
 // ledger or the configuration is missing or malformed.
-
-import {
-  "moonbitlang/async@0.22.5",
-  "moonbitlang/async@0.22.5/fs",
-  "moonbitlang/async@0.22.5/stdio",
-  "moonbitlang/core/env",
-  "moonbitlang/core/json",
-  "moonbitlang/x@0.5.6/sys",
-}
 
 ///|
 /// Prints `message` on stderr and exits with `code`.

@@ -1,3 +1,16 @@
+----
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/async@0.22.5/process",
+  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/async@0.22.5/stdio",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/x@0.5.6/sys",
+}
+----
+
 // Runs `moon prove` on every proved package of scripts/modules.json, with one
 // solver, and on the negative controls.
 //
@@ -32,17 +45,6 @@
 //
 // Exit status: 0 = every package proved and every control refused, 1 = not,
 // 2 = setup failure (no solver, wrong version, bad configuration).
-
-import {
-  "moonbitlang/async@0.22.5",
-  "moonbitlang/async@0.22.5/fs",
-  "moonbitlang/async@0.22.5/process",
-  "moonbitlang/async@0.22.5/shell",
-  "moonbitlang/async@0.22.5/stdio",
-  "moonbitlang/core/env",
-  "moonbitlang/core/json",
-  "moonbitlang/x@0.5.6/sys",
-}
 
 ///|
 /// Prints `message` on stderr and exits with `code`.

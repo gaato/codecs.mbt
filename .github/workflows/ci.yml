@@ -21,7 +21,7 @@ jobs:
     container:
       # The toolchain moonbit-version pins; moved by hand with the proofs and
       # benchmarks (renovate.json).
-      image: ghcr.io/gaato/moonbit:0.10.16
+      image: ghcr.io/gaato/moonbit:0.10.17-d971670cd
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -39,23 +39,12 @@ jobs:
       - name: Toolchain versions
         run: moon version --all
 
-      - name: Install the scripts' tools
-        # The reference zstd, brotli and gzip, which the generators' checks and
-        # the cross-checks decode with (Node's zlib, the other reference of the
-        # DEFLATE formats and the other brotli decoder the cross-checks use,
-        # comes with Node), and pypng, the reference of the PNG vectors (the
-        # release scripts/gen_png_vectors.mbtx names: Debian 13's python3-png),
-        # and cargo, which builds the APNG vectors' reference, the png crate.
-        run: apt-get update && apt-get install -y --no-install-recommends zstd brotli gzip unzip python3 python3-png cargo
-
-      - name: Install Z3 4.16.0, the solver of moon prove
-        # A script, shared with canary.yml: the official release, pinned by
-        # checksum.
-        run: scripts/install-z3.sh
-
       - name: Registry index
         # The scripts are .mbtx files; moon resolves their imports from it.
         run: moon update
+
+      - name: Install reference tools and proof solver
+        run: moon run scripts/setup_ci.mbtx
 
       - name: Docs audit
         # Also run by the gates; here first, so that a documentation failure

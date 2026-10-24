@@ -1,3 +1,14 @@
+----
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/core/encoding/base64",
+  "moonbitlang/core/env",
+  "moonbitlang/x@0.5.6/crypto",
+}
+----
+
 ///|
 // Generates the test vectors of gaato/deflate and its zlib and gzip packages:
 // deflate/src/vectors_wbtest.mbt, deflate/src/zlib/vectors_wbtest.mbt and
@@ -38,15 +49,6 @@
 // the files record for every crafted stream and corruption, and the rest of
 // each file must be what this script writes. It does not compress again,
 // because another version of zlib may produce other, equally valid, bytes.
-
-import {
-  "moonbitlang/async@0.22.5",
-  "moonbitlang/async@0.22.5/fs",
-  "moonbitlang/async@0.22.5/shell",
-  "moonbitlang/core/encoding/base64",
-  "moonbitlang/core/env",
-  "moonbitlang/x@0.5.6/crypto",
-}
 
 ///|
 let formats : Array[String] = ["deflate", "zlib", "gzip"]

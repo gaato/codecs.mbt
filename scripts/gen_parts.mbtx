@@ -1,3 +1,14 @@
+----
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/async@0.22.5/stdio",
+  "moonbitlang/core/env",
+  "moonbitlang/core/json",
+  "moonbitlang/x@0.5.6/sys",
+}
+----
+
 // Copies the shared building blocks of parts/ into the modules that use them.
 //
 // parts/ holds the single source of each block, one package per directory
@@ -18,15 +29,6 @@
 //   moon run scripts/gen_parts.mbtx [-- --check]
 // --check writes nothing and fails unless every copy is what generating it
 // would write, and no copy holds other files.
-
-import {
-  "moonbitlang/async@0.22.5",
-  "moonbitlang/async@0.22.5/fs",
-  "moonbitlang/async@0.22.5/stdio",
-  "moonbitlang/core/env",
-  "moonbitlang/core/json",
-  "moonbitlang/x@0.5.6/sys",
-}
 
 ///|
 /// Prints `message` on stderr and exits with `code`.
