@@ -3,10 +3,8 @@ import {
   "moonbitlang/async@0.22.5",
   "moonbitlang/async@0.22.5/fs",
   "moonbitlang/async@0.22.5/shell",
-  "moonbitlang/async@0.22.5/stdio",
   "moonbitlang/core/env",
   "moonbitlang/core/json",
-  "moonbitlang/x@0.5.6/sys",
 }
 ----
 
@@ -24,10 +22,9 @@ import {
 
 ///|
 /// Prints `message` on stderr and exits with `code`.
-async fn[T] die(code : Int, message : String) -> T {
-  @stdio.stderr.write("\{message}\n")
-  @sys.exit(code)
-  panic()
+fn[T] die(code : Int, message : String) -> T {
+  eprintln(message)
+  @env.exit(code)
 }
 
 ///|
@@ -40,7 +37,7 @@ async fn run(
   println("+ \{[program, ..args].join(" ")}")
   let code = @shell.Cmd(program, args, env~).status()
   if code != 0 {
-    @sys.exit(code)
+    @env.exit(code)
   }
 }
 

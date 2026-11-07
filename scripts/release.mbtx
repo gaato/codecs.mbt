@@ -7,7 +7,6 @@ import {
   "moonbitlang/async@0.22.5/stdio",
   "moonbitlang/core/env",
   "moonbitlang/core/json",
-  "moonbitlang/x@0.5.6/sys",
 }
 ----
 
@@ -41,10 +40,9 @@ let unreleased : String = "## [Unreleased]"
 
 ///|
 /// Prints `message` on stderr and exits with `code`.
-async fn[T] die(code : Int, message : String) -> T {
-  @stdio.stderr.write("\{message}\n")
-  @sys.exit(code)
-  panic()
+fn[T] die(code : Int, message : String) -> T {
+  eprintln(message)
+  @env.exit(code)
 }
 
 ///|
@@ -333,7 +331,7 @@ async fn check() -> Unit {
       status = 1
     }
   }
-  @sys.exit(status)
+  @env.exit(status)
 }
 
 ///|
@@ -360,7 +358,7 @@ async fn index_has(name : String, version : String) -> Bool {
 async fn moon_update() -> Unit {
   let code = @shell.Cmd("moon", ["update"], stdout=Discard, stderr=Inherit).status()
   if code != 0 {
-    @sys.exit(code)
+    @env.exit(code)
   }
 }
 
@@ -410,14 +408,14 @@ async fn publish(dry : Bool) -> Unit {
         )
       } else {
         println(out.trim_end(chars="\n"))
-        @sys.exit(1)
+        @env.exit(1)
       }
       pending.push(name)
     } else {
       println("publish \{name}@\{version}")
       let code = @shell.Cmd("moon", ["-C", dir, "publish"]).status()
       if code != 0 {
-        @sys.exit(code)
+        @env.exit(code)
       }
       moon_update()
     }
@@ -434,7 +432,7 @@ async fn main {
     ["publish", .. rest] => publish(rest is ["--dry-run", ..])
     _ => {
       println(usage)
-      @sys.exit(2)
+      @env.exit(2)
     }
   }
 }

@@ -3,13 +3,11 @@ import {
   "moonbitlang/async@0.22.5",
   "moonbitlang/async@0.22.5/fs",
   "moonbitlang/async@0.22.5/shell",
-  "moonbitlang/async@0.22.5/stdio",
   "moonbitlang/core/encoding/base64",
   "moonbitlang/core/encoding/hex",
   "moonbitlang/core/env",
   "moonbitlang/core/string",
   "moonbitlang/x@0.5.6/crypto",
-  "moonbitlang/x@0.5.6/sys",
 }
 ----
 
@@ -76,9 +74,9 @@ let node_encoder : String =
 let max_output : Int = 1 << 30
 
 ///|
-async fn setup_failure(message : String) -> Unit {
-  @stdio.stderr.write("\{message}\n")
-  @sys.exit(2)
+fn[T] setup_failure(message : String) -> T {
+  eprintln(message)
+  @env.exit(2)
 }
 
 ///|
@@ -246,7 +244,7 @@ async fn main {
       s.size > 1 &&
       s.name.split(" ").collect() is [_, _, level] &&
       level is ("l1" | "l6" | "l9") {
-      let level = level[1:].to_string()
+      let level = level[1:].to_owned()
       let decoded = @shell.Cmd("gzip", ["-d", "-c"], stdin=Binary(s.data)).output(
         max_output_bytes=max_output,
       ).stdout_bytes()
@@ -274,6 +272,6 @@ async fn main {
     "crosscheck: \{checked} streams decode with the reference decoders\{failed}",
   )
   if failures > 0 {
-    @sys.exit(1)
+    @env.exit(1)
   }
 }

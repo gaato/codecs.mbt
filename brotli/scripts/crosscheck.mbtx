@@ -3,13 +3,11 @@ import {
   "moonbitlang/async@0.22.5",
   "moonbitlang/async@0.22.5/fs",
   "moonbitlang/async@0.22.5/shell",
-  "moonbitlang/async@0.22.5/stdio",
   "moonbitlang/core/encoding/base64",
   "moonbitlang/core/encoding/hex",
   "moonbitlang/core/env",
   "moonbitlang/core/string",
   "moonbitlang/x@0.5.6/crypto",
-  "moonbitlang/x@0.5.6/sys",
 }
 ----
 
@@ -75,9 +73,9 @@ let node_encoder : String =
 let max_output : Int = 1 << 30
 
 ///|
-async fn setup_failure(message : String) -> Unit {
-  @stdio.stderr.write("\{message}\n")
-  @sys.exit(2)
+fn[T] setup_failure(message : String) -> T {
+  eprintln(message)
+  @env.exit(2)
 }
 
 ///|
@@ -258,6 +256,6 @@ async fn main {
     "crosscheck: \{checked} streams decode with the reference decoder\{failed}",
   )
   if failures > 0 {
-    @sys.exit(1)
+    @env.exit(1)
   }
 }

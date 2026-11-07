@@ -4,10 +4,8 @@ import {
   "moonbitlang/async@0.22.5/fs",
   "moonbitlang/async@0.22.5/process",
   "moonbitlang/async@0.22.5/shell",
-  "moonbitlang/async@0.22.5/stdio",
   "moonbitlang/core/env",
   "moonbitlang/core/json",
-  "moonbitlang/x@0.5.6/sys",
 }
 ----
 
@@ -48,10 +46,9 @@ import {
 
 ///|
 /// Prints `message` on stderr and exits with `code`.
-async fn[T] die(code : Int, message : String) -> T {
-  @stdio.stderr.write("\{message}\n")
-  @sys.exit(code)
-  panic()
+fn[T] die(code : Int, message : String) -> T {
+  eprintln(message)
+  @env.exit(code)
 }
 
 ///|
@@ -350,7 +347,7 @@ async fn main {
   let total = seconds_since(started)
   if bad {
     println("prove (\{solver.name}): FAIL")
-    @sys.exit(1)
+    @env.exit(1)
   }
   println("prove (\{solver.name}): OK - \{jobs.length()} packages in \{total} s")
 }

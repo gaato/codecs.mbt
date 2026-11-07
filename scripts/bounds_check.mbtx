@@ -2,9 +2,7 @@
 import {
   "moonbitlang/async@0.22.5",
   "moonbitlang/async@0.22.5/fs",
-  "moonbitlang/async@0.22.5/stdio",
   "moonbitlang/core/env",
-  "moonbitlang/x@0.5.6/sys",
 }
 ----
 
@@ -31,10 +29,9 @@ import {
 
 ///|
 /// Prints `message` on stderr and exits with `code`.
-async fn[T] die(code : Int, message : String) -> T {
-  @stdio.stderr.write("\{message}\n")
-  @sys.exit(code)
-  panic()
+fn[T] die(code : Int, message : String) -> T {
+  eprintln(message)
+  @env.exit(code)
 }
 
 ///|
@@ -224,7 +221,7 @@ async fn main {
   }
   if bad {
     println("bounds check: FAIL")
-    @sys.exit(1)
+    @env.exit(1)
   }
   println(
     "bounds check: OK - \{rows.length()} enforced limits name \{tests} tests that exist",
