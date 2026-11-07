@@ -111,15 +111,15 @@ async fn today() -> String {
 fn set_import(line : String, name : String, version : String) -> String {
   let needle = "\"\{name}@"
   for from = 0; from < line.length(); {
-    guard line.view(start_offset=from).find(needle) is Some(at) else { break }
+    guard line.clamped_view(start=from).find(needle) is Some(at) else { break }
     let start = from + at
     let digits = start + needle.length()
-    let rest = line.view(start_offset=digits)
+    let rest = line.clamped_view(start=digits)
     if rest is ['0'..<='9', ..] && rest.find("\"") is Some(close) {
       let end = digits + close + 1
-      return line.view(end_offset=start).to_owned() +
+      return line.clamped_view(end=start).to_owned() +
         "\"\{name}@\{version}\"" +
-        line.view(start_offset=end).to_owned()
+        line.clamped_view(start=end).to_owned()
     }
     continue start + 1
   }
@@ -375,7 +375,7 @@ fn waits_for(out : String, pending : Array[String]) -> Bool {
   .any(line => {
     pending.any(name => {
       guard line.find("dependency `\{name}`") is Some(at) else { return false }
-      let rest = line.view(start_offset=at)
+      let rest = line.clamped_view(start=at)
       rest.contains("not found in the registry") ||
       rest.contains("no version satisfies")
     })

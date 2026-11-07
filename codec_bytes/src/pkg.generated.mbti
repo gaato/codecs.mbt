@@ -11,28 +11,31 @@ import {
 // Errors
 
 // Types and methods
+#derive(Eq, @debug.Debug)
 pub(all) enum EncodeAction {
   Continue
   Flush
   Finish
-} derive(Eq, @debug.Debug)
+}
 pub fn EncodeAction::equal(Self, Self) -> Bool
 pub fn EncodeAction::not_equal(Self, Self) -> Bool
 pub fn EncodeAction::to_repr(Self) -> @debug.Repr
 
+#derive(Eq, @debug.Debug)
 pub(all) enum Status {
   Done
   NeedMoreInput
   NeedMoreOutput
-} derive(Eq, @debug.Debug)
+}
 pub fn Status::equal(Self, Self) -> Bool
 pub fn Status::not_equal(Self, Self) -> Bool
 pub fn Status::to_repr(Self) -> @debug.Repr
 
+#derive(Eq, @debug.Debug)
 pub(all) enum Until {
   EndOfInput
   EndOfMember
-} derive(Eq, @debug.Debug)
+}
 pub fn Until::equal(Self, Self) -> Bool
 pub fn Until::not_equal(Self, Self) -> Bool
 pub fn Until::to_repr(Self) -> @debug.Repr

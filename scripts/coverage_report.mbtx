@@ -99,10 +99,10 @@ fn sorted(keys : Iter[String]) -> Array[String] {
 /// `scope` directories.
 fn in_scope(file : String, scope : Array[String]) -> Bool {
   guard file.rev_find("/") is Some(slash) else { return false }
-  let base = file.view(start_offset=slash + 1)
+  let base = file.clamped_view(start=slash + 1)
   base.length() > 4 &&
   base.has_suffix(".mbt") &&
-  scope.contains(file.view(end_offset=slash).to_owned())
+  scope.contains(file.clamped_view(end=slash).to_owned())
 }
 
 ///|
@@ -129,7 +129,7 @@ async fn find(root : String, keep : (String) -> Bool) -> Array[String] {
 async fn measure(dir : String) -> String {
   let json_file = "_build/coverage_report.\{dir}.json"
   let drivers = find("\{dir}/src", name => name == "moon.pkg").map(path => {
-    path.view(end_offset=path.length() - "/moon.pkg".length()).to_owned()
+    path.clamped_view(end=path.length() - "/moon.pkg".length()).to_owned()
   })
   for counter in find("_build", name => name.has_prefix("moonbit_coverage_")) {
     @fs.remove(counter) catch {

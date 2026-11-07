@@ -3,6 +3,7 @@
 /// for output room, at the end or at an error; kinds whose output has
 /// structure (an image's header, its rows) also stop at events, which the
 /// checks compare as text.
+#derive(Eq, @debug.Debug)
 pub(all) enum Stop {
   NeedMoreInput
   NeedMoreOutput
@@ -15,7 +16,7 @@ pub(all) enum Stop {
   /// The step raised this kind of `CodecError`, with this message, after
   /// consuming and producing what the step says.
   Raised(@codec.ErrorKind, String)
-} derive(Eq, @debug.Debug)
+}
 
 ///|
 pub extend Stop with Eq::{equal, not_equal}

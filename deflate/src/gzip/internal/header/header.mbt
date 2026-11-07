@@ -24,12 +24,13 @@ pub const FIXED_SIZE : Int32 = 10
 
 ///|
 /// The fixed part of a member's header.
+#derive(Eq, @debug.Debug)
 pub(all) struct Fixed {
   flags : Int32
   mtime : UInt32
   xfl : Byte
   os : Byte
-} derive(Eq, @debug.Debug)
+}
 
 ///|
 /// Whether `start`, the first one or two bytes after a member, can begin

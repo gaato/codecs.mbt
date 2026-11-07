@@ -6,6 +6,7 @@
 
 ///|
 /// tRNS (11.3.1.1): which pixels are transparent.
+#derive(Eq, @debug.Debug)
 pub(all) enum Transparency {
   /// For a grayscale image: the gray level, masked to the bit depth, that is
   /// fully transparent.
@@ -16,7 +17,7 @@ pub(all) enum Transparency {
   /// For an indexed-color image: the alpha of each palette entry from the
   /// first, at most one for each; entries past the end are opaque.
   Alpha(ArrayView[Byte])
-} derive(Eq, @debug.Debug)
+}
 
 ///|
 /// `Transparency::equal` and `Transparency::not_equal`, the derived
@@ -30,6 +31,7 @@ pub extend Transparency with @debug.Debug::{to_repr}
 ///|
 /// cHRM (11.3.2.1): the chromaticities of the white point and the primaries,
 /// CIE 1931 x and y, each times 100,000.
+#derive(Eq, @debug.Debug)
 pub struct Chromaticities {
   white_x : UInt32
   white_y : UInt32
@@ -39,7 +41,7 @@ pub struct Chromaticities {
   green_y : UInt32
   blue_x : UInt32
   blue_y : UInt32
-} derive(Eq, @debug.Debug)
+}
 
 ///|
 /// `Chromaticities::equal` and `Chromaticities::not_equal`, the derived
@@ -52,6 +54,7 @@ pub extend Chromaticities with @debug.Debug::{to_repr}
 
 ///|
 /// cICP (11.3.2.6): the image's color space as code points of ITU-T H.273.
+#derive(Eq, @debug.Debug)
 pub struct CodingPoints {
   /// Color primaries (1 is BT.709 and sRGB, 9 BT.2020, 12 Display P3).
   color_primaries : Int32
@@ -61,7 +64,7 @@ pub struct CodingPoints {
   matrix_coefficients : Int32
   /// Whether the samples span their full range rather than a narrow one.
   full_range : Bool
-} derive(Eq, @debug.Debug)
+}
 
 ///|
 /// `CodingPoints::equal` and `CodingPoints::not_equal`, the derived
@@ -76,6 +79,7 @@ pub extend CodingPoints with @debug.Debug::{to_repr}
 /// mDCV (11.3.2.7): the display the content was mastered on (SMPTE ST
 /// 2086). Chromaticities are CIE 1931 x and y in units of 0.00002,
 /// luminances in units of 0.0001 cd/m².
+#derive(Eq, @debug.Debug)
 pub struct MasteringDisplay {
   red_x : Int32
   red_y : Int32
@@ -87,7 +91,7 @@ pub struct MasteringDisplay {
   white_y : Int32
   max_luminance : UInt32
   min_luminance : UInt32
-} derive(Eq, @debug.Debug)
+}
 
 ///|
 /// `MasteringDisplay::equal` and `MasteringDisplay::not_equal`, the derived
@@ -100,12 +104,13 @@ pub extend MasteringDisplay with @debug.Debug::{to_repr}
 
 ///|
 /// cLLI (11.3.2.8): the content's light levels, in units of 0.0001 cd/m².
+#derive(Eq, @debug.Debug)
 pub struct LightLevel {
   /// The brightest pixel (MaxCLL).
   max_content : UInt32
   /// The brightest frame's average (MaxFALL).
   max_frame_average : UInt32
-} derive(Eq, @debug.Debug)
+}
 
 ///|
 /// `LightLevel::equal` and `LightLevel::not_equal`, the derived comparison.
@@ -117,6 +122,7 @@ pub extend LightLevel with @debug.Debug::{to_repr}
 
 ///|
 /// pHYs (11.3.4.1): the pixels' size, or their aspect ratio.
+#derive(Eq, @debug.Debug)
 pub struct PhysicalSize {
   /// Pixels per unit, across.
   x : UInt32
@@ -124,7 +130,7 @@ pub struct PhysicalSize {
   y : UInt32
   /// Whether the unit is the metre; else only the ratio is known.
   per_meter : Bool
-} derive(Eq, @debug.Debug)
+}
 
 ///|
 /// `PhysicalSize::equal` and `PhysicalSize::not_equal`, the derived
@@ -137,6 +143,7 @@ pub extend PhysicalSize with @debug.Debug::{to_repr}
 
 ///|
 /// bKGD (11.3.4.2): a background color to show the image against.
+#derive(Eq, @debug.Debug)
 pub(all) enum Background {
   /// A gray level, for grayscale images with or without alpha.
   Gray(Int32)
@@ -145,7 +152,7 @@ pub(all) enum Background {
   Rgb(Int32, Int32, Int32)
   /// A palette index, for indexed-color images.
   Index(Int32)
-} derive(Eq, @debug.Debug)
+}
 
 ///|
 /// `Background::equal` and `Background::not_equal`, the derived comparison.

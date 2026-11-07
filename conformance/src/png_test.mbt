@@ -188,7 +188,7 @@ fn text_digest(blocks : Array[(String, Bytes)]) -> String {
     all.write_bytes(bytes)
   }
   let digest = @codec_harness.sha256(all.to_bytes())
-  "text \{blocks.length()} \{digest.view(end_offset=16)}"
+  "text \{blocks.length()} \{digest.clamped_view(end=16)}"
 }
 
 ///|

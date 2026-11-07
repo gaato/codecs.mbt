@@ -90,6 +90,7 @@ const MAX_CHUNK_BYTES : Int32 = 100_000_000
 ///|
 /// The color type of an image (table 11): how its pixels' samples are laid
 /// out in a row.
+#derive(Eq, @debug.Debug)
 pub(all) enum ColorType {
   /// One sample a pixel, a gray level: color type 0.
   Grayscale
@@ -101,7 +102,7 @@ pub(all) enum ColorType {
   GrayscaleAlpha
   /// Red, green, blue and alpha samples: color type 6.
   TruecolorAlpha
-} derive(Eq, @debug.Debug)
+}
 
 ///|
 /// `ColorType::equal` and `ColorType::not_equal`, the derived comparison.

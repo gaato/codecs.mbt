@@ -42,6 +42,7 @@ pub fn Encoder::step(Self, BytesView, MutArrayView[Byte], action~ : @codec_bytes
 pub fn Encoder::step_into(Self, BytesView, FixedArray[Byte], action~ : @codec_bytes.EncodeAction) -> @codec_bytes.Status
 pub impl @codec_bytes.Encode for Encoder
 
+#derive(Eq, @debug.Debug)
 pub(all) struct Header {
   text : Bool
   mtime : UInt32
@@ -50,7 +51,7 @@ pub(all) struct Header {
   extra : Bytes?
   name : Bytes?
   comment : Bytes?
-} derive(Eq, @debug.Debug)
+}
 pub fn Header::equal(Self, Self) -> Bool
 pub fn Header::is_writable(Self) -> Bool
 pub fn Header::not_equal(Self, Self) -> Bool

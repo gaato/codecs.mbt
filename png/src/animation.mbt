@@ -8,6 +8,7 @@
 ///|
 /// What to do with a frame's rectangle once it has been shown, before the
 /// next frame is drawn (dispose_op).
+#derive(Eq, @debug.Debug)
 pub(all) enum Dispose {
   /// Leave the canvas as it is.
   Keep
@@ -15,7 +16,7 @@ pub(all) enum Dispose {
   Background
   /// Put back what the rectangle held before the frame was drawn.
   Previous
-} derive(Eq, @debug.Debug)
+}
 
 ///|
 /// `Dispose::equal` and `Dispose::not_equal`, the derived comparison.
@@ -27,12 +28,13 @@ pub extend Dispose with @debug.Debug::{to_repr}
 
 ///|
 /// How a frame's pixels are put on the canvas (blend_op).
+#derive(Eq, @debug.Debug)
 pub(all) enum Blend {
   /// They replace the rectangle's, alpha included.
   Source
   /// They are composited over the rectangle's, by their alpha.
   Over
-} derive(Eq, @debug.Debug)
+}
 
 ///|
 /// `Blend::equal` and `Blend::not_equal`, the derived comparison.

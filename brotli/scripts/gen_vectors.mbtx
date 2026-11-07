@@ -390,7 +390,7 @@ fn literal(text : String) -> String {
   let out = StringBuilder()
   out.write_string("(\n")
   for i = 0; i < text.length().max(1); i = i + 76 {
-    let line = text.view(start_offset=i, end_offset=(i + 76).min(text.length()))
+    let line = text.clamped_view(start=i, end=(i + 76).min(text.length()))
     out.write_string("      #|\{line}\n")
   }
   out.write_string("    )")

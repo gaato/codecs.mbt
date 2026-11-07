@@ -8,14 +8,16 @@ import {
 // Values
 
 // Errors
+#derive(@debug.Debug)
 pub(all) suberror CodecError {
   CodecError(ErrorKind, String)
-} derive(@debug.Debug)
+}
 pub fn CodecError::kind(Self) -> ErrorKind
 pub fn CodecError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
 #non_exhaustive
+#derive(Eq, @debug.Debug)
 pub(all) enum ErrorKind {
   Truncated
   Corrupt
@@ -25,25 +27,27 @@ pub(all) enum ErrorKind {
   DictionaryRequired(UInt32?)
   DictionaryMismatch
   Unsupported
-} derive(Eq, @debug.Debug)
+}
 pub fn ErrorKind::equal(Self, Self) -> Bool
 pub fn ErrorKind::not_equal(Self, Self) -> Bool
 pub fn ErrorKind::to_repr(Self) -> @debug.Repr
 
+#derive(Eq, @debug.Debug)
 pub(all) struct Limit {
   resource : Resource
   needed : UInt64?
   limit : UInt64
-} derive(Eq, @debug.Debug)
+}
 pub fn Limit::equal(Self, Self) -> Bool
 pub fn Limit::not_equal(Self, Self) -> Bool
 pub fn Limit::to_repr(Self) -> @debug.Repr
 
 #non_exhaustive
+#derive(Eq, @debug.Debug)
 pub(all) enum Resource {
   Memory
   Output
-} derive(Eq, @debug.Debug)
+}
 pub fn Resource::equal(Self, Self) -> Bool
 pub fn Resource::not_equal(Self, Self) -> Bool
 pub fn Resource::to_repr(Self) -> @debug.Repr

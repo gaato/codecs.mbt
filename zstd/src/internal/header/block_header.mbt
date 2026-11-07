@@ -3,11 +3,12 @@
 
 ///|
 /// Block_Type, less the reserved value.
+#derive(Eq, @debug.Debug)
 pub(all) enum BlockType {
   Raw
   Rle
   Compressed
-} derive(Eq, @debug.Debug)
+}
 
 ///|
 pub extend BlockType with Eq::{equal, not_equal}
@@ -17,6 +18,7 @@ pub extend BlockType with @debug.Debug::{to_repr}
 
 ///|
 /// A decoded block header.
+#derive(Eq, @debug.Debug)
 pub(all) struct BlockHeader {
   /// Last_Block: the frame ends after this block.
   last : Bool
@@ -24,7 +26,7 @@ pub(all) struct BlockHeader {
   /// Block_Size: the bytes that follow for a raw or compressed block, the
   /// bytes it decodes to for an RLE block.
   size : Int32
-} derive(Eq, @debug.Debug)
+}
 
 ///|
 pub extend BlockHeader with Eq::{equal, not_equal}

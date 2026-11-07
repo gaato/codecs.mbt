@@ -20,6 +20,7 @@ pub using @codec {type Resource}
 
 ///|
 /// Why a step stopped without an error.
+#derive(Eq, @debug.Debug)
 pub(all) enum Status {
   /// The stream is complete. With `Until::EndOfInput` this needs `end` and
   /// every input byte consumed; with `Until::EndOfMember`, nothing after the
@@ -29,7 +30,7 @@ pub(all) enum Status {
   NeedMoreInput
   /// The output slice is full.
   NeedMoreOutput
-} derive(Eq, @debug.Debug)
+}
 
 ///|
 /// `Status::equal` and `Status::not_equal`, the derived comparison.
@@ -41,13 +42,14 @@ pub extend Status with @debug.Debug::{to_repr}
 
 ///|
 /// Where a decoder stops, for formats whose streams can follow one another.
+#derive(Eq, @debug.Debug)
 pub(all) enum Until {
   /// Decode every member up to the end of the input; bytes after the last
   /// member are an error.
   EndOfInput
   /// Stop right after the first member and leave the rest unread.
   EndOfMember
-} derive(Eq, @debug.Debug)
+}
 
 ///|
 /// `Until::equal` and `Until::not_equal`, the derived comparison.
@@ -59,6 +61,7 @@ pub extend Until with @debug.Debug::{to_repr}
 
 ///|
 /// What an encoder's step should do with the input it has.
+#derive(Eq, @debug.Debug)
 pub(all) enum EncodeAction {
   /// Compress as convenient; output may lag behind input.
   Continue
@@ -66,7 +69,7 @@ pub(all) enum EncodeAction {
   Flush
   /// End the stream.
   Finish
-} derive(Eq, @debug.Debug)
+}
 
 ///|
 /// `EncodeAction::equal` and `EncodeAction::not_equal`, the derived comparison.

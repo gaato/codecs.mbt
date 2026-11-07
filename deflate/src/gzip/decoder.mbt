@@ -41,6 +41,7 @@ const HDR_SIZE : Int32 = 10
 /// What a member's header says. The extra field, the name and the comment are
 /// the bytes the header holds: RFC 1952 writes names and comments in ISO
 /// 8859-1, and they are not converted.
+#derive(Eq, @debug.Debug)
 pub(all) struct Header {
   /// FTEXT: the data is probably text.
   text : Bool
@@ -57,7 +58,7 @@ pub(all) struct Header {
   name : Bytes?
   /// FCOMMENT: the comment, without its terminating zero.
   comment : Bytes?
-} derive(Eq, @debug.Debug)
+}
 
 ///|
 /// `Header::equal` and `Header::not_equal`, the derived comparison.

@@ -11,6 +11,7 @@ pub using @codec {type CodecError, type ErrorKind, type Limit, type Resource}
 /// Why a step stopped without an error. Every step that writes output says
 /// what it wrote (`Rows`, `Metadata`); every other answer comes from a step
 /// that wrote nothing.
+#derive(Eq, @debug.Debug)
 pub(all) enum Status {
   /// The image's header is read: `width` and `height` are known, and so is
   /// everything the format's own type reports about the header. Comes once,
@@ -37,7 +38,7 @@ pub(all) enum Status {
   /// The output slice cannot hold the next row or block of metadata, whose
   /// size `room_needed` says. Nothing was written.
   NeedMoreOutput
-} derive(Eq, @debug.Debug)
+}
 
 ///|
 /// `Status::equal` and `Status::not_equal`, the derived comparison.
@@ -49,13 +50,14 @@ pub extend Status with @debug.Debug::{to_repr}
 
 ///|
 /// Where a decoder stops when bytes follow the image.
+#derive(Eq, @debug.Debug)
 pub(all) enum Until {
   /// Decode the image up to the end of the input; bytes after it are an
   /// error.
   EndOfInput
   /// Stop right after the image and leave the rest unread.
   EndOfMember
-} derive(Eq, @debug.Debug)
+}
 
 ///|
 /// `Until::equal` and `Until::not_equal`, the derived comparison.

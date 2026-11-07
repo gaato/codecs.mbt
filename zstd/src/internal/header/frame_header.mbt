@@ -3,6 +3,7 @@
 
 ///|
 /// A decoded frame header.
+#derive(Eq, @debug.Debug)
 pub(all) struct FrameHeader {
   /// Single_Segment_Flag: the window is the content size.
   single_segment : Bool
@@ -17,7 +18,7 @@ pub(all) struct FrameHeader {
   window_size : UInt64
   /// The header's length, descriptor included: 2 to 14 bytes.
   header_len : Int32
-} derive(Eq, @debug.Debug)
+}
 
 ///|
 pub extend FrameHeader with Eq::{equal, not_equal}

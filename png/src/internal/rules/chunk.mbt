@@ -240,6 +240,7 @@ pub fn known(t : UInt32) -> Int32 {
 
 ///|
 /// Where the decoder is among the chunks of an image, as table 7 sees it.
+#derive(Eq, @debug.Debug)
 pub(all) enum Position {
   /// Nothing read yet: IHDR comes first.
   BeforeHeader
@@ -251,7 +252,7 @@ pub(all) enum Position {
   InData
   /// The IDAT chunks have ended.
   AfterData
-} derive(Eq, @debug.Debug)
+}
 
 ///|
 /// `Position::equal` and `Position::not_equal`, the derived comparison.
@@ -263,6 +264,7 @@ pub extend Position with @debug.Debug::{to_repr}
 
 ///|
 /// What a decoder does with a chunk, from where it comes.
+#derive(Eq, @debug.Debug)
 pub(all) enum Verdict {
   /// Read it.
   Accept
@@ -271,7 +273,7 @@ pub(all) enum Verdict {
   Ignore
   /// The image is refused.
   Refuse(@codec.ErrorKind, String)
-} derive(Eq, @debug.Debug)
+}
 
 ///|
 /// `Verdict::equal` and `Verdict::not_equal`, the derived comparison.

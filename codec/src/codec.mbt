@@ -2,6 +2,7 @@
 /// Why a codec stopped with an error. The same kinds serve every kind of
 /// codec (byte streams, images, audio), so that callers handle a failure the
 /// same way whatever they were decoding. New kinds may be added.
+#derive(Eq, @debug.Debug)
 #non_exhaustive
 pub(all) enum ErrorKind {
   /// The input ended inside a stream.
@@ -21,7 +22,7 @@ pub(all) enum ErrorKind {
   /// The stream is valid, but uses something this codec does not implement,
   /// or the caller asked for something the format cannot do.
   Unsupported
-} derive(Eq, @debug.Debug)
+}
 
 ///|
 /// `ErrorKind::equal` and `ErrorKind::not_equal`, the derived comparison.
@@ -35,11 +36,12 @@ pub extend ErrorKind with @debug.Debug::{to_repr}
 /// A limit a stream would exceed: what it is about, how much the stream needs
 /// when that is known, and how much is allowed. Amounts are in the
 /// resource's unit (bytes for memory and output).
+#derive(Eq, @debug.Debug)
 pub(all) struct Limit {
   resource : Resource
   needed : UInt64?
   limit : UInt64
-} derive(Eq, @debug.Debug)
+}
 
 ///|
 /// `Limit::equal` and `Limit::not_equal`, the derived comparison.
@@ -51,13 +53,14 @@ pub extend Limit with @debug.Debug::{to_repr}
 
 ///|
 /// What a limit is about. New resources may be added.
+#derive(Eq, @debug.Debug)
 #non_exhaustive
 pub(all) enum Resource {
   /// Bytes the codec allocates for a stream (windows, tables, buffers).
   Memory
   /// Bytes of output.
   Output
-} derive(Eq, @debug.Debug)
+}
 
 ///|
 /// `Resource::equal` and `Resource::not_equal`, the derived comparison.
@@ -70,9 +73,10 @@ pub extend Resource with @debug.Debug::{to_repr}
 ///|
 /// The error every codec raises through its kind's contract: a kind to act
 /// on, and a message for people.
+#derive(@debug.Debug)
 pub(all) suberror CodecError {
   CodecError(ErrorKind, String)
-} derive(@debug.Debug)
+}
 
 ///|
 /// `CodecError::to_repr`, the derived debug representation.

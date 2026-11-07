@@ -106,22 +106,24 @@ pub fn type_name(UInt32) -> String
 // Errors
 
 // Types and methods
+#derive(Eq, @debug.Debug)
 pub(all) enum Position {
   BeforeHeader
   AfterHeader
   AfterPalette
   InData
   AfterData
-} derive(Eq, @debug.Debug)
+}
 pub fn Position::equal(Self, Self) -> Bool
 pub fn Position::not_equal(Self, Self) -> Bool
 pub fn Position::to_repr(Self) -> @debug.Repr
 
+#derive(Eq, @debug.Debug)
 pub(all) enum Verdict {
   Accept
   Ignore
   Refuse(@codec.ErrorKind, String)
-} derive(Eq, @debug.Debug)
+}
 pub fn Verdict::equal(Self, Self) -> Bool
 pub fn Verdict::not_equal(Self, Self) -> Bool
 pub fn Verdict::to_repr(Self) -> @debug.Repr

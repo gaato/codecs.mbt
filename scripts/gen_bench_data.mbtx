@@ -66,7 +66,7 @@ fn text(n : Int) -> Bytes {
     if rng.below(100) < 8 {
       // Capitalised: the first letter upper case.
       out.write_byte((word.code_unit_at(0).to_int() - 32).to_byte())
-      write_ascii(out, word.view(start_offset=1).to_owned())
+      write_ascii(out, word.clamped_view(start=1).to_owned())
     } else {
       write_ascii(out, word)
     }
@@ -128,7 +128,7 @@ fn stored(file : String, binding : String) -> Bytes? raise {
     if line == "let \{binding} : String =" {
       inside = true
     } else if inside && line.has_prefix("  #|") {
-      b64.write_view(line.view(start_offset=4))
+      b64.write_view(line.clamped_view(start=4))
     } else if inside {
       break
     }
@@ -164,7 +164,7 @@ async fn render(
       )
       out.write_string("let \{format}_\{name} : String =\n")
       for i = 0; i < b64.length(); i = i + 76 {
-        let line = b64.view(start_offset=i, end_offset=(i + 76).min(b64.length()))
+        let line = b64.clamped_view(start=i, end=(i + 76).min(b64.length()))
         out.write_string("  #|\{line}\n")
       }
       out.write_string("\n")
@@ -173,7 +173,7 @@ async fn render(
   }
   // The formatter ends the file with one line break, not a blank line.
   let text = out.to_string()
-  text.view(end_offset=text.length() - 1).to_owned()
+  text.clamped_view(end=text.length() - 1).to_owned()
 }
 
 ///|

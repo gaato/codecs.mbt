@@ -29,25 +29,28 @@ pub fn window_size(Int32) -> UInt64
 // Errors
 
 // Types and methods
+#derive(Eq, @debug.Debug)
 pub(all) struct BlockHeader {
   last : Bool
   block_type : BlockType
   size : Int32
-} derive(Eq, @debug.Debug)
+}
 pub fn BlockHeader::check(Self, Int32) -> Result[Self, String]
 pub fn BlockHeader::equal(Self, Self) -> Bool
 pub fn BlockHeader::not_equal(Self, Self) -> Bool
 pub fn BlockHeader::to_repr(Self) -> @debug.Repr
 
+#derive(Eq, @debug.Debug)
 pub(all) enum BlockType {
   Raw
   Rle
   Compressed
-} derive(Eq, @debug.Debug)
+}
 pub fn BlockType::equal(Self, Self) -> Bool
 pub fn BlockType::not_equal(Self, Self) -> Bool
 pub fn BlockType::to_repr(Self) -> @debug.Repr
 
+#derive(Eq, @debug.Debug)
 pub(all) struct FrameHeader {
   single_segment : Bool
   has_checksum : Bool
@@ -55,29 +58,31 @@ pub(all) struct FrameHeader {
   content_size : UInt64?
   window_size : UInt64
   header_len : Int32
-} derive(Eq, @debug.Debug)
+}
 pub fn FrameHeader::equal(Self, Self) -> Bool
 pub fn FrameHeader::not_equal(Self, Self) -> Bool
 pub fn FrameHeader::to_repr(Self) -> @debug.Repr
 
+#derive(Eq, @debug.Debug)
 pub(all) struct LiteralsHeader {
   block_type : LiteralsType
   size_format : Int32
   header_len : Int32
   regenerated : Int32
   compressed : Int32
-} derive(Eq, @debug.Debug)
+}
 pub fn LiteralsHeader::equal(Self, Self) -> Bool
 pub fn LiteralsHeader::four_streams(Self) -> Bool
 pub fn LiteralsHeader::not_equal(Self, Self) -> Bool
 pub fn LiteralsHeader::to_repr(Self) -> @debug.Repr
 
+#derive(Eq, @debug.Debug)
 pub(all) enum LiteralsType {
   RawLiterals
   RleLiterals
   CompressedLiterals
   TreelessLiterals
-} derive(Eq, @debug.Debug)
+}
 pub fn LiteralsType::equal(Self, Self) -> Bool
 pub fn LiteralsType::not_equal(Self, Self) -> Bool
 pub fn LiteralsType::to_repr(Self) -> @debug.Repr

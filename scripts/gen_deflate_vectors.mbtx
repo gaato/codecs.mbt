@@ -1620,7 +1620,7 @@ fn literal(data : Bytes) -> String {
   let out = StringBuilder()
   out.write_string("(\n")
   for i = 0; i < b64.length().max(1); i = i + 76 {
-    let line = b64.view(start_offset=i, end_offset=(i + 76).min(b64.length()))
+    let line = b64.clamped_view(start=i, end=(i + 76).min(b64.length()))
     out.write_string("      #|\{line}\n")
   }
   out.write_string("    )")

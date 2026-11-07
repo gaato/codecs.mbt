@@ -79,7 +79,7 @@ fn separator(line : String) -> Bool {
   line.length() >= 3 &&
   line.has_suffix("|") &&
   line
-  .view(start_offset=1, end_offset=line.length() - 1)
+  .clamped_view(start=1, end=line.length() - 1)
   .iter()
   .all(c => c is ('-' | ':' | '|' | ' '))
 }
@@ -126,11 +126,11 @@ fn tokens(cell : String) -> Array[Token] {
     let c = cell[i]
     if c == '`' || c == '"' {
       let close = cell
-        .view(start_offset=i + 1)
+        .clamped_view(start=i + 1)
         .find(if c == '`' { "`" } else { "\"" })
       if close is Some(len) {
         let token = cell
-          .view(start_offset=i + 1, end_offset=i + 1 + len)
+          .clamped_view(start=i + 1, end=i + 1 + len)
           .to_owned()
         out.push(if c == '`' { Code(token) } else { Quoted(token) })
         continue i + len + 2
@@ -185,16 +185,16 @@ async fn packages_under(dir : String) -> Array[String] {
 fn signature(text : String, name : String) -> String? {
   for needle in ["fn \{name}(", "fn \{name}[", "fn[T] \{name}("] {
     if text.find(needle) is Some(at) {
-      let rest = text.view(start_offset=at)
+      let rest = text.clamped_view(start=at)
       // A contracted function's body follows `} {` on a line of its own;
       // an uncontracted one's follows `{` at the end of the signature line.
       let end = match (rest.find("\n} {"), rest.find("{\n")) {
-        (Some(a), Some(b)) => if rest.view(end_offset=b).contains("where") { a } else { b }
+        (Some(a), Some(b)) => if rest.clamped_view(end=b).contains("where") { a } else { b }
         (Some(a), None) => a
         (None, Some(b)) => b
         (None, None) => rest.length()
       }
-      return Some(rest.view(end_offset=end).to_owned())
+      return Some(rest.clamped_view(end=end).to_owned())
     }
   }
   None
@@ -216,17 +216,17 @@ fn package_dir(module_dir : String, pkg : String) -> String {
 fn axiomatized(text : String) -> Array[String] {
   let out = []
   let mut from = 0
-  while text.view(start_offset=from).find("proof_axiomatized: true") is Some(at) {
+  while text.clamped_view(start=from).find("proof_axiomatized: true") is Some(at) {
     let pos = from + at
     // The nearest `fn ` before it starts the bridge's signature.
-    let before = text.view(end_offset=pos)
+    let before = text.clamped_view(end=pos)
     if before.rev_find("fn ") is Some(f) {
-      let rest = before.view(start_offset=f + 3)
+      let rest = before.clamped_view(start=f + 3)
       let end = match rest.find("(") {
         Some(e) => e
         None => rest.length()
       }
-      out.push(rest.view(end_offset=end).trim(chars=" ").to_owned())
+      out.push(rest.clamped_view(end=end).trim(chars=" ").to_owned())
     }
     from = pos + 1
   }
@@ -240,7 +240,7 @@ fn logic_of_mbt(text : String) -> Array[String] {
   let out = []
   let chars = text.to_array()
   let mut from = 0
-  while text.view(start_offset=from).find("where {") is Some(at) {
+  while text.clamped_view(start=from).find("where {") is Some(at) {
     let open = from + at + 6
     let mut depth = 0
     let mut i = open
@@ -255,7 +255,7 @@ fn logic_of_mbt(text : String) -> Array[String] {
       }
       i += 1
     }
-    out.push(text.view(start_offset=open, end_offset=i).to_owned())
+    out.push(text.clamped_view(start=open, end=i).to_owned())
     from = i
   }
   let lines = text.split("\n").map(l => l.to_owned()).to_array()
@@ -285,7 +285,7 @@ fn without_comments(text : String) -> String {
   text
   .split("\n")
   .map(line => match line.find("//") {
-    Some(at) => line.view(end_offset=at)
+    Some(at) => line.clamped_view(end=at)
     None => line
   })
   .map(l => l.to_owned())
@@ -378,14 +378,14 @@ fn table_mismatch(name : String, body : String) -> String? {
   let mut last_n = -1L
   let mut from = 0
   let mut arms = 0
-  while body.view(start_offset=from).find(" == ") is Some(at) {
+  while body.clamped_view(start=from).find(" == ") is Some(at) {
     let pos = from + at + 4
-    guard leading_number(body.view(start_offset=pos)) is Some(n) else { break }
-    let open = match body.view(start_offset=pos).find("{ ") {
+    guard leading_number(body.clamped_view(start=pos)) is Some(n) else { break }
+    let open = match body.clamped_view(start=pos).find("{ ") {
       Some(o) => pos + o + 2
       None => break
     }
-    guard leading_number(body.view(start_offset=open)) is Some(v) else {
+    guard leading_number(body.clamped_view(start=open)) is Some(v) else {
       return Some("an arm without a number")
     }
     let want = if power { 1L << n.to_int() } else { n }
@@ -401,7 +401,7 @@ fn table_mismatch(name : String, body : String) -> String? {
   guard body.rev_find("else { ") is Some(at) else {
     return Some("no final else")
   }
-  guard leading_number(body.view(start_offset=at + 7)) is Some(v) else {
+  guard leading_number(body.clamped_view(start=at + 7)) is Some(v) else {
     return Some("a final else without a number")
   }
   let n = last_n + 1
@@ -421,7 +421,7 @@ fn closed_tables(text : String) -> Array[(String, String)] {
     guard line.has_prefix("fn ") || line.has_prefix("pub fn ") else { continue }
     guard line.contains("(k : Int)") else { continue }
     let start = line.find("fn ").unwrap() + 3
-    let name = line.view(start_offset=start, end_offset=line.find("(").unwrap()).to_owned()
+    let name = line.clamped_view(start=start, end=line.find("(").unwrap()).to_owned()
     let body = StringBuilder()
     for j = i + 1; j < lines.length() && lines[j] != "}"; j = j + 1 {
       body.write_string(lines[j])
@@ -536,7 +536,7 @@ async fn main {
   // Every axiomatized function of the module is listed, in its package.
   let found : Map[String, String] = Map([])
   for dir in packages_under("\{module_dir}/src") {
-    let pkg = dir.view(start_offset=module_dir.length() + 1).to_owned()
+    let pkg = dir.clamped_view(start=module_dir.length() + 1).to_owned()
     for file in sources(dir) {
       guard file.has_suffix(".mbt") else { continue }
       for name in axiomatized(@fs.read_file(file).text()) {
@@ -557,7 +557,7 @@ async fn main {
   // The budget.
   let budget = match text.find("Bridge budget: ") {
     Some(at) =>
-      match leading_number(text.view(start_offset=at + 15)) {
+      match leading_number(text.clamped_view(start=at + 15)) {
         Some(n) => n.to_int()
         None => -1
       }

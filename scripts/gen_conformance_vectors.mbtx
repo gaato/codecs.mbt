@@ -110,7 +110,7 @@ fn render(fmt : String, source : String, all : Array[Entry], text : String) -> S
     out.write_string("  {\n    name: \"\{e.name}\",\n    compressed: (\n")
     let b64 = e.base64
     for i = 0; i < b64.length().max(1); i = i + 76 {
-      let line = b64.view(start_offset=i, end_offset=(i + 76).min(b64.length()))
+      let line = b64.clamped_view(start=i, end=(i + 76).min(b64.length()))
       out.write_string("      #|\{line}\n")
     }
     let bits = e.window_bits.unwrap_or(24)

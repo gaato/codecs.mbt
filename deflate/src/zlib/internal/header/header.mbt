@@ -1,5 +1,6 @@
 ///|
 /// What the two header bytes, CMF and FLG, say.
+#derive(Eq, @debug.Debug)
 pub(all) struct Header {
   /// The base-2 logarithm of the window the encoder used, CINFO + 8: 8 to 15.
   window_bits : Int32
@@ -7,7 +8,7 @@ pub(all) struct Header {
   level : Int32
   /// FDICT: a preset dictionary's Adler-32 (DICTID) follows.
   dictionary : Bool
-} derive(Eq, @debug.Debug)
+}
 
 ///|
 /// Reads CMF and FLG, in the order zlib checks them: the header check, the

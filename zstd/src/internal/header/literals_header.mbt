@@ -3,6 +3,7 @@
 
 ///|
 /// Literals_Block_Type.
+#derive(Eq, @debug.Debug)
 pub(all) enum LiteralsType {
   /// Raw_Literals_Block: the literals as they are.
   RawLiterals
@@ -12,7 +13,7 @@ pub(all) enum LiteralsType {
   CompressedLiterals
   /// Treeless_Literals_Block: streams with the previous Huffman table.
   TreelessLiterals
-} derive(Eq, @debug.Debug)
+}
 
 ///|
 pub extend LiteralsType with Eq::{equal, not_equal}
@@ -22,6 +23,7 @@ pub extend LiteralsType with @debug.Debug::{to_repr}
 
 ///|
 /// A decoded literals section header whose section fits its block.
+#derive(Eq, @debug.Debug)
 pub(all) struct LiteralsHeader {
   block_type : LiteralsType
   /// Size_Format, the two bits after the type. For compressed and treeless
@@ -34,7 +36,7 @@ pub(all) struct LiteralsHeader {
   /// The bytes the section takes after its header: Regenerated_Size for raw
   /// literals, 1 for RLE, Compressed_Size for compressed and treeless.
   compressed : Int32
-} derive(Eq, @debug.Debug)
+}
 
 ///|
 pub extend LiteralsHeader with Eq::{equal, not_equal}

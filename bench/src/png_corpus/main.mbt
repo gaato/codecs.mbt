@@ -166,7 +166,7 @@ fn category(desc : String) -> String {
     let second = words[1]
     match second.find(":") {
       Some(i) if head != "type" =>
-        return "\{head} \{second.view(start_offset=i + 1)}"
+        return "\{head} \{second.clamped_view(start=i + 1)}"
       _ => ()
     }
   }

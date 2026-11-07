@@ -112,12 +112,12 @@ async fn module_info(dir : String) -> (String, String) {
 /// relative), whose module is `module_dir`.
 async fn report_path(module_dir : String, dir : String) -> String {
   let (name, source) = module_info(module_dir)
-  let mut pkg = dir.view(start_offset=module_dir.length() + 1).to_owned()
+  let mut pkg = dir.clamped_view(start=module_dir.length() + 1).to_owned()
   if source != "" {
     pkg = pkg.strip_prefix("\{source}/").map(s => s.to_owned()).unwrap_or(pkg)
   }
   let last = match pkg.rev_find("/") {
-    Some(at) => pkg.view(start_offset=at + 1).to_owned()
+    Some(at) => pkg.clamped_view(start=at + 1).to_owned()
     None => pkg
   }
   "_build/verif/\{name}/\{pkg}/\{last}.proof.json"
@@ -215,7 +215,7 @@ async fn failed_functions(path : String) -> Array[String] {
   for f in failures {
     if f is { "goal": String(goal), .. } {
       let name = match goal.find("'") {
-        Some(at) => goal.view(end_offset=at).to_owned()
+        Some(at) => goal.clamped_view(end=at).to_owned()
         None => goal
       }
       if !out.contains(name) {
@@ -292,7 +292,7 @@ async fn main {
     guard prelude is String(prelude) else {
       die(2, "\{config_path}: proof_controls.\{dir} must name a prelude")
     }
-    let module_dir = dir.view(end_offset=dir.find("/").unwrap_or(dir.length())).to_owned()
+    let module_dir = dir.clamped_view(end=dir.find("/").unwrap_or(dir.length())).to_owned()
     jobs.push((module_dir, dir, prelude, true, []))
   }
   let mut bad = false

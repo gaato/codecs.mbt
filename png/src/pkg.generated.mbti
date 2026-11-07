@@ -29,23 +29,26 @@ pub fn scatter(ArrayView[Byte], Int32, Int32, Int32, Int32, MutArrayView[Byte]) 
 // Errors
 
 // Types and methods
+#derive(Eq, @debug.Debug)
 pub(all) enum Background {
   Gray(Int32)
   Rgb(Int32, Int32, Int32)
   Index(Int32)
-} derive(Eq, @debug.Debug)
+}
 pub fn Background::equal(Self, Self) -> Bool
 pub fn Background::not_equal(Self, Self) -> Bool
 pub fn Background::to_repr(Self) -> @debug.Repr
 
+#derive(Eq, @debug.Debug)
 pub(all) enum Blend {
   Source
   Over
-} derive(Eq, @debug.Debug)
+}
 pub fn Blend::equal(Self, Self) -> Bool
 pub fn Blend::not_equal(Self, Self) -> Bool
 pub fn Blend::to_repr(Self) -> @debug.Repr
 
+#derive(Eq, @debug.Debug)
 pub struct Chromaticities {
   white_x : UInt32
   white_y : UInt32
@@ -55,28 +58,30 @@ pub struct Chromaticities {
   green_y : UInt32
   blue_x : UInt32
   blue_y : UInt32
-} derive(Eq, @debug.Debug)
+}
 pub fn Chromaticities::equal(Self, Self) -> Bool
 pub fn Chromaticities::not_equal(Self, Self) -> Bool
 pub fn Chromaticities::to_repr(Self) -> @debug.Repr
 
+#derive(Eq, @debug.Debug)
 pub struct CodingPoints {
   color_primaries : Int32
   transfer_function : Int32
   matrix_coefficients : Int32
   full_range : Bool
-} derive(Eq, @debug.Debug)
+}
 pub fn CodingPoints::equal(Self, Self) -> Bool
 pub fn CodingPoints::not_equal(Self, Self) -> Bool
 pub fn CodingPoints::to_repr(Self) -> @debug.Repr
 
+#derive(Eq, @debug.Debug)
 pub(all) enum ColorType {
   Grayscale
   Truecolor
   IndexedColor
   GrayscaleAlpha
   TruecolorAlpha
-} derive(Eq, @debug.Debug)
+}
 pub fn ColorType::equal(Self, Self) -> Bool
 pub fn ColorType::not_equal(Self, Self) -> Bool
 pub fn ColorType::to_repr(Self) -> @debug.Repr
@@ -143,11 +148,12 @@ pub fn Decoder::transparency(Self) -> Transparency?
 pub fn Decoder::width(Self) -> Int32
 pub impl @codec_image.Decode for Decoder
 
+#derive(Eq, @debug.Debug)
 pub(all) enum Dispose {
   Keep
   Background
   Previous
-} derive(Eq, @debug.Debug)
+}
 pub fn Dispose::equal(Self, Self) -> Bool
 pub fn Dispose::not_equal(Self, Self) -> Bool
 pub fn Dispose::to_repr(Self) -> @debug.Repr
@@ -163,14 +169,16 @@ pub struct Image {
 }
 pub fn Image::row(Self, Int32) -> ArrayView[Byte]
 
+#derive(Eq, @debug.Debug)
 pub struct LightLevel {
   max_content : UInt32
   max_frame_average : UInt32
-} derive(Eq, @debug.Debug)
+}
 pub fn LightLevel::equal(Self, Self) -> Bool
 pub fn LightLevel::not_equal(Self, Self) -> Bool
 pub fn LightLevel::to_repr(Self) -> @debug.Repr
 
+#derive(Eq, @debug.Debug)
 pub struct MasteringDisplay {
   red_x : Int32
   red_y : Int32
@@ -182,25 +190,27 @@ pub struct MasteringDisplay {
   white_y : Int32
   max_luminance : UInt32
   min_luminance : UInt32
-} derive(Eq, @debug.Debug)
+}
 pub fn MasteringDisplay::equal(Self, Self) -> Bool
 pub fn MasteringDisplay::not_equal(Self, Self) -> Bool
 pub fn MasteringDisplay::to_repr(Self) -> @debug.Repr
 
+#derive(Eq, @debug.Debug)
 pub struct PhysicalSize {
   x : UInt32
   y : UInt32
   per_meter : Bool
-} derive(Eq, @debug.Debug)
+}
 pub fn PhysicalSize::equal(Self, Self) -> Bool
 pub fn PhysicalSize::not_equal(Self, Self) -> Bool
 pub fn PhysicalSize::to_repr(Self) -> @debug.Repr
 
+#derive(Eq, @debug.Debug)
 pub(all) enum Transparency {
   Gray(Int32)
   Rgb(Int32, Int32, Int32)
   Alpha(ArrayView[Byte])
-} derive(Eq, @debug.Debug)
+}
 pub fn Transparency::equal(Self, Self) -> Bool
 pub fn Transparency::not_equal(Self, Self) -> Bool
 pub fn Transparency::to_repr(Self) -> @debug.Repr

@@ -76,7 +76,7 @@ fn part_imports(moon_pkg : String, parts_name : String) -> Array[String] {
     let line = line.trim(chars=" ")
     guard line.strip_prefix(prefix) is Some(rest) else { continue }
     guard rest.find("\"") is Some(end) else { continue }
-    found.push(rest.view(end_offset=end).to_owned())
+    found.push(rest.clamped_view(end=end).to_owned())
   }
   found
 }
@@ -189,7 +189,7 @@ async fn main {
       }
       for file, text in wanted {
         let slash = file.rev_find("/").unwrap()
-        @fs.mkdir(file.view(end_offset=slash), recursive=true, allow_exist=true)
+        @fs.mkdir(file.clamped_view(end=slash), recursive=true, allow_exist=true)
         if !@fs.exists(file) || @fs.read_file(file).text() != text {
           @fs.write_file(file, text)
           println("wrote \{file}")

@@ -84,6 +84,7 @@ pub(all) struct Step {
   stop : Stop
 }
 
+#derive(Eq, @debug.Debug)
 pub(all) enum Stop {
   NeedMoreInput
   NeedMoreOutput
@@ -91,7 +92,7 @@ pub(all) enum Stop {
   Wrote
   Done
   Raised(@codec.ErrorKind, String)
-} derive(Eq, @debug.Debug)
+}
 pub fn Stop::equal(Self, Self) -> Bool
 pub fn Stop::not_equal(Self, Self) -> Bool
 pub fn Stop::to_repr(Self) -> @debug.Repr
