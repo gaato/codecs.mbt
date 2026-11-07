@@ -5,7 +5,9 @@ test "deflate decode" (b : @bench.T) {
   let out = FixedArray::make(1 << 16, b'\x00')
   assert_eq(@compare.deflate_steps(text, out), text_size)
   assert_eq(@compare.flate_steps(text, out), text_size)
-  // moonbit-community/flate's streaming decoder, called as gaato/deflate's.
+  assert_eq(@compare.core_flate_steps(text, out), text_size)
+  // moonbit-community/flate's and core's streaming decoders, called as
+  // gaato/deflate's.
   let benches : Array[(String, () -> Unit)] = [
     (
       "gaato/deflate steps text",
@@ -22,6 +24,14 @@ test "deflate decode" (b : @bench.T) {
     (
       "moonbit-community/flate 0.10.0 steps binary",
       () => b.keep(@compare.flate_steps(binary, out)),
+    ),
+    (
+      "\{@compare.core_name} steps text",
+      () => b.keep(@compare.core_flate_steps(text, out)),
+    ),
+    (
+      "\{@compare.core_name} steps binary",
+      () => b.keep(@compare.core_flate_steps(binary, out)),
     ),
   ]
   add_whole(benches, b, @compare.deflate_whole(), "text", text, text_size)

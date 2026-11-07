@@ -304,7 +304,7 @@ The header checks, the decoder's verdict on a code's lengths and the canonical c
 
 gaato/deflate fits DEFLATE, zlib and gzip that arrive in pieces or come from anyone. Its decoders take input in pieces down to one byte, write into your slices and hold about 46 KiB, check every checksum, and refuse what zlib refuses: they agreed with zlib on all 517 valid and 2,893 invalid streams of the comparison. Its header checks, code-length verdicts and the encoder's codes are proved against RFC 1950, 1951 and 1952. It runs on Native, JS, Wasm and Wasm GC.
 
-moonbit-community/flate's one-shot decoder takes about 1.3 (Native), 2.7 (Wasm), 1.5 (Wasm GC) and 0.63 (JS) times as long as gaato/deflate's `decompress` on the benchmarks' text; its streaming decoder 1.1 to 3.1. Its level-6 encoder takes 0.84 (Native), 0.53 (Wasm), 1.0 (Wasm GC) and 0.71 (JS) times as long as ours, for 1.5 % more output on the Silesia corpus.
+moonbit-community/flate's one-shot decoder takes about 1.3 (Native), 2.7 (Wasm), 1.5 (Wasm GC) and 0.69 (JS) times as long as gaato/deflate's `decompress` on the benchmarks' text; its streaming decoder 1.1 to 2.8. Its level-6 encoder takes 0.85 (Native), 0.56 (Wasm), 1.1 (Wasm GC) and 0.69 (JS) times as long as ours, for 1.5 % more output on the Silesia corpus. The DEFLATE, zlib and gzip packages of MoonBit's core library (`moonbitlang/core/compress`, experimental in MoonBit 0.10.20) take 1.7 (Native), 2.7 (Wasm), 1.4 (Wasm GC) and 1.0 (JS) times as long as `decompress`, 1.2 to 3.1 when streaming, and compress to the same sizes as moonbit-community/flate. Both accept text after the last member of a gzip stream, which zlib and gaato/deflate refuse.
 
 ## Links
 

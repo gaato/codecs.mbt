@@ -27,6 +27,7 @@ pub fn deflate_whole() -> Array[Whole] {
       name: "hustcer/fzip 0.8.8",
       decode: input => of_fixed(@fzip.inflate_sync(fixed(input))),
     },
+    core_raw_whole(),
   ]
 }
 
@@ -53,6 +54,7 @@ pub fn zlib_whole() -> Array[Whole] {
       name: "hustcer/fzip 0.8.8",
       decode: input => of_fixed(@fzip.unzlib_sync(fixed(input))),
     },
+    core_zlib_whole(),
   ]
 }
 
@@ -102,6 +104,7 @@ pub fn zlib_dictionary() -> Array[(String, (Bytes, Bytes) -> Bytes raise)] {
         of_fixed(@fzip.unzlib_sync(fixed(input), opts~))
       },
     ),
+    core_zlib_dictionary(),
   ]
 }
 
@@ -128,6 +131,7 @@ pub fn gzip_whole() -> Array[Whole] {
       name: "hustcer/fzip 0.8.8",
       decode: input => of_fixed(@fzip.gunzip_sync(fixed(input))),
     },
+    core_gzip_whole(),
   ]
 }
 
@@ -249,6 +253,7 @@ pub fn deflate_pieces() -> Array[Pieces] {
         fzip_run((c, last) => s.push(c, final_=last), input, piece)
       },
     },
+    core_raw_pieces(),
   ]
 }
 
@@ -297,6 +302,7 @@ pub fn zlib_pieces() -> Array[Pieces] {
         fzip_run((c, last) => s.push(c, final_=last), input, piece)
       },
     },
+    core_zlib_pieces(),
   ]
 }
 
@@ -345,6 +351,7 @@ pub fn gzip_pieces() -> Array[Pieces] {
         fzip_run((c, last) => s.push(c, final_=last), input, piece)
       },
     },
+    core_gzip_pieces(),
   ]
 }
 
@@ -392,5 +399,6 @@ pub fn deflate_compress() -> Array[Compress] {
         of_fixed(@fzip.deflate_sync(fixed(input), opts~))
       },
     },
+    core_raw_compress(),
   ]
 }

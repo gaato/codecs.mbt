@@ -14,6 +14,10 @@ pub fn brotli_steps(BytesView, FixedArray[Byte]) -> Int32
 
 pub fn brotli_whole() -> Array[Whole]
 
+pub fn core_flate_steps(BytesView, FixedArray[Byte]) -> Int32
+
+pub let core_name : String
+
 pub fn deflate_compress() -> Array[Compress]
 
 pub fn deflate_pieces() -> Array[Pieces]

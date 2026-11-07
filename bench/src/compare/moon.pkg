@@ -28,4 +28,19 @@ import {
   "gmlewis/io" @gm_io,
   "mizchi/zlib" @mizchi_zlib,
   "hustcer/fzip",
+  "moonbitlang/core/compress/flate" @core_flate,
+  "moonbitlang/core/compress/zlib" @core_zlib,
+  "moonbitlang/core/compress/gzip" @core_gzip,
 }
+
+// core's compress packages are experimental (`experimental: true` in their
+// moon.pkg). The comparison measures them as they are, so this package, and
+// only this one, acknowledges them.
+
+options(
+  "allow-experimental-packages": [
+    "moonbitlang/core/compress/flate",
+    "moonbitlang/core/compress/zlib",
+    "moonbitlang/core/compress/gzip",
+  ],
+)
