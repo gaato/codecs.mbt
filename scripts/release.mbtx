@@ -392,15 +392,17 @@ async fn publish(dry : Bool) -> Unit {
       continue
     }
     if dry {
-      // `moon publish --dry-run` exits non-zero even when the server accepts
-      // the dry run, so judge it by its output. A dependant of a module that
-      // this run would publish first cannot be checked yet: its packaged copy
-      // resolves dependencies from the registry.
-      let (_, out) = @process.collect_output_merged("moon", [
+      // Since moon 0.1.20261104 a dry run the server accepts exits 0 and
+      // prints "Server status: 202 Accepted"; it no longer prints "Dry run
+      // completed successfully" (earlier versions printed that and exited
+      // non-zero). A dependant of a module that this run would publish first
+      // cannot be checked yet: its packaged copy resolves dependencies from
+      // the registry.
+      let (code, out) = @process.collect_output_merged("moon", [
         "-C", dir, "publish", "--dry-run",
       ])
       let out = out.text()
-      if out.contains("Dry run completed successfully") {
+      if code == 0 {
         println("would   \{name}@\{version}")
       } else if !pending.is_empty() && waits_for(out, pending) {
         println(
