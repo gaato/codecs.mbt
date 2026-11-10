@@ -1,8 +1,8 @@
 ----
 import {
-  "moonbitlang/async@0.22.5",
-  "moonbitlang/async@0.22.5/fs",
-  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/core/async",
+  "moonbitlang/core/async/fs",
+  "moonbitlang/core/async/shell",
   "moonbitlang/core/encoding/base64",
   "moonbitlang/core/encoding/hex",
   "moonbitlang/core/encoding/utf8",
@@ -141,7 +141,7 @@ async fn compress(data : Bytes, quality : Int, lgwin : Int) -> Bytes {
 ///|
 async fn google_file(source : String?, name : String) -> Bytes {
   match source {
-    Some(dir) => @fs.read_file("\{dir}/\{name}").binary()
+    Some(dir) => @fs.read_binary("\{dir}/\{name}")
     None => fetch("\{raw}tests/testdata/\{name}")
   }
 }
@@ -454,7 +454,7 @@ async fn main {
     )
   }
   out.write_string("]\n")
-  @fs.write_file(target, out.to_string())
+  @fs.write_text(target, out.to_string())
   @shell.Cmd("moon", ["fmt", target]).run()
   println("wrote \{target}: \{vectors.length()} vectors")
 }

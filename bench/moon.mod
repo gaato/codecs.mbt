@@ -27,7 +27,6 @@ import {
   "gmlewis/io@0.23.20",
   "mizchi/image@0.4.3",
   "moonbitlang/x@0.5.6",
-  "moonbitlang/async@0.22.5",
   "Milky2018/zstd@0.1.4",
   "hustcer/fbr@0.8.2",
   "mizchi/brotli@0.2.2",

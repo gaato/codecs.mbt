@@ -7,8 +7,8 @@
 import {
   "gaato/png",
   "gaato/codec_bench/compare_png",
-  "moonbitlang/async",
-  "moonbitlang/async/fs" @afs,
+  "moonbitlang/core/async",
+  "moonbitlang/core/async/fs" @afs,
   "moonbitlang/core/debug",
   "moonbitlang/core/env",
   "moonbitlang/core/string",
@@ -17,3 +17,10 @@ import {
 pkgtype(kind: "executable")
 
 supported_targets = "native"
+
+options(
+  "allow-experimental-packages": [
+    "moonbitlang/core/async",
+    "moonbitlang/core/async/fs",
+  ],
+)

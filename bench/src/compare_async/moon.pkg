@@ -1,11 +1,18 @@
-// moonbitlang/async's gzip decoder and encoder, which read from and write to
+// moonbitlang/core/async's gzip decoder and encoder, which read from and write to
 // asynchronous streams, behind the comparison's shapes: kept apart from
 // `compare` so that the other packages build without the async runtime.
 
 import {
   "gaato/codec_bench/compare",
-  "moonbitlang/async/io" @aio,
-  "moonbitlang/async/gzip" @agzip,
+  "moonbitlang/core/async/io",
+  "moonbitlang/core/async/gzip" @agzip,
 }
 
 supported_targets = "native + js"
+
+options(
+  "allow-experimental-packages": [
+    "moonbitlang/core/async/io",
+    "moonbitlang/core/async/gzip",
+  ],
+)

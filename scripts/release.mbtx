@@ -1,10 +1,10 @@
 ----
 import {
-  "moonbitlang/async@0.22.5",
-  "moonbitlang/async@0.22.5/fs",
-  "moonbitlang/async@0.22.5/process",
-  "moonbitlang/async@0.22.5/shell",
-  "moonbitlang/async@0.22.5/stdio",
+  "moonbitlang/core/async",
+  "moonbitlang/core/async/fs",
+  "moonbitlang/core/async/process",
+  "moonbitlang/core/async/shell",
+  "moonbitlang/core/async/stdio",
   "moonbitlang/core/env",
   "moonbitlang/core/json",
 }
@@ -52,7 +52,7 @@ async fn modules() -> Array[String] {
   guard @fs.exists(path) else {
     die(2, "no \{path}: run from the repository root")
   }
-  let config = @json.parse(@fs.read_file(path).text())
+  let config = @json.parse(@fs.read_text(path))
   guard config is { "modules": Array(list), .. } else {
     die(2, "\{path} has no \"modules\" list")
   }
@@ -85,7 +85,7 @@ async fn moon_mod(dir : String, field : String) -> String {
   let path = "\{dir}/moon.mod"
   guard @fs.exists(path) else { die(2, "no \{path}") }
   let prefix = "\{field} = \""
-  for line in @fs.read_file(path).text().split("\n") {
+  for line in @fs.read_text(path).split("\n") {
     if line.strip_prefix(prefix) is Some(rest) &&
       rest.strip_suffix("\"") is Some(value) {
       return value.to_owned()
@@ -130,10 +130,10 @@ fn set_import(line : String, name : String, version : String) -> String {
 async fn changelog_release(dir : String, version : String) -> Unit {
   let file = "\{dir}/CHANGELOG.md"
   guard @fs.exists(file) else { return }
-  let text = @fs.read_file(file).text()
+  let text = @fs.read_text(file)
   let lines = lines(text)
   if !lines.contains(unreleased) {
-    @stdio.stderr.write(
+    @stdio.stderr.text.write(
       "warning: \{file} has no '\{unreleased}' heading; not updated\n",
     )
     return
@@ -163,11 +163,11 @@ async fn changelog_release(dir : String, version : String) -> Unit {
     out.push(line)
   }
   if !entries {
-    @stdio.stderr.write(
+    @stdio.stderr.text.write(
       "warning: no entries under [Unreleased] for \{heading}\n",
     )
   }
-  @fs.write_file(file, unlines(out))
+  @fs.write_text(file, unlines(out))
   println("  \{file}: [Unreleased] -> [\{version}] - \{date}")
 }
 
@@ -176,7 +176,7 @@ async fn changelog_release(dir : String, version : String) -> Unit {
 async fn changelog_note(dir : String, section : String, text : String) -> Unit {
   let file = "\{dir}/CHANGELOG.md"
   guard @fs.exists(file) else { die(1, "no \{file}") }
-  let line = lines(@fs.read_file(file).text())
+  let line = lines(@fs.read_text(file))
   guard line.search(unreleased) is Some(start) else {
     die(1, "\{file} has no '\{unreleased}' heading")
   }
@@ -236,14 +236,14 @@ async fn changelog_note(dir : String, section : String, text : String) -> Unit {
       out.append(line[end:])
     }
   }
-  @fs.write_file(file, unlines(out))
+  @fs.write_text(file, unlines(out))
 }
 
 ///|
 async fn bump(dir : String, version : String) -> Unit {
   let name = moon_mod(dir, "name")
   let own = "\{dir}/moon.mod"
-  let text = @fs.read_file(own).text()
+  let text = @fs.read_text(own)
   let set = text
     .split("\n")
     .map(line => {
@@ -256,7 +256,7 @@ async fn bump(dir : String, version : String) -> Unit {
       }
     })
     .to_array()
-  @fs.write_file(own, set.join("\n"))
+  @fs.write_text(own, set.join("\n"))
   // Every module of the workspace, in the order of `*/moon.mod`.
   let mods = []
   for entry in @fs.readdir(".", include_hidden=false) {
@@ -267,14 +267,14 @@ async fn bump(dir : String, version : String) -> Unit {
   mods.sort_by(lexical)
   let importers = []
   for path in mods {
-    let text = @fs.read_file(path).text()
+    let text = @fs.read_text(path)
     let edited = text
       .split("\n")
       .map(line => set_import(line.to_owned(), name, version))
       .to_array()
       .join("\n")
     if edited != text {
-      @fs.write_file(path, edited)
+      @fs.write_text(path, edited)
     }
     if edited.contains("\{name}@\{version}") {
       importers.push(path)
@@ -312,20 +312,20 @@ async fn check() -> Unit {
     let file = "\{dir}/CHANGELOG.md"
     let version = moon_mod(dir, "version")
     if !@fs.exists(file) {
-      @stdio.stderr.write("\{file} is missing\n")
+      @stdio.stderr.text.write("\{file} is missing\n")
       status = 1
       continue
     }
-    let text = @fs.read_file(file).text()
+    let text = @fs.read_text(file)
     let first = lines(text).search_by(l => l.has_prefix("## "))
     if first.map(i => lines(text)[i]) != Some(unreleased) {
-      @stdio.stderr.write(
+      @stdio.stderr.text.write(
         "\{file}: the first section must be '\{unreleased}'\n",
       )
       status = 1
     }
     if !text.contains("## [\{version}] - ") {
-      @stdio.stderr.write(
+      @stdio.stderr.text.write(
         "\{file}: no '## [\{version}] - <date>' heading for the version in moon.mod (use 'moon run scripts/release.mbtx -- bump')\n",
       )
       status = 1
@@ -343,7 +343,7 @@ async fn index_has(name : String, version : String) -> Bool {
   }
   let file = "\{home}/registry/index/user/\{name}.index"
   guard @fs.exists(file) else { return false }
-  for line in @fs.read_file(file).text().split("\n") {
+  for line in @fs.read_text(file).split("\n") {
     let entry = @json.parse(line) catch { _ => continue }
     if entry is { "version": String(v), .. } && v == version {
       return true
@@ -398,11 +398,14 @@ async fn publish(dry : Bool) -> Unit {
       // non-zero). A dependant of a module that this run would publish first
       // cannot be checked yet: its packaged copy resolves dependencies from
       // the registry.
-      let (code, out) = @process.collect_output_merged("moon", [
-        "-C", dir, "publish", "--dry-run",
-      ])
-      let out = out.text()
-      if code == 0 {
+      let result = @process.run(
+        "moon",
+        ["-C", dir, "publish", "--dry-run"],
+        stdout=Collect,
+        stderr=DuplicateStdout,
+      )
+      let out = result.stdout_text()
+      if result.exit_code == 0 {
         println("would   \{name}@\{version}")
       } else if !pending.is_empty() && waits_for(out, pending) {
         println(

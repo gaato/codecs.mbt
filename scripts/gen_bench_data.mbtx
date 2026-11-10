@@ -1,8 +1,8 @@
 ----
 import {
-  "moonbitlang/async@0.22.5",
-  "moonbitlang/async@0.22.5/fs",
-  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/core/async",
+  "moonbitlang/core/async/fs",
+  "moonbitlang/core/async/shell",
   "moonbitlang/core/encoding/base64",
   "moonbitlang/core/env",
 }
@@ -181,7 +181,7 @@ async fn main {
   let stale = "\{target} is stale: run moon run scripts/gen_bench_data.mbtx"
   if @env.args().contains("--check") {
     guard @fs.exists(target) else { fail(stale) }
-    let file = @fs.read_file(target).text()
+    let file = @fs.read_text(target)
     let text = render(async fn(format, name, raw) {
       guard stored(file, "\{format}_\{name}") is Some(data) else { fail(stale) }
       if decompress(format, data) != raw {
@@ -200,7 +200,7 @@ async fn main {
         _ => compress("brotli", ["-c", "-q", "9", "-w", "22"], raw)
       }
     })
-    @fs.write_file(target, text)
+    @fs.write_text(target, text)
     println("\{target}: \{text.length()} characters")
   }
 }

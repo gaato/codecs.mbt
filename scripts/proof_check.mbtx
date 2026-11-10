@@ -1,7 +1,7 @@
 ----
 import {
-  "moonbitlang/async@0.22.5",
-  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/core/async",
+  "moonbitlang/core/async/fs",
   "moonbitlang/core/env",
   "moonbitlang/core/json",
 }
@@ -439,7 +439,7 @@ async fn main {
   guard @fs.exists(config_path) else {
     die(2, "no \{config_path}: run from the repository root")
   }
-  let config = @json.parse(@fs.read_file(config_path).text())
+  let config = @json.parse(@fs.read_text(config_path))
   guard config is { "proved": Object(all), .. } &&
     all.get(module_dir) is Some(Object(proved)) else {
     die(2, "\{config_path} lists no \"proved\" packages for \{module_dir}")
@@ -483,7 +483,7 @@ async fn main {
   }
   let ledger = "\{module_dir}/PROOFS.md"
   guard is_file(ledger) else { die(2, "proof_check.mbtx: no ledger at \{ledger}") }
-  let text = @fs.read_file(ledger).text()
+  let text = @fs.read_text(ledger)
   let proved_rows = table(text, "Proved")
   let bridge_rows = table(text, "Trusted bridges")
   guard !proved_rows.is_empty() else {
@@ -518,7 +518,7 @@ async fn main {
           let path = "\{module_dir}/\{file}"
           if file == "" || !is_file(path) {
             fail("NO FILE     \{name}: \{file}")
-          } else if !@fs.read_file(path).text().contains("test \"\{test_name}\" {") {
+          } else if !@fs.read_text(path).contains("test \"\{test_name}\" {") {
             fail("NO TEST     \{name}: \{file} has no test \"\{test_name}\"")
           } else {
             named += 1
@@ -536,7 +536,7 @@ async fn main {
     let pkg = dir.clamped_view(start=module_dir.length() + 1).to_owned()
     for file in sources(dir) {
       guard file.has_suffix(".mbt") else { continue }
-      for name in axiomatized(@fs.read_file(file).text()) {
+      for name in axiomatized(@fs.read_text(file)) {
         found[name] = pkg
         match listed.get(name) {
           Some(p) if p == pkg => ()
@@ -605,7 +605,7 @@ async fn main {
     let mut ok = false
     for file in sources(package_dir(module_dir, pkg)) {
       guard file.has_suffix(".mbt") else { continue }
-      if signature(@fs.read_file(file).text(), name) is Some(sig) {
+      if signature(@fs.read_text(file), name) is Some(sig) {
         ok = sig.contains("proof_ensure:")
       }
     }
@@ -618,7 +618,7 @@ async fn main {
   // The logic of the proved packages.
   for pkg, _ in packages {
     for file in sources(package_dir(module_dir, pkg)) {
-      let source = @fs.read_file(file).text()
+      let source = @fs.read_text(file)
       let logic = if file.has_suffix(".mbtp") {
         [source]
       } else {

@@ -1,8 +1,8 @@
 ----
 import {
-  "moonbitlang/async@0.22.5",
-  "moonbitlang/async@0.22.5/fs",
-  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/core/async",
+  "moonbitlang/core/async/fs",
+  "moonbitlang/core/async/shell",
   "moonbitlang/core/env",
 }
 ----
@@ -239,11 +239,11 @@ async fn main {
   let text = formatted(render())
   if @env.args().contains("--check") {
     guard @fs.exists(target) else { fail("\{target} is missing") }
-    if @fs.read_file(target).text() != text {
+    if @fs.read_text(target) != text {
       fail("stale: \{target} (run moon run scripts/gen_proof_reverse.mbtx)")
     }
   } else {
-    @fs.write_file(target, text)
+    @fs.write_text(target, text)
     println("\{target}: n from 1 to \{max_bits}")
   }
 }

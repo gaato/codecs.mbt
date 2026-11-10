@@ -1,9 +1,9 @@
 ----
 import {
-  "moonbitlang/async@0.22.5",
-  "moonbitlang/async@0.22.5/fs",
-  "moonbitlang/async@0.22.5/shell",
-  "moonbitlang/async@0.22.5/stdio",
+  "moonbitlang/core/async",
+  "moonbitlang/core/async/fs",
+  "moonbitlang/core/async/shell",
+  "moonbitlang/core/async/stdio",
   "moonbitlang/core/env",
   "moonbitlang/core/json",
   "moonbitlang/core/string",
@@ -65,7 +65,7 @@ async fn config() -> Json {
   guard @fs.exists(path) else {
     die(2, "no \{path}: run from the repository root")
   }
-  @json.parse(@fs.read_file(path).text())
+  @json.parse(@fs.read_text(path))
 }
 
 ///|
@@ -174,7 +174,7 @@ async fn measure(dir : String) -> String {
 ///|
 /// The `name = "..."` of `dir`/moon.mod.
 async fn module_name(dir : String) -> String {
-  for line in @fs.read_file("\{dir}/moon.mod").text().split("\n") {
+  for line in @fs.read_text("\{dir}/moon.mod").split("\n") {
     if line.strip_prefix("name = \"") is Some(rest) &&
       rest.strip_suffix("\"") is Some(name) {
       return name.to_owned()
@@ -190,7 +190,7 @@ async fn budgets(ledger : String, scope : Array[String]) -> Map[String, Int] {
   if !@fs.exists(ledger) {
     return budget
   }
-  for line in @fs.read_file(ledger).text().split("\n") {
+  for line in @fs.read_text(ledger).split("\n") {
     guard line.has_prefix("|") else { continue }
     let cell = line.split("|").to_array()
     guard cell.length() > 2 else { continue }
@@ -257,7 +257,7 @@ async fn check(
   scope : Array[String],
 ) -> Int {
   guard @fs.exists(json_file) else { raise Setup("error: no \{json_file}") }
-  let report = @json.parse(@fs.read_file(json_file).text()) catch {
+  let report = @json.parse(@fs.read_text(json_file)) catch {
     _ => raise Setup("error: \{json_file} is not JSON")
   }
   guard report is { "source_files": Array(files), .. } else {
@@ -282,7 +282,7 @@ async fn check(
     // A `proof_assert` is a step of a proof that `moon prove` checks; it is
     // erased from the program, yet the instrumentation may count its lines.
     let proof = if @fs.exists(name) {
-      proof_lines(@fs.read_file(name).text())
+      proof_lines(@fs.read_text(name))
     } else {
       []
     }
@@ -367,7 +367,7 @@ async fn check(
 /// Measures (or rechecks `from_json` for) `dir`; its exit status.
 async fn report(dir : String, from_json : String?, scopes : Json?) -> Int {
   guard scopes is Some(Object(scopes)) && scopes.get(dir) is Some(scope) else {
-    @stdio.stderr.write(
+    @stdio.stderr.text.write(
       "no coverage scope for \{dir} in scripts/modules.json\n",
     )
     return 2
@@ -381,7 +381,7 @@ async fn report(dir : String, from_json : String?, scopes : Json?) -> Int {
     check(dir, json_file, scope)
   } catch {
     Setup(message) => {
-      @stdio.stderr.write("\{message}\n")
+      @stdio.stderr.text.write("\{message}\n")
       2
     }
     err => raise err

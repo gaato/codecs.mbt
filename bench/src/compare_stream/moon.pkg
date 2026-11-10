@@ -7,7 +7,7 @@
 import {
   "gaato/codec_bench/compare",
   "gaato/codec_bench/compare_async",
-  "moonbitlang/async",
+  "moonbitlang/core/async",
   "moonbitlang/core/env",
   "moonbitlang/core/string",
   "moonbitlang/x/fs",
@@ -16,3 +16,7 @@ import {
 pkgtype(kind: "executable")
 
 supported_targets = "native"
+
+options(
+  "allow-experimental-packages": [ "moonbitlang/core/async" ],
+)

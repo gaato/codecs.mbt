@@ -292,6 +292,12 @@ the rows that were measured again came out the same. Peak memory depends on
 the machine: the runs of 2026-10-23, in a cloud VM, peaked 4 to 8 MiB lower
 than these.
 
+The moonbitlang/core/async (MoonBit 0.10.20) entry was measured again on
+2026-11-10 on the i5-10400F, pinned to CPU 2, after migrating from
+moonbitlang/async 0.22.5. It used the same MoonBit and reference versions,
+with Node 26.13.0, using `--only moonbitlang/core/async` and a 300 s timeout.
+The other entries retain their measurements above.
+
 The packages are called through `src/compare`, one adapter each, the way
 their READMEs show: their one-shot call for a whole input, and their
 streaming API, if they have one, for input in pieces. `src/compare_check`,
@@ -328,7 +334,7 @@ DEFLATE, zlib and gzip:
 | gmlewis/flate, zlib, gzip | raw DEFLATE, zlib, gzip; an encoder without levels; zlib dictionaries | it pulls its input from a reader, into the caller's buffer | the window; no output limit | Adler-32, CRC-32, ISIZE, gzip header CRC | decoder: Native (on JS, Wasm and Wasm GC it overflows the stack on the 512 KiB text: `read_literal` and `copy_history` call each other for each match); encoder: all four |
 | mizchi/zlib | raw DEFLATE, zlib, gzip, whole buffers; an encoder without levels; no preset dictionaries | no | `max_size` 256 MiB by default | Adler-32, CRC-32, ISIZE | Native, JS, Wasm, Wasm GC |
 | hustcer/fzip | raw DEFLATE, zlib, gzip, ZIP; levels 0 to 9; dictionaries | input in pieces (`push`), output through a callback; the input is kept and decoded at the last push | `max_output_size` 100 MiB and `max_input_size` 1 GiB by default; inputs over a third of `max_output_size` are refused | Adler-32, CRC-32, ISIZE, gzip header CRC | Native, JS, Wasm, Wasm GC |
-| moonbitlang/async `gzip` | gzip; decoder and encoder (the encoder was not measured) | an asynchronous reader, read into the caller's buffer | the window | CRC-32 and ISIZE of the first member | Native, JS (others not tried) |
+| moonbitlang/core/async (MoonBit 0.10.20) `gzip` | gzip; decoder and encoder (the encoder was not measured) | an asynchronous reader, read into the caller's buffer | the window | CRC-32 and ISIZE of the first member | Native, JS (others not tried) |
 | moonbitlang/core `compress` | raw DEFLATE, zlib, gzip (and ZIP in `archive/zip`); levels 0 to 9 (`Standard`), and `Split` and `Optimal` strategies (not measured); preset dictionaries; no access to a gzip header's fields | yes (`IncrementalDecoder`, and the zlib and gzip `Decoder`s, with `check_end` at the end of input) | the window when streaming; `max_output=` on every one-shot call, `Bytes` capacity by default | Adler-32, CRC-32, ISIZE, gzip header CRC | Native, JS, Wasm, Wasm GC |
 
 ### Correctness
@@ -425,7 +431,7 @@ gzip (112 valid, 1,111 invalid):
 | mizchi/zlib | 105 | 1,098 | 66/66 | 66/67 | 47/51 | 919/927 | 0 | 0 |
 | hustcer/fzip | 112 | 1,111 | 66/66 | 67/67 | 51/51 | 927/927 | 0 | 0 |
 | moonbitlang/core | 112 | 1,110 | 66/66 | 67/67 | 50/51 | 927/927 | 0 | 0 |
-| moonbitlang/async | 72 | 1,075 | 64/66 | 63/67 | 45/51 | 903/927 | 0 | 0 |
+| moonbitlang/core/async (MoonBit 0.10.20) | 72 | 1,075 | 64/66 | 63/67 | 45/51 | 903/927 | 0 | 0 |
 
 What lies behind the misses, from the list the script prints:
 
@@ -440,7 +446,7 @@ What lies behind the misses, from the list the script prints:
 - gzip: gmlewis/gzip and mizchi/zlib accept the reserved FLG bits;
   mizchi/zlib does not check the header CRC (FHCRC) and refuses a second
   member ("Trailing data after gzip stream").
-  moonbitlang/async refuses any header field (FNAME, FCOMMENT, FEXTRA,
+  moonbitlang/core/async refuses any header field (FNAME, FCOMMENT, FEXTRA,
   FHCRC, FTEXT) with `InvalidHeader`, and decodes the first member only,
   ignoring the rest, corrupt or not. moonbit-community/flate and
   moonbitlang/core accept text after the last member, which zlib refuses;
@@ -469,7 +475,7 @@ the output had come out while only the first half of the input had gone in.
 | moonbit-community/flate | caller's buffer | 370/370, 32/32, 112/112 | 49 % | 0.9× | 45 ms |
 | gmlewis/flate, zlib, gzip | caller's buffer (it pulls from a reader) | 370/370, 32/32, 112/112 | 44 % | 1.0× | 33 ms |
 | hustcer/fzip | callback | 370/370, 32/32, 112/112 | 0 % | 1.0× | 10 ms |
-| moonbitlang/async (gzip) | caller's buffer (an asynchronous reader) | 72/112, as whole | 49 % | 1.0× | 113 ms |
+| moonbitlang/core/async (MoonBit 0.10.20) | caller's buffer (an asynchronous reader) | 72/112, as whole | 49 % | 0.9× | 177 ms |
 | moonbitlang/core (raw / zlib / gzip) | caller's buffer | 370/370, 32/32, 112/112 | 49 % | 0.9× | 44 ms (raw) |
 
 mizchi/brotli and mizchi/zlib take whole inputs only. The times are on
@@ -515,7 +521,7 @@ MiB (mizchi/brotli 30.1 MiB).
 | gmlewis/flate, zlib, gzip | 592 / 592 / 594 MiB | 75.9 / 76.0 / 77.9 MiB |
 | mizchi/zlib | 592 / 592 / 594 MiB | |
 | hustcer/fzip | refuses: "input too large for safe allocation" (over a third of its 100 MiB output limit), at 144 MiB | the same, at the last push, with no output, at 242 MiB |
-| moonbitlang/async (gzip) | 614 MiB | 80.0 MiB |
+| moonbitlang/core/async (MoonBit 0.10.20) | 589 MiB | 76.3 MiB |
 | moonbitlang/core (raw / zlib / gzip) | 846 / 848 / 850 MiB | 78.0 / 78.0 / 80.0 MiB |
 
 Whole, every decoder holds the 256 MiB output, and most a second copy while
@@ -546,7 +552,8 @@ references refuse all four claims.
 | Decoder | Peak on the four claims | Outcome |
 |---|---|---|
 | gaato/zstd, gaato/brotli, gaato/deflate (gzip) | 8.0 to 10.0 MiB | refused |
-| Milky2018/zstd, moonbit-community/flate, gmlewis/gzip, mizchi/zlib, hustcer/fzip, moonbitlang/async, moonbitlang/core | 8.0 to 8.1 MiB | refused |
+| Milky2018/zstd, moonbit-community/flate, gmlewis/gzip, mizchi/zlib, hustcer/fzip, moonbitlang/core | 8.0 to 8.1 MiB | refused |
+| moonbitlang/core/async (MoonBit 0.10.20) | 8.0 MiB on `gzip_isize` | refused |
 | hustcer/fbr | 25.9 MiB on `brotli_mlen` | refused |
 | mizchi/brotli | 139.9 MiB on `brotli_mlen` | an abort (signal 6), under either limit |
 
@@ -620,11 +627,10 @@ as `inflate_all` on Wasm and Wasm GC, and on the text 28 % slower on Native
 and 49 % on JS. gaato/deflate's `decompress` is faster than core's on every
 target.
 
-moonbitlang/async's gzip decoder was timed with `compare_stream` on Native
-only (its API is asynchronous, which `moon bench` does not run): 4.05 ms for
-the text's gzip member, against 2.30 ms
-for gaato/deflate's gzip `decompress` in the same run (`compare_codecs.mbtx
-stream`).
+moonbitlang/core/async's gzip decoder was timed with `compare_stream` on
+Native only (its API is asynchronous, which `moon bench` does not run):
+4.75 ms for the text's gzip member whole, and 4.50 ms in 4 KiB pieces
+(`compare_codecs.mbtx stream`, the second of two runs).
 
 Encoding (text, then binary), at each package's default level and, if it
 has another, its highest:

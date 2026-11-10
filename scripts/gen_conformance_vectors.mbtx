@@ -1,7 +1,7 @@
 ----
 import {
-  "moonbitlang/async@0.22.5",
-  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/core/async",
+  "moonbitlang/core/async/fs",
   "moonbitlang/core/env",
   "moonbitlang/core/string",
 }
@@ -143,15 +143,15 @@ async fn main {
   let stale = []
   for format in formats {
     let (fmt, path) = format
-    let source = @fs.read_file(path).text()
+    let source = @fs.read_text(path)
     let text = render(fmt, path, entries(source), source)
     let target = "conformance/src/\{fmt}_vectors_test.mbt"
     if check {
-      if !@fs.exists(target) || @fs.read_file(target).text() != text {
+      if !@fs.exists(target) || @fs.read_text(target) != text {
         stale.push(target)
       }
     } else {
-      @fs.write_file(target, text)
+      @fs.write_text(target, text)
       let count = text.split("    name: ").count() - 1
       println("\{target}: \{count} vectors")
     }

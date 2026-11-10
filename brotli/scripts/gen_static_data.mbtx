@@ -1,8 +1,8 @@
 ----
 import {
-  "moonbitlang/async@0.22.5",
-  "moonbitlang/async@0.22.5/fs",
-  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/core/async",
+  "moonbitlang/core/async/fs",
+  "moonbitlang/core/async/shell",
   "moonbitlang/core/encoding/utf8",
   "moonbitlang/core/env",
 }
@@ -363,7 +363,7 @@ async fn main {
   let (dictionary, rfc) = match args {
     [] => (fetch(dictionary_url), @utf8.decode(fetch(rfc_url)))
     [dictionary, rfc] =>
-      (@fs.read_file(dictionary).binary(), @fs.read_file(rfc).text())
+      (@fs.read_binary(dictionary), @fs.read_text(rfc))
     _ =>
       fail(
         "usage: moon run brotli/scripts/gen_static_data.mbtx [-- DICTIONARY_BIN RFC7932_TXT]",
@@ -372,7 +372,7 @@ async fn main {
   if dictionary.length() != 122784 {
     fail("dictionary is \{dictionary.length()} bytes, expected 122784")
   }
-  @fs.write_file(target, render(dictionary, lines(rfc)))
+  @fs.write_text(target, render(dictionary, lines(rfc)))
   // Leave the file as `moon fmt` would, so the gates' fmt check passes.
   @shell.Cmd("moon", ["fmt", target]).run()
   println("wrote \{target}")

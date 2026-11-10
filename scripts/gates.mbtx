@@ -1,8 +1,8 @@
 ----
 import {
-  "moonbitlang/async@0.22.5",
-  "moonbitlang/async@0.22.5/fs",
-  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/core/async",
+  "moonbitlang/core/async/fs",
+  "moonbitlang/core/async/shell",
   "moonbitlang/core/env",
   "moonbitlang/core/json",
 }
@@ -48,7 +48,7 @@ async fn ledgered() -> Array[String] {
   guard @fs.exists(path) else {
     die(2, "no \{path}: run from the repository root")
   }
-  let config = @json.parse(@fs.read_file(path).text())
+  let config = @json.parse(@fs.read_text(path))
   guard config is { "ledgered": Array(list), .. } else {
     die(2, "\{path} has no \"ledgered\" list")
   }

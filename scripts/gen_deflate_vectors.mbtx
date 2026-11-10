@@ -1,8 +1,8 @@
 ----
 import {
-  "moonbitlang/async@0.22.5",
-  "moonbitlang/async@0.22.5/fs",
-  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/core/async",
+  "moonbitlang/core/async/fs",
+  "moonbitlang/core/async/shell",
   "moonbitlang/core/encoding/base64",
   "moonbitlang/core/env",
   "moonbitlang/x@0.5.6/crypto",
@@ -321,7 +321,7 @@ async fn gzip(args : Array[String], input : Bytes, name : String?) -> Bytes {
       let dir = "_build/gen_deflate_vectors"
       @fs.mkdir(dir, recursive=true, allow_exist=true)
       let path = "\{dir}/\{name}"
-      @fs.write_file(path, input)
+      @fs.write_binary(path, input)
       @shell.Cmd("touch", ["-d", "@1700000000", path]).output().check()
       let output = @shell.Cmd("gzip", ["-c", "-N", ..args, path]).output(
         max_output_bytes=1 << 26,
@@ -1963,7 +1963,7 @@ async fn main {
     }
     let file = if check {
       guard @fs.exists(target) else { fail("\{target} is missing") }
-      Some(@fs.read_file(target).text())
+      Some(@fs.read_text(target))
     } else {
       None
     }
@@ -2022,7 +2022,7 @@ async fn main {
         stale.push(target)
       }
     } else {
-      @fs.write_file(target, text)
+      @fs.write_text(target, text)
       println(
         "\{target}: \{vectors.length()} vectors, \{dictionaries.length()} with a dictionary, \{crafted.length()} crafted, \{corruptions.length()} corruptions",
       )

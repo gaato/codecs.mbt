@@ -1,8 +1,8 @@
 ----
 import {
-  "moonbitlang/async@0.22.5",
-  "moonbitlang/async@0.22.5/fs",
-  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/core/async",
+  "moonbitlang/core/async/fs",
+  "moonbitlang/core/async/shell",
   "moonbitlang/core/encoding/base64",
   "moonbitlang/core/env",
   "moonbitlang/x@0.5.6/crypto",
@@ -218,7 +218,7 @@ async fn vectors(command : Array[String], check : Bool) -> Unit {
   for line in lines[1:] {
     let fields = line.split(" ").map(f => f.to_owned()).to_array()
     let file = fields[0]
-    let data = @fs.read_file("\{unpacked}/\{file}").binary()
+    let data = @fs.read_binary("\{unpacked}/\{file}")
     let name = file.strip_suffix(".png").unwrap_or(file[:]).to_owned()
     let answer = fields[1:].to_owned().join(" ")
     out.write_string((
@@ -234,13 +234,13 @@ async fn vectors(command : Array[String], check : Bool) -> Unit {
   let text = formatted(out.to_string())
   if check {
     guard @fs.exists(target) else { fail("\{target} is missing") }
-    if @fs.read_file(target).text() != text {
+    if @fs.read_text(target) != text {
       fail(
         "\{target} is stale (or the reference is \{version}): run moon run scripts/gen_png_vectors.mbtx",
       )
     }
   } else {
-    @fs.write_file(target, text)
+    @fs.write_text(target, text)
     println("wrote \{target}")
   }
 }
@@ -503,7 +503,7 @@ async fn bench_data(command : Array[String], check : Bool) -> Unit {
   let raw = picture(bench_width, bench_height)
   let file = if check {
     guard @fs.exists(bench_target) else { fail("\{bench_target} is missing") }
-    Some(@fs.read_file(bench_target).text())
+    Some(@fs.read_text(bench_target))
   } else {
     None
   }
@@ -552,7 +552,7 @@ async fn bench_data(command : Array[String], check : Bool) -> Unit {
       fail(stale)
     }
   } else {
-    @fs.write_file(bench_target, text)
+    @fs.write_text(bench_target, text)
     println("wrote \{bench_target}")
   }
 }
@@ -560,7 +560,7 @@ async fn bench_data(command : Array[String], check : Bool) -> Unit {
 ///|
 async fn main {
   let check = @env.args().contains("--check")
-  let archive = @fs.read_file(tarball).binary()
+  let archive = @fs.read_binary(tarball)
   if hex_digest(archive) != tarball_sha256 {
     fail("\{tarball} is not PngSuite's release of 2017-07-19")
   }

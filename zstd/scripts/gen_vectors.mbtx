@@ -1,8 +1,8 @@
 ----
 import {
-  "moonbitlang/async@0.22.5",
-  "moonbitlang/async@0.22.5/fs",
-  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/core/async",
+  "moonbitlang/core/async/fs",
+  "moonbitlang/core/async/shell",
   "moonbitlang/core/encoding/base64",
   "moonbitlang/core/env",
   "moonbitlang/x@0.5.6/crypto",
@@ -572,7 +572,7 @@ async fn render(
   let vectors = []
   for name in golden {
     let path = "\{upstream}/golden-decompression/\{name}"
-    let compressed = @fs.read_file(path).binary()
+    let compressed = @fs.read_binary(path)
     vectors.push(("upstream/\{name}", compressed, decompress(compressed)))
   }
   for named in generated() {
@@ -625,7 +625,7 @@ async fn render(
   )
   for name in golden_errors {
     let path = "\{upstream}/golden-decompression-errors/\{name}"
-    let compressed = @fs.read_file(path).binary()
+    let compressed = @fs.read_binary(path)
     let refused = @shell.Cmd(
       "zstd",
       ["-d", "-c", "-q", "-q"],
@@ -690,7 +690,7 @@ async fn main {
   let kinds = Map([])
   if @env.args().contains("--check") {
     guard @fs.exists(target) else { fail(stale) }
-    let file = @fs.read_file(target).text()
+    let file = @fs.read_text(target)
     guard stored_version(file) is Some(version) else { fail(stale) }
     let streams = stored(file)
     let text = render(version, (name, _) => {
@@ -710,7 +710,7 @@ async fn main {
       println("  \{kind}: \{n}")
     }
     check_kinds(kinds)
-    @fs.write_file(target, text)
+    @fs.write_text(target, text)
     println("\{target}: \{text.length()} characters")
   }
 }

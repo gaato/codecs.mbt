@@ -1,8 +1,8 @@
 ----
 import {
-  "moonbitlang/async@0.22.5",
-  "moonbitlang/async@0.22.5/fs",
-  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/core/async",
+  "moonbitlang/core/async/fs",
+  "moonbitlang/core/async/shell",
   "moonbitlang/core/encoding/base64",
   "moonbitlang/core/env",
   "moonbitlang/core/string",
@@ -264,7 +264,7 @@ fn records(text : String, list : String) -> Array[Map[String, String]] {
 
 ///|
 async fn read_text(path : String) -> String {
-  @fs.read_file(path).text()
+  @fs.read_text(path)
 }
 
 // ---------------------------------------------------------------------------
@@ -773,11 +773,11 @@ async fn write_cases(dir : String, cases : Array[Case]) -> Unit {
   let index = StringBuilder()
   for i, c in cases {
     let input = "files/\{i}.bin"
-    @fs.write_file("\{dir}/\{input}", c.input)
+    @fs.write_binary("\{dir}/\{input}", c.input)
     let dict = match c.dictionary {
       Some(d) => {
         let path = "files/\{i}.dict"
-        @fs.write_file("\{dir}/\{path}", d)
+        @fs.write_binary("\{dir}/\{path}", d)
         path
       }
       None => ""
@@ -786,7 +786,7 @@ async fn write_cases(dir : String, cases : Array[Case]) -> Unit {
       "\{c.format}\t\{c.name}\t\{input}\t\{c.expect}\t\{dict}\n",
     )
   }
-  @fs.write_file("\{dir}/cases.tsv", index.to_string())
+  @fs.write_text("\{dir}/cases.tsv", index.to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -1031,7 +1031,7 @@ async fn filter(program : String, args : Array[String], input : Bytes) -> Bytes 
 ///|
 /// A raw DEFLATE and a zlib stream of `input`, from Node's zlib at level 6.
 async fn node_deflate(input : Bytes, dir : String) -> (String, String) {
-  @fs.write_file("\{dir}/plain", input)
+  @fs.write_binary("\{dir}/plain", input)
   let script =
     $|const zlib = require("node:zlib"); const fs = require("node:fs");
     $|const input = fs.readFileSync("\{dir}/plain");
@@ -1057,12 +1057,12 @@ async fn streams_of(input : Bytes, dir : String) -> Map[String, String] {
     "deflate": deflate,
     "zlib": zlib,
   }
-  @fs.write_file(files["zstd"], filter("zstd", ["-3", "-c"], input))
-  @fs.write_file(
+  @fs.write_binary(files["zstd"], filter("zstd", ["-3", "-c"], input))
+  @fs.write_binary(
     files["brotli"],
     filter("brotli", ["-q", "9", "-w", "22", "-c"], input),
   )
-  @fs.write_file(files["gzip"], filter("gzip", ["-6", "-n", "-c"], input))
+  @fs.write_binary(files["gzip"], filter("gzip", ["-6", "-n", "-c"], input))
   @fs.remove("\{dir}/plain")
   files
 }
@@ -1180,7 +1180,7 @@ async fn memory(dir : String, timeout_s : Int32, only : String) -> Unit {
   let small = streams_of(text, "\{dir}/memory-small")
   println("format\tcompressed input of 256 MiB (bytes)")
   for format in ["zstd", "brotli", "deflate", "zlib", "gzip"] {
-    let size = @fs.read_file(files[format]).binary().length()
+    let size = @fs.read_binary(files[format]).length()
     println("\{format}\t\{size}")
   }
   println("")
@@ -1242,8 +1242,8 @@ async fn ratio(
   @fs.mkdir("\{work}/dump", recursive=true)
   let text = bench_text()
   let binary = filter("zstd", ["-d", "-c"], bench_data("zstd_binary"))
-  @fs.write_file("\{work}/bench_text", text)
-  @fs.write_file("\{work}/bench_binary", binary)
+  @fs.write_binary("\{work}/bench_text", text)
+  @fs.write_binary("\{work}/bench_binary", binary)
   let paths = ["\{work}/bench_text", "\{work}/bench_binary"]
   for d in dirs {
     let names = @fs.readdir(d)
@@ -1288,7 +1288,7 @@ async fn ratio(
           max_output_bytes=1 << 28,
         )
         out.check()
-        let size = @fs.read_file(path).binary().length()
+        let size = @fs.read_binary(path).length()
         println(
           "brotli \{args.join(" ")}\treference\t\t\{path}\t\{size}\t\{out.stdout_bytes().length()}\t0\t",
         )
@@ -1305,7 +1305,7 @@ async fn ratio(
       println("\{n}: no input file of that name")
       continue
     }
-    let original = @fs.read_file(paths[at]).binary()
+    let original = @fs.read_binary(paths[at])
     let cmd = if format == "brotli" {
       @shell.Cmd("brotli", ["-d", "-c", "\{work}/dump/\{n}"])
     } else {
@@ -1433,7 +1433,7 @@ async fn claims(
       continue
     }
     let path = "\{work}/\{name.replace_all(old="/", new="_")}"
-    @fs.write_file(path, input)
+    @fs.write_binary(path, input)
     // The reference, with no limit: Node reserves more address space at
     // start than the decoders are allowed.
     let (program, args) = match format {
@@ -1554,7 +1554,7 @@ async fn speed(out : String, runs : Int32) -> Unit {
         ],
         env={ "MOON_CC": "cc" },
       ).output(max_output_bytes=1 << 24)
-      @fs.write_file(
+      @fs.write_text(
         "\{out}/\{target}-\{run}.txt",
         "\{result.stdout()}\{result.stderr()}",
       )

@@ -1,7 +1,7 @@
 ----
 import {
-  "moonbitlang/async@0.22.5",
-  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/core/async",
+  "moonbitlang/core/async/fs",
   "moonbitlang/core/env",
 }
 ----
@@ -154,7 +154,7 @@ async fn main {
   guard is_file(ledger) else {
     die(2, "bounds_check.mbtx: no ledger at \{ledger}")
   }
-  let (header, found) = table(@fs.read_file(ledger).text())
+  let (header, found) = table(@fs.read_text(ledger))
   guard header is Some("Tests") else {
     die(
       2,
@@ -178,8 +178,7 @@ async fn main {
         if !declared.contains(path) {
           declared[path] = if is_file(path) {
             Some(
-              @fs.read_file(path)
-              .text()
+              @fs.read_text(path)
               .split("\n")
               .map(l => l.to_owned())
               .to_array(),
