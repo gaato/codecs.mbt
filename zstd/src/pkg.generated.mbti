@@ -7,6 +7,8 @@ import {
 }
 
 // Values
+pub fn compress(BytesView, level? : Int32, checksum? : Bool) -> Bytes
+
 pub fn decompress(BytesView, max_output? : Int32, max_window_bits? : Int32) -> Bytes raise @codec.CodecError
 
 // Errors
@@ -25,7 +27,22 @@ pub fn Decoder::step(Self, BytesView, MutArrayView[Byte], end~ : Bool) -> @codec
 pub fn Decoder::step_into(Self, BytesView, FixedArray[Byte], end~ : Bool) -> @codec_bytes.Status raise @codec.CodecError
 pub impl @codec_bytes.Decode for Decoder
 
+pub struct Encoder {
+  // private fields
+}
+pub fn Encoder::Encoder(level? : Int32, checksum? : Bool, content_size? : Int64) -> Self
+pub fn Encoder::is_finished(Self) -> Bool
+pub fn Encoder::last_consumed(Self) -> Int32
+pub fn Encoder::last_produced(Self) -> Int32
+pub fn Encoder::memory_usage(Self) -> Int32
+pub fn Encoder::reset(Self) -> Unit
+pub fn Encoder::step(Self, BytesView, MutArrayView[Byte], action~ : @codec_bytes.EncodeAction) -> @codec_bytes.Status raise @codec.CodecError
+pub fn Encoder::step_into(Self, BytesView, FixedArray[Byte], action~ : @codec_bytes.EncodeAction) -> @codec_bytes.Status raise @codec.CodecError
+pub impl @codec_bytes.Encode for Encoder
+
 // Type aliases
+pub using @codec_bytes {type EncodeAction}
+
 pub using @codec_bytes {type Status}
 
 // Traits

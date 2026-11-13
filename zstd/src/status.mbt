@@ -1,7 +1,13 @@
 ///|
-/// Outcome of one `Decoder::step`: `Done`, `NeedMoreInput` or
-/// `NeedMoreOutput`, as every `gaato/codec_bytes` decoder answers.
+/// Outcome of one `Decoder::step` or `Encoder::step`: `Done`,
+/// `NeedMoreInput` or `NeedMoreOutput`, as every `gaato/codec_bytes` codec
+/// answers.
 pub using @codec_bytes {type Status}
+
+///|
+/// What `Encoder::step` does once its input is taken: `Continue`, `Flush`
+/// or `Finish`, as every `gaato/codec_bytes` encoder takes it.
+pub using @codec_bytes {type EncodeAction}
 
 ///|
 /// Why a unit stopped early, inside the decoder.

@@ -1,0 +1,12 @@
+// Prints frames made by the encoder, for scripts/crosscheck.mbtx to decode
+// with the reference decoders. Not part of the library.
+
+import {
+  "gaato/zstd",
+  "gaato/zstd/internal/checksum",
+  "moonbitlang/core/encoding/base64",
+}
+
+pkgtype(kind: "executable")
+
+supported_targets = "js + native + wasm + wasm-gc"

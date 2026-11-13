@@ -25,13 +25,13 @@ and corruptions.
 
 ### What is measured
 
-- Sources: every non-test `.mbt` directly under `src/`, the library package,
-  and under the internal packages it ships (`src/internal/header/`,
+- Sources: every non-test `.mbt` directly under `src/`, the library package
+  (the decoder and the encoder), and under the internal packages it ships (`src/internal/header/`,
   `src/internal/frame/`, `src/internal/huffman/`, `src/internal/xxhash/`,
   the encoder's `src/internal/fse/` and `src/internal/huffenc/`, the copies
   of `parts/` in `src/internal/bits/` and `src/internal/huffman_code/`, and
-  the proof packages). The test-only checksum package under `src/internal/`
-  is not measured.
+  the proof packages). The test-only checksum package and the crosscheck
+  tool under `src/internal/` are not measured.
 - Counts are Coveralls lines: lines with at least one instrumented point,
   covered when any point on them ran.
 
@@ -46,7 +46,7 @@ and corruptions.
 - moon's bundled tcc cannot link on some hosts (openSUSE); the script sets
   `MOON_CC=cc` unless it is already set.
 
-Snapshot at the last full measurement (2026-11-13): **98.8 %** (1108/1122
+Snapshot at the last full measurement (2026-11-13): **99.0 %** (1351/1365
 lines).
 
 ## Policy

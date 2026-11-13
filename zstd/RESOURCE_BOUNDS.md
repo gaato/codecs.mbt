@@ -1,7 +1,7 @@
 # Resource bounds
 
-What a decoder holds, and what keeps each structure from growing without
-limit. The rule: **every structure that grows with the input is listed here
+What a decoder and an encoder hold, and what keeps each structure from
+growing without limit. The rule: **every structure that grows with the input is listed here
 with its bound**. A new one needs a row before it ships.
 
 **Every row of "Enforced limits" names a test that checks the bound**, in its
@@ -30,6 +30,12 @@ checked against the limits before anything is allocated from them.
 | Reported memory (`Decoder::memory_usage`) | The window, the compressed block and the literals buffer: at most `(1 << max_window_bits) + 2 * 128 KiB`. The fixed tables below are not counted. It drops when the window is released for a frame that needs a smaller one, and to 0 at `reset` | Cannot overflow: each part is bounded by its own row | `src/bounds_wbtest.mbt`: "memory_usage stays within the window limit and two blocks", "memory_usage drops when a frame needs a smaller window" |
 | Huffman weights (`src/huffman.mbt`, `weights`) | 255 decoded weights, as RFC 8878 allows | `Corrupt` | `src/crafted_wbtest.mbt`: "Huffman tree descriptions" |
 | One-shot output (`decompress`, `max_output`) | `max_output` bytes when given; unlimited by default | `LimitExceeded({ resource: Output, needed: None, limit: max_output })` | `src/decode_wbtest.mbt`: "decompress honours max_output" |
+| Encoder input buffer (`src/encoder.mbt`, `data`) | One block not encoded yet: Block_Maximum_Size, min(window, 128 KiB), and for a single-segment frame no more than its content size. Allocated from 1 KiB, doubling only as input arrives; released at `reset` | Cannot overflow: a step takes no more input than fills a block, and a full block is encoded before more is taken | `src/bounds_wbtest.mbt`: "the encoder's input buffer is at most a block, and grows only with input" |
+| Encoder output waiting (`src/encoder.mbt`, `writer`, a `BitPacker` of `src/internal/bits`) | One block (3 + 128 KiB: a compressed block is chosen only when smaller than the raw one), with the magic number and the frame header (at most 14 bytes) before the first and the checksum (4) after the last: at most 131,093 bytes. The buffer doubles as it grows, so it may be up to twice that and 5 bytes | `NeedMoreOutput`; no input is taken and no block encoded until the caller has taken it all | `src/bounds_wbtest.mbt`: "the encoder's waiting output is at most a block and the frame's header and checksum" |
+| Huffman coder's stream buffers (`src/internal/huffenc`, `packer` and `copy`) | Four literal streams, written only for a block they make smaller than raw: less than 128 KiB. The writer doubles as it grows (up to twice that and 5 bytes); the copy is exactly the largest so far | Cannot overflow: bounded by the block | `src/bounds_wbtest.mbt`: "the encoder's memory_usage stays within its bound after every step" |
+| Encoder memory (`Encoder::memory_usage`) | Everything the encoder allocates: the input buffer, the waiting output and the Huffman coder's buffers above, and the fixed tables below: at most 131,072 + 2 * 131,098 + 2 * 131,077 + 131,072 + 8,036 = 794,530 bytes, whatever the level | Cannot overflow: each part is bounded by its own row | `src/bounds_wbtest.mbt`: "the encoder's memory_usage stays within its bound after every step", "the encoder's fixed tables and its memory bound" |
+| Encoded size | A block is the smallest of raw, RLE and compressed, so a frame is at most its input, 3 bytes a block (an empty block for no input), the frame header and the checksum | Cannot overflow | `src/encode_wbtest.mbt`: "incompressible input costs 3 bytes a block and the frame's header and checksum" |
+| Encoder input against its content size (`Encoder(content_size=..)`) | Exactly the content size given, which the frame header declares | `ChecksumMismatch`, as soon as a step's input would pass it (nothing of it taken) or at `Finish` short of it | `src/encode_wbtest.mbt`: "the input must match the content size given" |
 
 ## Fixed per decoder
 
@@ -40,10 +46,18 @@ checked against the limits before anything is allocated from them.
 | Table scratch, XXH64 state, repeat offsets | About 2 KiB |
 | The predefined tables | 160 states, shared by all decoders |
 
+## Fixed per encoder
+
+| Structure | Size |
+|---|---|
+| Literals writer (`src/block_writer.mbt`, `LiteralsWriter`) | 8,036 bytes, counted by `memory_usage`: the Huffman coder's code maker, code and weight tables, its 64-state FSE table for weights and the tree description, and two arrays of 256 byte counts |
+| XXH64 state, flags | Under 100 bytes |
+
 ## Left to the caller
 
 | Structure | Grows with | Why it is not bounded here |
 |---|---|---|
 | Total output of a stream | The stream | `step` hands it out in slices; the caller decides what to keep |
-| Input chunks | What the caller passes | `step` keeps no reference to them after it returns; what it needs it copies |
+| Input chunks | What the caller passes | `step` keeps no reference to them after it returns; what it needs it copies, the encoder as well |
+| `compress` output | The input | It returns the whole frame; use `Encoder` to stream |
 | `decompress` output | The stream | It returns the whole output; pass `max_output`, or use `Decoder` |

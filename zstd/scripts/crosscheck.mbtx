@@ -1,0 +1,290 @@
+----
+import {
+  "moonbitlang/core/async",
+  "moonbitlang/core/async/fs",
+  "moonbitlang/core/async/shell",
+  "moonbitlang/core/encoding/base64",
+  "moonbitlang/core/encoding/hex",
+  "moonbitlang/core/env",
+  "moonbitlang/core/string",
+  "moonbitlang/x@0.5.6/crypto",
+}
+----
+
+// Decodes the encoder's frames with two reference decoders that share no
+// code with this one: the `zstd` command (facebook/zstd) and Node's zlib
+// (zstdDecompressSync).
+//
+// Runs src/internal/crosscheck, which prints one line per stream: a name, the
+// length and SHA-256 of the input so far, and the base64 of the stream so far.
+// Each stream must decode to exactly that input, with both decoders:
+// - a whole frame with `zstd -d`, which fails on a frame that is cut short,
+//   corrupt, has the wrong checksum or content size, or is followed by more
+//   bytes; and with Node, told that the input is complete, which fails on the
+//   same;
+// - a frame cut after a flush (" flush " in its name), which must give out
+//   everything before the flush without being told the end. Node is given
+//   finishFlush ZSTD_e_flush, so that it returns what it gave out instead of
+//   raising "unexpected end of file"; a frame that holds back some of its
+//   input decodes to fewer bytes, and the length and SHA-256 catch that.
+//   `zstd -d` writes what it decoded and then fails with "premature end",
+//   but once more than its 128 KiB output buffer came out it holds back the
+//   rest, for frames that zstd flushed as well (zstd 1.5.7, checked with a
+//   frame from Node's createZstdCompress flushed after 140,000 bytes). So
+//   its failure is expected and its output must be a prefix of the input so
+//   far, compared with what it decodes from the whole frame of the same run.
+//
+// Usage, from the repository root (needs the zstd command and node):
+//   moon run zstd/scripts/crosscheck.mbtx [-- --target native|js|wasm|wasm-gc] [--compare]
+//   --compare  also print, for every whole frame at levels 1, 3 and 12, the
+//              size from `zstd` at the same level, for the ratio record.
+// Exit status: 0 = every stream decodes, 1 = one does not, 2 = setup failure.
+
+///|
+/// Decodes each line of stdin (whether the frame was cut after a flush, and
+/// its base64) and prints the length and SHA-256 of what came out, or
+/// `error` and why.
+let node_decoder : String =
+  #|const zlib = require("node:zlib");
+  #|const crypto = require("node:crypto");
+  #|const lines = require("node:fs").readFileSync(0, "latin1").split("\n");
+  #|lines.pop();
+  #|for (const line of lines) {
+  #|  const [flushed, data] = line.split("\t");
+  #|  const options = flushed === "1"
+  #|    ? { finishFlush: zlib.constants.ZSTD_e_flush } : {};
+  #|  try {
+  #|    const out = zlib.zstdDecompressSync(Buffer.from(data, "base64"), options);
+  #|    const digest = crypto.createHash("sha256").update(out).digest("hex");
+  #|    console.log(`${out.length} ${digest}`);
+  #|  } catch (err) {
+  #|    console.log(`error ${err.message}`);
+  #|  }
+  #|}
+
+///|
+/// 1 GiB: more than the crosscheck tool prints and any stream decodes to.
+let max_output : Int = 1 << 30
+
+///|
+fn[T] setup_failure(message : String) -> T {
+  eprintln(message)
+  @env.exit(2)
+}
+
+///|
+struct Stream {
+  name : String
+  flushed : Bool
+  size : Int
+  digest : String
+  data : Bytes
+}
+
+///|
+fn sha256_hex(data : Bytes) -> String {
+  @hex.encode(Bytes::from_array(@crypto.sha256(data)))
+}
+
+///|
+/// `n / d` with three decimals.
+fn ratio(n : Int, d : Int) -> String {
+  let thousandths = (n.to_int64() * 1000 + (d / 2).to_int64()) / d.to_int64()
+  let frac = (thousandths % 1000).to_string()
+  "\{thousandths / 1000}.\{"0".repeat(3 - frac.length())}\{frac}"
+}
+
+///|
+async fn main {
+  let mut target = "native"
+  let mut compare = false
+  let args = @env.args()[1:]
+  let mut i = 0
+  while i < args.length() {
+    match args[i] {
+      "--compare" => compare = true
+      "--target" if i + 1 < args.length() => {
+        target = args[i + 1]
+        i += 1
+      }
+      arg if arg.strip_prefix("--target=") is Some(value) =>
+        target = value.to_owned()
+      arg => {
+        setup_failure(
+          "unknown argument \{arg}\nusage: moon run zstd/scripts/crosscheck.mbtx [-- --target native|js|wasm|wasm-gc] [--compare]",
+        )
+        return
+      }
+    }
+    i += 1
+  }
+  if !@fs.exists("zstd/moon.mod") {
+    setup_failure("run from the repository root")
+    return
+  }
+  for tool in ["zstd", "node"] {
+    @shell.Cmd(tool, ["--version"]).output().check() catch {
+      _ => {
+        setup_failure("crosscheck.mbtx needs the \{tool} command")
+        return
+      }
+    }
+  }
+  let env = if @env.get_env_var("MOON_CC") is None {
+    { "MOON_CC": "cc" }
+  } else {
+    {}
+  }
+  let run = @shell.Cmd(
+    "moon",
+    ["run", "--release", "--target", target, "src/internal/crosscheck"],
+    cwd="zstd",
+    env~,
+  ).output(max_output_bytes=max_output)
+  if run.exit_code() != 0 {
+    setup_failure(run.stderr())
+    return
+  }
+  let streams = []
+  for line in run.stdout().split("\n") {
+    if line.is_empty() {
+      continue
+    }
+    guard line.split("\t").collect() is [name, size, digest, data] else {
+      setup_failure("unexpected line from the crosscheck tool: \{line}")
+      return
+    }
+    streams.push({
+      name: name.to_owned(),
+      flushed: name.contains(" flush "),
+      size: @string.parse_int(size),
+      digest: digest.to_owned(),
+      data: @base64.decode(data),
+    })
+  }
+  // Every stream through one Node process.
+  let input = StringBuilder()
+  for s in streams {
+    let flushed = if s.flushed { "1" } else { "0" }
+    input.write_string("\{flushed}\t\{@base64.encode(s.data)}\n")
+  }
+  let node = @shell.Cmd(
+    "node",
+    ["-e", node_decoder],
+    stdin=Text(input.to_string()),
+  ).output(max_output_bytes=max_output)
+  if node.exit_code() != 0 {
+    setup_failure("node: \{node.stderr()}")
+    return
+  }
+  let node_results = node.stdout().split("\n").map(l => l.to_owned()).collect()
+  if node_results.length() != streams.length() + 1 {
+    setup_failure(
+      "node answered \{node_results.length() - 1} of \{streams.length()} streams",
+    )
+    return
+  }
+  let mut failures = 0
+  let mut checked = 0
+  let mut held_back = 0
+  // Whole frames first; what `zstd -d` made of each, for the frames cut
+  // after a flush of the same run.
+  let whole : Map[String, Bytes] = Map([])
+  for flushed_pass in [false, true] {
+    for n, s in streams {
+      if s.flushed != flushed_pass {
+        continue
+      }
+      let result = node_results[n]
+      if result.strip_prefix("error ") is Some(err) {
+        println("FAIL \{s.name}: node: \{err}")
+        failures += 1
+        continue
+      }
+      if result != "\{s.size} \{s.digest}" {
+        let length = result.split(" ").collect()[0]
+        println("FAIL \{s.name}: node decodes it to \{length} different bytes")
+        failures += 1
+        continue
+      }
+      let output = @shell.Cmd("zstd", ["-d", "-c", "-q"], stdin=Binary(s.data)).output(
+        max_output_bytes=max_output,
+      )
+      let stderr = output.stderr().trim()
+      let decoded = output.stdout_bytes()
+      if s.flushed {
+        // What came out before the frame was found cut short. The command
+        // holds back the end of the output past its 128 KiB buffer (it does
+        // the same with frames zstd itself flushed), so what it wrote must
+        // be a prefix of the input so far.
+        guard s.name.split(" flush ").collect() is [run, ..] &&
+          whole.get(run.to_owned()) is Some(full) else {
+          setup_failure("no whole frame for \{s.name}")
+          return
+        }
+        if output.exit_code() == 0 || !stderr.contains("premature end") {
+          println(
+            "FAIL \{s.name}: zstd -d does not see a frame cut short: \{stderr}",
+          )
+          failures += 1
+          continue
+        }
+        if full.length() < s.size ||
+          sha256_hex(full[:s.size].to_owned()) != s.digest ||
+          decoded.length() > s.size ||
+          decoded != full[:decoded.length()].to_owned() {
+          println(
+            "FAIL \{s.name}: zstd -d decodes it to \{decoded.length()} bytes that are not the input so far",
+          )
+          failures += 1
+          continue
+        }
+        if decoded.length() < s.size {
+          held_back += 1
+        }
+        checked += 1
+        continue
+      }
+      if output.exit_code() != 0 {
+        println("FAIL \{s.name}: zstd -d: \{stderr}")
+        failures += 1
+        continue
+      }
+      if decoded.length() != s.size || sha256_hex(decoded) != s.digest {
+        println(
+          "FAIL \{s.name}: zstd -d decodes it to \{decoded.length()} different bytes",
+        )
+        failures += 1
+        continue
+      }
+      whole[s.name] = decoded
+      checked += 1
+      println(
+        "ok   \{s.name}: \{s.size} -> \{s.data.length()} bytes (\{ratio(s.data.length(), s.size.max(1))})",
+      )
+      if compare &&
+        s.size > 1 &&
+        s.name.split(" ").collect() is [_, level] &&
+        level is ("l1" | "l3" | "l12") {
+        let reference = @shell.Cmd(
+          "zstd",
+          ["-\{level[1:]}", "-c", "-q"],
+          stdin=Binary(decoded),
+        ).output(max_output_bytes=max_output)
+        reference.check()
+        println("       zstd -\{level[1:]} \{reference.stdout_bytes().length()}")
+      }
+    }
+  }
+  if checked == 0 {
+    setup_failure("no streams checked")
+    return
+  }
+  let failed = if failures > 0 { ", \{failures} FAILED" } else { "" }
+  println(
+    "crosscheck: \{checked} streams decode with zstd -d and Node's zstd (zstd -d held back the end of \{held_back} flushed ones)\{failed}",
+  )
+  if failures > 0 {
+    @env.exit(1)
+  }
+}

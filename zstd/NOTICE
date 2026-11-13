@@ -6,3 +6,7 @@ and tests/golden-decompression-errors, at commit
 them. They are used under facebook/zstd's BSD license, testdata/upstream/LICENSE:
 
   Copyright (c) Meta Platforms, Inc. and affiliates. All rights reserved.
+
+src/params.mbt transcribes the compression parameters of levels 1 to 12 from
+facebook/zstd v1.5.7, lib/compress/clevels.h (ZSTD_defaultCParameters), under
+the same BSD license.

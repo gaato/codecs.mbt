@@ -1,16 +1,16 @@
 import {
   "gaato/codec",
   "gaato/codec_bytes",
+  "gaato/zstd/internal/bits",
   "gaato/zstd/internal/fse",
   "gaato/zstd/internal/header",
+  "gaato/zstd/internal/huffenc",
   "gaato/zstd/internal/huffman",
   "gaato/zstd/internal/xxhash",
 }
 
 import {
-  "gaato/zstd/internal/bits",
   "gaato/zstd/internal/checksum",
-  "gaato/zstd/internal/huffenc",
   "moonbitlang/core/encoding/base64",
 } for "wbtest"
 

@@ -88,3 +88,65 @@ test "until=EndOfMember leaves what follows the first frame" {
   inspect(decoder.last_produced(), content="104")
   inspect(two[decoder.last_consumed():] == hello[:], content="true")
 }
+
+///|
+test "compress and decompress round-trip" {
+  let text = b"Hello, zstd! ".repeat(8)
+  let frame = @zstd.compress(text)
+  assert_eq(@zstd.decompress(frame), text)
+  // Levels 1 to 12; others are clamped.
+  assert_eq(@zstd.decompress(@zstd.compress(text, level=19)), text)
+  // Without the checksum, 4 bytes shorter.
+  let unchecked = @zstd.compress(text, checksum=false)
+  assert_eq(@zstd.decompress(unchecked), text)
+  inspect(frame.length() - unchecked.length(), content="4")
+}
+
+///|
+/// Encodes `input` with any `gaato/codec_bytes` encoder, in 7-byte chunks
+/// into 10-byte slices.
+fn[E : @codec_bytes.Encode] encode_with(e : E, input : Bytes) -> Bytes raise {
+  let out = FixedArray::make(10, b'\x00')
+  let encoded = Buffer()
+  let mut rest = input[:]
+  for ;; {
+    let chunk = rest[:rest.length().min(7)]
+    let action : @codec_bytes.EncodeAction = if chunk.length() == rest.length() {
+      Finish
+    } else {
+      Continue
+    }
+    let status = e.step(chunk, out.mut_view(), action~)
+    rest = rest[e.last_consumed():]
+    encoded.write_bytes(Bytes::from_array(out[:e.last_produced()]))
+    if status is Done {
+      return encoded.to_bytes()
+    }
+  }
+}
+
+///|
+test "the encoder is a gaato/codec_bytes Encode" {
+  let text = b"Hello, zstd! ".repeat(8)
+  let encoder = @zstd.Encoder()
+  let frame = encode_with(encoder, text)
+  assert_eq(@zstd.decompress(frame), text)
+  inspect(@codec_bytes.Encode::memory_usage(encoder) > 0, content="true")
+  @codec_bytes.Encode::reset(encoder)
+  assert_eq(encode_with(encoder, text), frame)
+  // Told the content size, it writes what `compress` writes.
+  let sized = @zstd.Encoder(content_size=text.length().to_int64())
+  assert_eq(encode_with(sized, text), @zstd.compress(text))
+}
+
+///|
+test "an input that does not match the content size given raises" {
+  let encoder = @zstd.Encoder(content_size=3)
+  let out = FixedArray::make(64, b'\x00')
+  let result = try encoder.step_into(b"four", out, action=Finish) catch {
+    @codec.CodecError(kind, _) => Repr(kind).to_string()
+  } noraise {
+    _ => "encoded"
+  }
+  inspect(result, content="ChecksumMismatch")
+}

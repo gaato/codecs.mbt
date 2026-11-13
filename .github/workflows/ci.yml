@@ -63,3 +63,6 @@ jobs:
 
       - name: Cross-check the DEFLATE, zlib and gzip encoders with the reference decoders
         run: moon run deflate/scripts/crosscheck.mbtx
+
+      - name: Cross-check the zstd encoder with the reference decoders
+        run: moon run zstd/scripts/crosscheck.mbtx

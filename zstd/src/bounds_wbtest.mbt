@@ -151,3 +151,174 @@ test "memory_usage drops when a frame needs a smaller window" {
   decoder.reset()
   inspect(decoder.memory_usage(), content="0")
 }
+
+///|
+/// The most bytes the encoder's output writer holds at once: the magic
+/// number and the longest frame header (4 + 10), one block (3 + 128 KiB)
+/// and the checksum (4).
+const ENCODER_PENDING_MAX : Int32 = 4 + 10 + 3 + MAX_BLOCK_SIZE + 4
+
+///|
+/// What RESOURCE_BOUNDS.md gives for `Encoder::memory_usage`: the input
+/// buffer (a block), the output writer and the Huffman coder's stream
+/// writer, each of which may grow to twice what it holds (plus the 5 bytes
+/// a write reserves), the Huffman coder's copy of four streams (less than a
+/// block), and the fixed tables of the literals writer.
+fn encoder_memory_bound() -> Int32 {
+  MAX_BLOCK_SIZE +
+  2 * (ENCODER_PENDING_MAX + 5) +
+  2 * (MAX_BLOCK_SIZE + 5) +
+  MAX_BLOCK_SIZE +
+  LiteralsWriter::new().memory_usage()
+}
+
+///|
+/// Checks the encoder's bounds after a step.
+fn check_encoder_bounds(e : Encoder, _room : Int32) -> Unit raise {
+  assert_true(e.data.length() <= e.block_max)
+  assert_true(e.block_max <= MAX_BLOCK_SIZE)
+  assert_true(e.data_len <= e.data.length())
+  assert_true(e.writer.pending() <= ENCODER_PENDING_MAX)
+  assert_eq(
+    e.memory_usage(),
+    e.data.length() + e.writer.capacity() + e.literals.memory_usage(),
+  )
+  assert_true(e.memory_usage() <= encoder_memory_bound())
+}
+
+///|
+test "the encoder's fixed tables and its memory bound" {
+  inspect(
+    LiteralsWriter::new().memory_usage(),
+    content=(
+      #|8036
+    ),
+  )
+  inspect(
+    encoder_memory_bound(),
+    content=(
+      #|794530
+    ),
+  )
+  // A new encoder holds only the fixed tables.
+  inspect(
+    Encoder().memory_usage() == LiteralsWriter::new().memory_usage(),
+    content="true",
+  )
+}
+
+///|
+test "the encoder's input buffer is at most a block, and grows only with input" {
+  let rng = Rng::new(42)
+  let largest = (input : Bytes, content_size : Int64?) => {
+    let encoder = match content_size {
+      Some(size) => Encoder(content_size=size)
+      None => Encoder()
+    }
+    let mut most = 0
+    encode_drive(encoder, input, next_in=() => 3000, next_out=() => 65536, check=(
+      e,
+      room,
+    ) => {
+      check_encoder_bounds(e, room)
+      most = most.max(e.data.length())
+    })
+    |> ignore
+    most
+  }
+  inspect(largest(sample_text(rng, 500), None), content="1024")
+  inspect(largest(sample_text(rng, 100000), None), content="131072")
+  inspect(largest(sample_text(rng, 400000), None), content="131072")
+  // A single-segment frame's blocks are at most its content.
+  inspect(largest(sample_text(rng, 1500), Some(1500)), content="1500")
+  // `reset` releases it.
+  let encoder = Encoder()
+  encode_drive(encoder, sample_text(rng, 100000), next_in=() => 100000, next_out=() => {
+    1 << 20
+  })
+  |> ignore
+  encoder.reset()
+  inspect(encoder.data.length(), content="0")
+}
+
+///|
+test "the encoder's waiting output is at most a block and the frame's header and checksum" {
+  let rng = Rng::new(43)
+  let most = (encoder : Encoder, input : Bytes) => {
+    let mut most = 0
+    encode_drive(encoder, input, next_in=() => 1 << 20, next_out=() => 1, check=(
+      e,
+      room,
+    ) => {
+      check_encoder_bounds(e, room)
+      most = most.max(e.writer.pending() + e.last_produced())
+    })
+    |> ignore
+    most
+  }
+  // An incompressible block, the last: magic, a descriptor and a 4-byte
+  // content size, the block and the checksum.
+  let random = sample_random(rng, MAX_BLOCK_SIZE)
+  inspect(
+    most(Encoder(content_size=MAX_BLOCK_SIZE.to_int64()), random),
+    content=(
+      #|131088
+    ),
+  )
+  // The longest header, with a window descriptor and an 8-byte content
+  // size, is 14 bytes with the magic number ("frame headers parse back, at
+  // every content size field", src/encode_format_wbtest.mbt): 4 bytes more
+  // than here, for inputs of 4 GiB and more.
+}
+
+///|
+test "the encoder's memory_usage stays within its bound after every step" {
+  let rng = Rng::new(44)
+  // Literals in four streams that Huffman barely shrinks: the coder's own
+  // buffers at their largest.
+  let skewed = Bytes::makei(400000, _ => {
+    let r = rng.below(1 << 16) >> 8
+    if r < 192 {
+      r.to_byte()
+    } else {
+      (r & 7).to_byte()
+    }
+  })
+  let inputs = [
+    sample_random(rng, 300000),
+    skewed,
+    sample_text(rng, 300000),
+    Bytes::make(300000, b'\x00'),
+  ]
+  let mut most = 0
+  for input in inputs {
+    for level in [1, 3, 12] {
+      for split in [(1, 65536), (65536, 1), (777, 3000), (1 << 20, 1 << 20)] {
+        let (next_in, next_out) = split
+        // A byte at a time over the first 20,000 bytes: past a block, the
+        // steps go as over the rest.
+        let input = if next_in == 1 || next_out == 1 {
+          input[:20000].to_owned()
+        } else {
+          input
+        }
+        let stream = encode_drive(
+          Encoder(level~),
+          input,
+          next_in=() => next_in,
+          next_out=() => next_out,
+          flush=_ => rng.below(5) == 0,
+          check=(e, room) => {
+            check_encoder_bounds(e, room)
+            most = most.max(e.memory_usage())
+          },
+        )
+        assert_true(decompress(stream) == input)
+      }
+    }
+  }
+  // The streams push it most of the way: 653,119 bytes on native, 620,351
+  // on JS, whose bit writer reserves 4 bytes a write instead of 5, so its
+  // buffers double at other points.
+  assert_true(most > 600000 && most <= encoder_memory_bound())
+}
