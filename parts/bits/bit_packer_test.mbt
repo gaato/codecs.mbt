@@ -233,3 +233,123 @@ test "write_pending moves the waiting bytes of another writer" {
     ),
   )
 }
+
+///|
+test "whole bytes waiting count as pending and keep the writer aligned" {
+  let w = @bits.BitPacker()
+  w.write(8, 0x5a)
+  inspect(w.is_aligned(), content="true")
+  inspect(w.position(), content="8")
+  inspect(w.pending(), content="1")
+  w.write(12, 0xabc)
+  inspect(w.is_aligned(), content="false")
+  inspect(w.buffered(), content="2")
+  w.align()
+  inspect(w.position(), content="24")
+  debug_inspect(
+    take(w, 2),
+    content=(
+      #|<Bytes: [0x5a, 0xbc, 0x0a]>
+    ),
+  )
+}
+
+///|
+test "writes across every byte boundary near the end of the buffer" {
+  // A writer whose buffer holds exactly `size` bytes, after reset: the
+  // writes reach its end at every offset, through every write width, so
+  // whole bytes are moved both with room for eight and without.
+  for size in [1, 2, 7, 8, 9, 15, 16, 17, 64] {
+    for lead in 0..<72 {
+      for n in [1, 7, 8, 9, 15, 16, 17, 24, 31, 32] {
+        let w = @bits.BitPacker()
+        w.write_bytes(FixedArray::make(size, b'\x00'), 0, size)
+        assert_eq(w.capacity(), size)
+        w.reset()
+        let bits = []
+        push_bits(bits, lead % 8, 0b1010101)
+        w.write(lead % 8, 0b1010101 & ((1 << (lead % 8)) - 1))
+        for k in 0..<(lead / 8) {
+          w.write(8, k * 37 % 256)
+          push_bits(bits, 8, k * 37 % 256)
+        }
+        for k in 0..<12 {
+          let v = if n == 32 { -1 - k } else { ((1 << n) - 1) ^ k }
+          let v = if n == 32 { v } else { v & ((1 << n) - 1) }
+          w.write(n, v)
+          push_bits(bits, n, v)
+        }
+        w.align()
+        assert_eq(take(w, 64), pack(bits))
+      }
+    }
+  }
+}
+
+///|
+test "rewind after whole bytes reached the buffer" {
+  let rng = { state: 4141, }
+  for _ in 0..<300 {
+    let w = @bits.BitPacker()
+    let bits = []
+    for _ in 0..<rng.below(12) {
+      let n = rng.below(33)
+      let v = rng.bits(n)
+      w.write(n, v)
+      push_bits(bits, n, v)
+    }
+    let mark = w.mark()
+    // Long writes after the mark move bytes into the buffer, and past it.
+    for _ in 0..<(1 + rng.below(10)) {
+      w.write(32, -1)
+      w.write(rng.below(33), 0)
+    }
+    w.rewind(mark)
+    for _ in 0..<rng.below(12) {
+      let n = rng.below(33)
+      let v = rng.bits(n)
+      w.write(n, v)
+      push_bits(bits, n, v)
+    }
+    w.align()
+    assert_eq(take(w, 64), pack(bits))
+  }
+}
+
+///|
+test "partial drains between writes hand out the bits in order" {
+  let rng = { state: 2024, }
+  for _ in 0..<100 {
+    let w = @bits.BitPacker()
+    let bits = []
+    let out = Buffer()
+    let chunk = FixedArray::make(8, b'\x00')
+    for _ in 0..<(1 + rng.below(300)) {
+      let n = rng.below(33)
+      let v = rng.bits(n)
+      w.write(n, v)
+      push_bits(bits, n, v)
+      if rng.below(4) == 0 {
+        // Fewer bytes than are waiting, sometimes: the rest stays.
+        let room = rng.below(9)
+        let before = w.pending()
+        let got = if rng.below(2) == 0 {
+          w.drain(chunk.mut_view(), 8 - room)
+        } else {
+          w.drain_into(chunk, 8 - room)
+        }
+        let taken = got - (8 - room)
+        assert_eq(taken, before.min(room))
+        assert_eq(w.pending(), before - taken)
+        out.write_bytesview(Bytes::from_array(chunk[8 - room:got])[:])
+      }
+    }
+    w.write_end_mark()
+    out.write_bytes(take(w, 3))
+    bits.push(true)
+    while bits.length() % 8 != 0 {
+      bits.push(false)
+    }
+    assert_eq(out.to_bytes(), pack(bits))
+  }
+}

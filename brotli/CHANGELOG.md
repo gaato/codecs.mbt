@@ -10,6 +10,7 @@ never does. Every breaking change is listed with a migration note.
 ### Changed
 
 - **The README has sections.** Install, Usage, What it decodes, Encoding, Memory, Errors and Links; links are absolute, so they work on mooncakes.io. The cross-check with google/brotli's decoder is described in TEST_COVERAGE.md instead. The `gaato/codec_bytes` trait methods have doc comments, and the repository-only `scripts/` is no longer packaged.
+- The encoder writes its bits eight bytes at a time on native, Wasm and Wasm GC (the shared bit writer of parts/bits), 2-5% faster; its output is unchanged.
 
 ### Fixed
 

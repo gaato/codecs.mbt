@@ -161,8 +161,8 @@ const ENCODER_PENDING_MAX : Int32 = 4 + 10 + 3 + MAX_BLOCK_SIZE + 4
 ///|
 /// What RESOURCE_BOUNDS.md gives for `Encoder::memory_usage`: the input
 /// buffer, waiting output, match window/hash, sequence arrays and scratch,
-/// and both entropy coders. Packer capacities include doubling and the
-/// extra 5 bytes reserved by a write.
+/// and both entropy coders. Packer capacities include doubling and 5 bytes
+/// past the bytes written: a write reserves at most the bytes it moves.
 fn encoder_memory_bound(params~ : Params = encoder_params(12, None)) -> Int32 {
   2 * (ENCODER_PENDING_MAX + 5) +
   LiteralsWriter::new().memory_usage() +

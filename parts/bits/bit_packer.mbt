@@ -7,6 +7,16 @@
 // integer is a BigInt, and the brotli encoder ran twice as fast with 32 bits
 // and long writes split in two, while native, wasm and wasm-gc ran 0 to 3%
 // slower that way (bench/, 2026-10-21).
+//
+// With 64 bits, up to 31 bits wait between writes, and a write that brings
+// them to 32 moves the whole bytes into the buffer in one eight-byte store,
+// as zstd's BIT_flushBits does. That took 16% off the Zstandard encoder's
+// level-one time on the bench text natively, and 14% off Wasm GC's on the
+// binary; moving the bytes after every write instead, one store each time,
+// gave back over half of the native gain (zstd/docs/compression.md, Speed).
+// JS keeps 32 bits and moves bytes one at a time after each write. Whole
+// bytes still in the accumulator are moved before anything counts or hands
+// out the buffer's bytes, so `pending`, `drain` and the rest see them.
 
 ///|
 #cfg(not(target="js"))
@@ -23,7 +33,8 @@ pub struct BitPacker {
   // Complete bytes in `buf`; those from `drained` wait to be handed out.
   priv mut len : Int32
   priv mut drained : Int32
-  // `nbits` (below 8 between writes) bits not yet in `buf`.
+  // `nbits` bits not yet in `buf`: below 8 after `flush`, and between
+  // writes below 32, except on JS, where they are below 8.
   priv mut acc : Acc
   priv mut nbits : Int32
 }
@@ -33,7 +44,7 @@ pub struct BitPacker {
 pub struct Mark {
   priv len : Int32
   priv nbits : Int32
-  // The bits of the partial byte, below 8 of them.
+  // The bits not yet in `buf`, as many as `nbits` says.
   priv partial : Acc
 }
 
@@ -66,10 +77,49 @@ fn BitPacker::reserve(self : BitPacker, n : Int32) -> Unit {
 /// Writes the `n` (at most 32) bits of `value`, which has no bits above them.
 #cfg(not(target="js"))
 pub fn BitPacker::write(self : BitPacker, n : Int32, value : Int32) -> Unit {
+  // Fewer than 32 bits wait, so the 64-bit accumulator holds these too.
   self.acc = self.acc | (value.reinterpret_as_uint().to_uint64() << self.nbits)
   self.nbits += n
+  if self.nbits >= FLUSH_AT {
+    self.flush()
+  }
+}
+
+///|
+/// Moves the accumulator's whole bytes into the buffer, all of them in one
+/// eight-byte store when the buffer has eight bytes of room: the bytes past
+/// the whole ones land beyond `len`, where the next store overwrites them
+/// and nothing reads them.
+#cfg(not(target="js"))
+fn BitPacker::flush(self : BitPacker) -> Unit {
+  let whole = self.nbits >> 3
+  if self.len + 8 <= self.buf.length() {
+    // 0 <= len and len + 8 <= buf.length(): the store lies within `buf`.
+    self.buf.unsafe_write_uint64_le(self.len, self.acc)
+  } else {
+    self.reserve(whole)
+    for i in 0..<whole {
+      self.buf[self.len + i] = (self.acc >> (i << 3)).to_byte()
+    }
+  }
+  self.len += whole
+  // At most 63 bits wait, so the shift is below 64.
+  self.acc = self.acc >> (whole << 3)
+  self.nbits = self.nbits & 7
+}
+
+///|
+/// Waiting bits that make `write` move whole bytes to the buffer: with
+/// fewer than 32 waiting, the 64-bit accumulator takes a write of up to 32.
+#cfg(not(target="js"))
+const FLUSH_AT : Int32 = 32
+
+///|
+/// Moves the accumulator's whole bytes into the buffer, one at a time.
+#cfg(target="js")
+fn BitPacker::flush(self : BitPacker) -> Unit {
   if self.nbits >= 8 {
-    self.reserve(5)
+    self.reserve(4)
     while self.nbits >= 8 {
       self.buf[self.len] = self.acc.to_byte()
       self.len += 1
@@ -101,22 +151,15 @@ pub fn BitPacker::write(self : BitPacker, n : Int32, value : Int32) -> Unit {
 fn BitPacker::write_fitting(self : BitPacker, n : Int32, value : Int32) -> Unit {
   self.acc = self.acc | (value.reinterpret_as_uint() << self.nbits)
   self.nbits += n
-  if self.nbits >= 8 {
-    self.reserve(4)
-    while self.nbits >= 8 {
-      self.buf[self.len] = self.acc.to_byte()
-      self.len += 1
-      self.acc = self.acc >> 8
-      self.nbits -= 8
-    }
-  }
+  self.flush()
 }
 
 ///|
 /// Pads with zero bits to the next byte boundary.
 pub fn BitPacker::align(self : BitPacker) -> Unit {
-  if self.nbits > 0 {
-    self.write(8 - self.nbits, 0)
+  let partial = self.nbits & 7
+  if partial > 0 {
+    self.write(8 - partial, 0)
   }
 }
 
@@ -134,7 +177,7 @@ pub fn BitPacker::write_end_mark(self : BitPacker) -> Unit {
 ///|
 /// Whether the bits written so far end on a byte boundary.
 pub fn BitPacker::is_aligned(self : BitPacker) -> Bool {
-  self.nbits == 0
+  (self.nbits & 7) == 0
 }
 
 ///|
@@ -145,6 +188,7 @@ pub fn BitPacker::write_bytes(
   start : Int32,
   n : Int32,
 ) -> Unit {
+  self.flush()
   self.reserve(n)
   FixedArray::unsafe_blit(self.buf, self.len, data, start, n)
   self.len += n
@@ -154,6 +198,7 @@ pub fn BitPacker::write_bytes(
 /// Appends the complete bytes `other` waits to hand out and hands them out
 /// of it, in one copy; this writer is byte-aligned.
 pub fn BitPacker::write_pending(self : BitPacker, other : BitPacker) -> Unit {
+  self.flush()
   let n = other.pending()
   self.reserve(n)
   FixedArray::unsafe_blit(self.buf, self.len, other.buf, other.drained, n)
@@ -186,12 +231,14 @@ pub fn BitPacker::rewind(self : BitPacker, mark : Mark) -> Unit {
 ///|
 /// Complete bytes waiting to be handed out.
 pub fn BitPacker::pending(self : BitPacker) -> Int32 {
+  self.flush()
   self.len - self.drained
 }
 
 ///|
 /// Complete bytes in the buffer, handed out or not, until all are.
 pub fn BitPacker::buffered(self : BitPacker) -> Int32 {
+  self.flush()
   self.len
 }
 

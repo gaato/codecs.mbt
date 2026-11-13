@@ -855,3 +855,114 @@ second representation in the tests. The packing is not done.
 Unchanged: the 276 published compression counts (all 300 frames decode
 with gaato and `zstd -d`), the SHA-256 pins on all four targets, and the
 crosscheck (2,360 streams through `zstd -d` and Node).
+
+### After writing bits eight bytes at a time
+
+The shared bit writer (`internal/bits`, also brotli's) used to move every
+whole byte into its buffer as soon as a write completed one: a capacity
+check, then one checked store per byte. Now, except on JS, up to 31 bits
+wait in its 64-bit accumulator, and the write that brings them to 32 or
+more stores the accumulator into the buffer as one unchecked eight-byte
+little-endian write and counts only the whole bytes, as zstd's
+`BIT_addBits` and `BIT_flushBits` do. The bytes stored past the whole ones
+are overwritten by the next store and never read. Instead of keeping eight
+bytes of slack past the buffer's end, the store is taken only when eight
+bytes of the buffer are left; nearer the end the whole bytes are written
+one at a time, growing the buffer as before. Capacities therefore still
+grow only by what is written, and every packer stays within the bounds
+of RESOURCE_BOUNDS.md, which are unchanged. Counting, handing out, copying
+and aligned byte writes (`pending`, `buffered`, `drain`, `drain_into`,
+`write_pending`, `write_bytes`) first move the whole bytes still waiting;
+`mark` and `rewind` save and restore the waiting bits with the length.
+
+Moving the bytes with one store after every write, instead of waiting
+for 32 bits, kept less than half of the gain natively (one run: text
+level one 5.56 ms, binary level one 0.98 ms, against 4.98 and 0.76
+below). Wasm GC, whose arrays trap out of range in any case, also takes
+the eight-byte store: the checked byte path measured 11.62/1.69 ms at
+text/binary level one, the new one 11.26/1.40 and 11.37/1.40 in the same
+session. JS keeps its 32-bit accumulator and byte stores. Making the
+eight-byte store inline in every caller, with the near-end path apart,
+was not faster natively (5.11 ms at text level one) and was not kept.
+
+The same codec_bench "zstd encode" command as above, alternating an
+unchanged copy of the sources and the changed ones, pinned to one CPU.
+Means in milliseconds over the runs on each side: three on native and
+JS, two on Wasm and Wasm GC.
+
+| Input, level | Native before → after | Wasm before → after | Wasm GC before → after | JS before → after |
+|---|---:|---:|---:|---:|
+| text, 1 | 5.96 → 4.98 | 17.57 → 16.42 | 11.78 → 11.32 | 88.26 → 88.20 |
+| text, 3 | 6.51 → 5.49 | 18.55 → 17.63 | 11.29 → 10.87 | 114.80 → 114.48 |
+| text, 5 | 12.54 → 11.56 | 28.35 → 27.36 | 19.22 → 19.06 | 144.00 → 141.51 |
+| text, 8 | 27.67 → 26.46 | 48.71 → 47.17 | 49.49 → 49.58 | 203.19 → 203.02 |
+| text, 12 | 68.02 → 66.88 | 91.01 → 89.80 | 115.18 → 112.65 | 309.11 → 316.52 |
+| binary, 1 | 1.06 → 0.76 | 2.28 → 1.65 | 1.63 → 1.40 | 8.94 → 9.18 |
+| binary, 3 | 2.76 → 2.50 | 5.67 → 5.10 | 4.65 → 4.52 | 47.53 → 50.23 |
+| binary, 12 | 10.81 → 10.78 | 11.54 → 11.02 | 25.32 → 24.17 | 104.50 → 106.21 |
+
+Native is 16% faster at text levels one and three and 28% at binary
+level one, where entropy coding is the largest share; the gain shrinks
+as matching takes over, to 2% at text level twelve. Native binary level
+twelve alternates between about 10.2 and 11.9 ms on both sides (runs of
+10.20, 10.39, 11.84 before and 9.96, 11.94, 10.43 after), so it shows no
+change. Wasm is 1–27% faster and Wasm GC up to 14%, except text level
+eight, unchanged. JS runs the same code as before: its higher means come
+from single runs with large deviations (binary level three 55.45 ±
+6.38 ms, text level twelve 332.60 ± 46.81 ms); the medians of the three
+runs are within 2.5% of each other on every row, in either direction.
+
+A native `perf record -e cycles:u -F 4000` of the two level-one cases
+afterwards (11,349 samples): `Encoder::encode_block` 20.7%, the Huffman
+literal streams with the writes inlined in them 18.3%, match length 8.4%,
+`BitPacker::flush` 7.8%, the fast finder's hash and length 6.1% each,
+`CTable::encode` 5.9%.
+
+The brotli encoder writes through the same packer. codec_bench's
+"encode" (`-i 1`), alternated the same way, two runs on each side; the
+deflate rows, which do not use it, show the spread between runs:
+
+| Input | Native before → after | Wasm before → after | Wasm GC before → after | JS before → after |
+|---|---:|---:|---:|---:|
+| brotli, text | 13.82 → 13.09 | 45.65 → 43.97 | 15.73 → 15.35 | 27.14 → 26.79 |
+| brotli, binary | 4.53 → 4.44 | 11.93 → 11.35 | 5.27 → 5.15 | 7.93 → 8.27 |
+| deflate, text | 13.16 → 13.10 | 28.87 → 28.54 | 20.92 → 21.19 | 38.45 → 38.77 |
+| deflate, binary | 3.27 → 3.23 | 9.06 → 9.07 | 5.43 → 5.42 | 9.07 → 9.32 |
+
+Brotli is 2–5% faster on native, Wasm and Wasm GC; on JS, which runs
+the same code as before, it moves with the deflate rows.
+
+Unchanged: the 276 published compression counts (all 300 frames decode
+with gaato and `zstd -d`), the SHA-256 pins of both encoders on all four
+targets, and both crosschecks (2,360 zstd streams through `zstd -d` and
+Node, 3,071 brotli streams through the reference decoder).
+
+### Where encoding speed stands
+
+All four targets as measured above (the "after" columns), against the
+starting point, and zstd 1.5.7's `zstd -b<level>` on the same two files,
+measured again in the same session on the same CPU (text 299.0, 229.2,
+112.0, 47.6 and 24.8 MB/s; binary 726.8, 186.4 and 36.6 MB/s). Unlike our
+benchmark, `zstd -b` gives the encoder the input's size. The last column
+is how many times as long as the reference native takes.
+
+| Input, level | Native start → now | Wasm start → now | Wasm GC start → now | JS start → now | Native vs zstd, start → now |
+|---|---:|---:|---:|---:|---:|
+| text, 1 | 11.85 → 4.98 ms (105 MB/s) | 40.00 → 16.42 ms | 13.67 → 11.32 ms | 94.08 → 88.20 ms | 6.9 → 2.8 |
+| text, 3 | 12.98 → 5.49 ms (96 MB/s) | 42.53 → 17.63 ms | 14.94 → 10.87 ms | 117.13 → 114.48 ms | 5.7 → 2.4 |
+| text, 5 | 22.38 → 11.56 ms (45 MB/s) | 70.91 → 27.36 ms | 21.89 → 19.06 ms | 149.87 → 141.51 ms | 4.6 → 2.5 |
+| text, 8 | 47.62 → 26.46 ms (20 MB/s) | 125.83 → 47.17 ms | 49.46 → 49.58 ms | 206.25 → 203.02 ms | 4.2 → 2.4 |
+| text, 12 | 105.01 → 66.88 ms (7.8 MB/s) | 192.79 → 89.80 ms | 105.26 → 112.65 ms | 306.97 → 316.52 ms | 5.0 → 3.2 |
+| binary, 1 | 1.55 → 0.76 ms (173 MB/s) | 4.12 → 1.65 ms | 1.82 → 1.40 ms | 9.80 → 9.18 ms | 8.6 → 4.2 |
+| binary, 3 | 4.28 → 2.50 ms (52 MB/s) | 12.09 → 5.10 ms | 4.95 → 4.52 ms | 47.68 → 50.23 ms | 6.0 → 3.6 |
+| binary, 12 | 21.90 → 10.78 ms (12 MB/s) | 23.51 → 11.02 ms | 20.41 → 24.17 ms | 104.12 → 106.21 ms | 6.1 → 3.0 |
+
+Native runs 1.6 to 2.4 times as fast as at the start and Wasm 2.1 to
+2.7 times; Wasm now takes 1.0 to 3.3 times as long as native. Native takes 2.4 to
+4.2 times as long as zstd 1.5.7, most at the fastest binary level. Wasm
+GC is 1.0 to 1.4 times as fast up to text level eight and at binary
+levels one and three; at level twelve
+it is slower than the starting table (text 7%, binary 18%), the rows the
+earlier refreshed baselines found unstable and the shared history
+slowed on binary input (above). JS, which keeps the checked byte paths
+throughout, is within 7% of its starting times either way.
