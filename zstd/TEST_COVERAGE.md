@@ -27,8 +27,11 @@ and corruptions.
 
 - Sources: every non-test `.mbt` directly under `src/`, the library package,
   and under the internal packages it ships (`src/internal/header/`,
-  `src/internal/huffman/`, `src/internal/xxhash/` and the proof packages). The test-only
-  checksum package under `src/internal/` is not measured.
+  `src/internal/frame/`, `src/internal/huffman/`, `src/internal/xxhash/`,
+  the encoder's `src/internal/fse/` and `src/internal/huffenc/`, the copies
+  of `parts/` in `src/internal/bits/` and `src/internal/huffman_code/`, and
+  the proof packages). The test-only checksum package under `src/internal/`
+  is not measured.
 - Counts are Coveralls lines: lines with at least one instrumented point,
   covered when any point on them ran.
 
@@ -43,7 +46,7 @@ and corruptions.
 - moon's bundled tcc cannot link on some hosts (openSUSE); the script sets
   `MOON_CC=cc` unless it is already set.
 
-Snapshot at the last full measurement (2026-10-21): **99.3 %** (588/592
+Snapshot at the last full measurement (2026-11-13): **98.8 %** (1108/1122
 lines).
 
 ## Policy
@@ -68,7 +71,17 @@ Must be covered by tests:
   mode (predefined, RLE, FSE-compressed, repeat), repeat offset case, and
   frame header field size; several frames in a row and skippable frames;
 - suspension on input and on output at every unit, through byte-sized and
-  random splits.
+  random splits;
+- the encoder's entropy coders, through the decoder's own readers: FSE table
+  descriptions read back by `Fse::read` into the table `Fse::build` makes,
+  for every distribution of up to three symbols over 32 states and seeded
+  random ones at every accuracy log, and FSE streams decoded to the symbols
+  encoded with every bit used (`src/fse_encode_wbtest.mbt`); Huffman tree
+  descriptions, direct and FSE-compressed, read back by `Huffman::read`, and
+  literals in one and four streams decoded by `Huffman::decode`
+  (`src/huffman_encode_wbtest.mbt`); `normalize` over every histogram of
+  three symbols of up to 12 and seeded random ones, and `settle` over
+  arbitrary shares (`src/internal/fse/`).
 
 Accepted as uncovered (needs a row):
 
@@ -81,7 +94,9 @@ Budgets are exact uncovered counts at the last measurement.
 
 | File | Budget | Reason |
 | --- | --- | --- |
-| src/fse.mbt | 2 | `Fse::build` returning false, and `Fse::read` raising on it: the spread of symbols over the table fills it exactly whenever the probabilities sum to the table size, and `Fse::read` only builds once they do (a probability never exceeds what remains: the largest value a field can hold is `remaining + 1`). RFC 8878 section 4.1.1 states the same guarantee. Kept because a table with unset rows could index past itself. |
+| src/fse.mbt | 1 | `Fse::read` raising when `Fse::build` returns false: the spread of symbols over the table (`@fse.spread`) fills it exactly whenever the probabilities sum to the table size, and `Fse::read` only builds once they do (a probability never exceeds what remains: the largest value a field can hold is `remaining + 1`). RFC 8878 section 4.1.1 states the same guarantee. Kept because a table with unset rows could index past itself. `src/internal/fse/fse_test.mbt` checks that `spread` reports a distribution that does not fill the table. |
 | src/huffman.mbt | 1 | In `Huffman::build`, the message for weights that overfill the table, which `@huffman.build_table` never reports: see the next row. |
+| src/internal/bits/bit_packer.mbt | 8 | `BitPacker::write` and `BitPacker::write_fitting` for JS (`#cfg(target="js")`), the 32-bit accumulator: the ledger measures native, which compiles the 64-bit `write` instead. The gates run the same tests on JS: `src/internal/bits/bit_packer_test.mbt` and the encoder's round trips. |
 | src/internal/huffman/table.mbt | 2 | In `fill`, the check for weights that overfill the table and its OVERFULL: each weight `w` takes `2^(w-1)` of `2^max_bits` entries, and the implied last weight completes the sum to exactly `2^max_bits`, so the blocks never run past the table. `moon prove` proves it (PROOFS.md: `build_table` never returns OVERFULL). Kept because the reference decoder checks it. |
+| src/internal/huffman_code/code_maker.mbt | 1 | The `abort` of `CodeMaker::CodeMaker` for an alphabet outside 2 to 1,024 symbols: the `panic` test of `src/internal/huffman_code/code_maker_test.mbt` runs it, but the abort ends the test before its coverage counts are written. |
 | src/sequences.mbt | 1 | In `reserve_window`, no room for a compressed block's bytes: a block is decoded only when no output is pending, it decodes to at most `block_max` bytes, and `block_max` is at most the window (`ring_max`), so `ensure_space` always succeeds. |

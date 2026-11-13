@@ -1,0 +1,35 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/zstd/internal/fse"
+
+import {
+  "gaato/zstd/internal/bits",
+}
+
+// Values
+pub const MIN_LOG : Int32 = 5
+
+pub fn accuracy_log(Int32, Int32, Int32) -> Int32
+
+pub fn normalize(FixedArray[Int32], Int32, Int32, Int32, Bool, FixedArray[Int32]) -> Unit
+
+pub fn spread(FixedArray[Int32], Int32, Int32, FixedArray[Byte]) -> Bool
+
+pub fn write_description(@bits.BitPacker, FixedArray[Int32], Int32, Int32) -> Unit
+
+// Errors
+
+// Types and methods
+pub struct CTable {
+  // private fields
+}
+pub fn CTable::CTable(max_log~ : Int32, max_symbols~ : Int32) -> Self
+pub fn CTable::build(Self, FixedArray[Int32], Int32, Int32) -> Unit
+pub fn CTable::encode(Self, @bits.BitPacker, Int32, Int32) -> Int32
+pub fn CTable::finish(Self, @bits.BitPacker, Int32) -> Unit
+pub fn CTable::log(Self) -> Int32
+pub fn CTable::memory_usage(Self) -> Int32
+pub fn CTable::start(Self, Int32) -> Int32
+
+// Type aliases
+
+// Traits

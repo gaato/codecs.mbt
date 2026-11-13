@@ -1,0 +1,28 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/zstd/internal/huffenc"
+
+import {
+  "gaato/zstd/internal/bits",
+}
+
+// Values
+pub const MAX_BITS : Int32 = 11
+
+// Errors
+
+// Types and methods
+pub struct HuffmanEncoder {
+  // private fields
+}
+pub fn HuffmanEncoder::HuffmanEncoder() -> Self
+pub fn HuffmanEncoder::build(Self, FixedArray[Int32]) -> Bool
+pub fn HuffmanEncoder::cost(Self, FixedArray[Int32]) -> Int32
+pub fn HuffmanEncoder::description_size(Self) -> Int32
+pub fn HuffmanEncoder::max_bits(Self) -> Int32
+pub fn HuffmanEncoder::memory_usage(Self) -> Int32
+pub fn HuffmanEncoder::write_description(Self, @bits.BitPacker) -> Unit
+pub fn HuffmanEncoder::write_literals(Self, @bits.BitPacker, FixedArray[Byte], Int32, Int32, four_streams~ : Bool) -> Unit
+
+// Type aliases
+
+// Traits

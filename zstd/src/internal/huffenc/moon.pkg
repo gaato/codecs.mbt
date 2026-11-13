@@ -1,0 +1,10 @@
+// Huffman coding of literals for the encoder (RFC 8878 section 4.2): code
+// lengths of at most 11 bits, the tree description, and literal streams.
+
+import {
+  "gaato/zstd/internal/bits",
+  "gaato/zstd/internal/fse",
+  "gaato/zstd/internal/huffman_code",
+}
+
+supported_targets = "js + native + wasm + wasm-gc"

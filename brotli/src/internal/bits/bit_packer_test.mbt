@@ -185,3 +185,29 @@ test "the buffer empties once handed out, and reset forgets everything" {
     ),
   )
 }
+
+///|
+test "the end mark is the highest set bit of the last byte" {
+  let rng = { state: 8878, }
+  for n in 0..<200 {
+    let w = @bits.BitPacker()
+    let bits = []
+    for _ in 0..<n {
+      let v = rng.below(2)
+      w.write(1, v)
+      push_bits(bits, 1, v)
+    }
+    w.write_end_mark()
+    inspect(w.is_aligned(), content="true")
+    let out = take(w, 64)
+    assert_eq(out.length(), n / 8 + 1)
+    // Reading back from the last byte: the mark, then the bits written.
+    let last = out[out.length() - 1].to_int()
+    let mark = 31 - last.clz()
+    assert_eq((out.length() - 1) * 8 + mark, n)
+    for i in 0..<n {
+      let set = ((out[i / 8].to_int() >> (i % 8)) & 1) == 1
+      assert_eq(set, bits[i])
+    }
+  }
+}

@@ -23,6 +23,7 @@ pub fn BitPacker::reset(Self) -> Unit
 pub fn BitPacker::rewind(Self, Mark) -> Unit
 pub fn BitPacker::write(Self, Int32, Int32) -> Unit
 pub fn BitPacker::write_bytes(Self, FixedArray[Byte], Int32, Int32) -> Unit
+pub fn BitPacker::write_end_mark(Self) -> Unit
 
 pub struct Mark {
   // private fields

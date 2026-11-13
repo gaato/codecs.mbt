@@ -5,9 +5,9 @@ share; each format's module carries copies of the files it uses.
 
 | Package | Holds | Copied into |
 | --- | --- | --- |
-| `huffman` | Huffman code lengths and canonical codes for encoders, and `CodeMaker`, libdeflate's way of building length-limited codes; decoding tables (`Builder`) and their size bounds (`max_entries`) for decoders. `moon prove` checks its reversal of bits and its canonical codes | brotli, deflate (`CodeMaker` deflate only) |
+| `huffman` | Huffman code lengths and canonical codes for encoders, and `CodeMaker`, libdeflate's way of building length-limited codes; decoding tables (`Builder`) and their size bounds (`max_entries`) for decoders. `moon prove` checks its reversal of bits and its canonical codes | brotli, deflate, zstd (`CodeMaker` deflate and zstd only; zstd's copy is `internal/huffman_code`) |
 | `crc32` | CRC-32 (ISO 3309, the reflected polynomial 0xEDB88320), eight bytes at a time (slice-by-8) from tables computed at start-up, 9 KiB | deflate (gzip), png |
-| `bits` | `BitPacker`, an encoder's least-significant-bit-first bit writer and output buffer | brotli |
+| `bits` | `BitPacker`, an encoder's least-significant-bit-first bit writer and output buffer, with the end mark of a Zstandard stream read backward | brotli, zstd |
 | `lz77` | The hash and match length of LZ77 match finders; `Matcher`, a greedy one with bucketed hash chains; `HcMatchfinder` and `HtMatchfinder`, libdeflate's hash-chain and hash-table finders | brotli (`Matcher`), deflate (the other two) |
 | `proof_bits` | The trusted bridges of `moon prove`: shifts and masks behind contracts that state their arithmetic, with the tests that back them | zstd, brotli, deflate, png |
 | `proof_fields` | A lemma for proofs of header parsers: a bit field read with division and remainder is the field (apart from `proof_bits`, so that solvers prove it with nothing else in their context) | zstd |
@@ -38,7 +38,12 @@ What a module copies is the `copies` object of `scripts/modules.json`: per
 module, per package, the files, tests included. Files rather than whole
 packages, so that a module carries, and its coverage ledger covers, only what
 it uses. The copies go to `<module>/src/internal/<package>`; add that
-directory to the module's `coverage_scope` too.
+directory to the module's `coverage_scope` too, and to `generated` in
+`scripts/docs_audit.json`. Where the module has a package of that name
+already, an entry `{ "from": <package>, "files": [...] }` copies the part
+under the entry's name instead (zstd's decoder has an `internal/huffman`, so
+it takes `huffman` as `internal/huffman_code`), and the copied tests' `@<package>.`
+become `@<name>.`.
 
 The generator writes each copy's `moon.pkg` from the part's, with imports of
 other parts rewritten to the module's copies of them, so a module that copies

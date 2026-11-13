@@ -1,0 +1,95 @@
+// RFC 8878 section 4.1.1: a normalized distribution gives every state of a
+// table of 2^Accuracy_Log states to a symbol. A probability of -1 ("less
+// than 1") takes one state, any other probability that many.
+
+// Sums and counts over an array: Why3's int.Sum and map.Occ on the array's
+// elements, whose axioms and lemmas are what the proofs reason with.
+#proof_import("array.Array")
+fn elements(a : FixedArray[Int]) -> (Int) -> Int = "elts"
+
+#proof_import("int.Sum")
+fn sum(f : (Int) -> Int, l : Int, u : Int) -> Int = "sum"
+
+#proof_import("map.Occ")
+fn occ(v : Int, m : (Int) -> Int, l : Int, u : Int) -> Int = "occ"
+
+#proof_import("map.Map")
+fn set(m : (Int) -> Int, k : Int, v : Int) -> (Int) -> Int = "set"
+
+// Writing an element leaves the sums and counts of the elements before it
+// alone. (Stated on Why3's maps, where an array's write lands, so that the
+// solvers find them when a proof writes an element; Z3 does not see it
+// from int.Sum's and map.Occ's extensionality lemmas.)
+lemma sum_set_before(m : (Int) -> Int, k : Int, v : Int, u : Int) where {
+  proof_require: u <= k,
+  proof_ensure: sum(set(m, k, v), 0, u) == sum(m, 0, u),
+} {
+}
+
+lemma occ_set_before(m : (Int) -> Int, k : Int, v : Int, w : Int, u : Int) where {
+  proof_require: u <= k,
+  proof_ensure: occ(w, set(m, k, v), 0, u) == occ(w, m, 0, u),
+} {
+}
+
+// The sum of `a[l..u)`.
+fn total_of(a : FixedArray[Int], l : Int, u : Int) -> Int {
+  sum(elements(a), l, u)
+}
+
+// How many of `a[l..u)` are `v`.
+fn count_of(a : FixedArray[Int], v : Int, l : Int, u : Int) -> Int {
+  occ(v, elements(a), l, u)
+}
+
+// The states the probabilities `norm[0..u)` take: their sum, with each -1
+// counted as 1.
+fn states(norm : FixedArray[Int], u : Int) -> Int {
+  total_of(norm, 0, u) + 2 * count_of(norm, -1, 0, u)
+}
+
+// The symbols of `counts[l..u)` that occur.
+fn seen(counts : FixedArray[Int], l : Int, u : Int) -> Int {
+  u - l - count_of(counts, 0, l, u)
+}
+
+// A symbol seen `c` times has probability `v`: 0 if it never occurs, at
+// least one state (1 or more, or -1) if it does.
+predicate fits(c : Int, v : Int) {
+  c == 0 && v == 0 || c > 0 && v >= 1 || c > 0 && v == -1
+}
+
+predicate all_fit(counts : FixedArray[Int], norm : FixedArray[Int], u : Int) {
+  ∀ i : Int, 0 <= i && i < u → fits(counts[i], norm[i])
+}
+
+predicate counts_within(counts : FixedArray[Int], n : Int, total : Int) {
+  ∀ i : Int, 0 <= i && i < n → 0 <= counts[i] && counts[i] <= total
+}
+
+// The counts of `counts[0..n)`, `total` of them at most (a block's worth,
+// 2^17), the last one seen, to be normalized over `size` states (2^5 to
+// 2^9), at least one for each symbol up to the last.
+predicate settle_pre(
+  counts : FixedArray[Int],
+  n : Int,
+  total : Int,
+  size : Int,
+  norm : FixedArray[Int],
+) {
+  32 <= size && size <= 512 &&
+  1 <= n && n <= size &&
+  n <= counts.length() && n <= norm.length() &&
+  0 < total && total <= 131072 &&
+  counts_within(counts, n, total) &&
+  counts[n - 1] > 0
+}
+
+predicate settle_post(
+  counts : FixedArray[Int],
+  n : Int,
+  size : Int,
+  norm : FixedArray[Int],
+) {
+  states(norm, n) == size && all_fit(counts, norm, n)
+}

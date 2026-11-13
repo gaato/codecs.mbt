@@ -59,8 +59,9 @@ fn FseScratch::new() -> FseScratch {
 ///|
 /// Builds `self` from `probs[0:count]`, a distribution summing to
 /// `1 << log` in which -1 stands for "less than 1" (RFC 8878 section
-/// 4.1.1). False when the rows do not come out exactly filled, which only a
-/// corrupt description can cause.
+/// 4.1.1). The symbols go on the states where `@fse.spread`, which the
+/// encoder's tables share, puts them. False when the rows do not come out
+/// exactly filled, which only a corrupt description can cause.
 fn Fse::build(
   self : Fse,
   probs : FixedArray[Int32],
@@ -70,29 +71,12 @@ fn Fse::build(
 ) -> Bool {
   let size = 1 << log
   self.log = log
-  let mut high = size - 1
+  guard @fse.spread(probs, count, log, self.symbol) else { return false }
+  // Each symbol's states, in order, decode the values from its probability
+  // up to twice it, less one.
   for s in 0..<count {
-    if probs[s] == -1 {
-      self.symbol[high] = s.to_byte()
-      high -= 1
-      next[s] = 1
-    } else {
-      next[s] = probs[s]
-    }
+    next[s] = if probs[s] == -1 { 1 } else { probs[s] }
   }
-  let step = (size >> 1) + (size >> 3) + 3
-  let mask = size - 1
-  let mut pos = 0
-  for s in 0..<count {
-    for _ in 0..<probs[s] {
-      self.symbol[pos] = s.to_byte()
-      pos = (pos + step) & mask
-      while pos > high {
-        pos = (pos + step) & mask
-      }
-    }
-  }
-  guard pos == 0 else { return false }
   for i in 0..<size {
     let s = self.symbol[i].to_int()
     let state = next[s]

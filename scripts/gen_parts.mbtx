@@ -17,6 +17,13 @@ import {
 // parts would couple every format, since moon's resolver treats all 0.x
 // versions of a module as compatible; copies keep each module standalone.
 //
+// A copy is named after its source, unless the module already has a package
+// of that name: then the entry is { "from": <source>, "files": [...] }, keyed
+// by the copy's name (zstd's decoder has an `internal/huffman` of its own, so
+// it takes parts/huffman as `internal/huffman_code`). The tests of a package
+// name it by its alias, so in a renamed copy `@<source>.` becomes
+// `@<copy>.`.
+//
 // Each copied file starts with a line naming its source (and a blank line
 // when the source starts with a block), and is otherwise the source as it is. The copy's moon.pkg is the source's, with the imports of
 // other parts rewritten to the module's copies of them (a part must be copied
@@ -88,27 +95,31 @@ async fn expected(
 ) -> Map[String, String] {
   let name = module_name(dir)
   let out = Map([])
-  for pkg, files in packages {
-    guard files is Array(files) else {
-      die(2, "copies.\{dir}.\{pkg} must be a list of files")
-    }
-    let source = "parts/\{pkg}"
+  // The copy of each source package.
+  let copy_names : Map[String, String] = Map([])
+  for pkg, entry in packages {
+    copy_names[source_of(dir, pkg, entry)] = pkg
+  }
+  for pkg, entry in packages {
+    let from = source_of(dir, pkg, entry)
+    let files = files_of(dir, pkg, entry)
+    let source = "parts/\{from}"
     let target = "\{dir}/src/internal/\{pkg}"
     guard @fs.exists("\{source}/moon.pkg") else {
-      die(2, "copies.\{dir} names \{pkg}, but \{source} is not a package")
+      die(2, "copies.\{dir} names \{from}, but \{source} is not a package")
     }
     // The package's own moon.pkg, its imports of parts rewritten.
     let mut moon_pkg = @fs.read_text("\{source}/moon.pkg")
     for import_ in part_imports(moon_pkg, parts_name) {
-      guard packages.contains(import_) else {
+      guard copy_names.get(import_) is Some(copy) else {
         die(2, "\{source} imports parts/\{import_}, which \{dir} does not copy")
       }
       moon_pkg = moon_pkg.replace_all(
         old="\"\{parts_name}/\{import_}\"",
-        new="\"\{name}/internal/\{import_}\"",
+        new="\"\{name}/internal/\{copy}\"",
       )
     }
-    out["\{target}/moon.pkg"] = copy_of(pkg, "moon.pkg", moon_pkg)
+    out["\{target}/moon.pkg"] = copy_of(from, "moon.pkg", moon_pkg)
     for file in files {
       guard file is String(file) else {
         die(2, "copies.\{dir}.\{pkg} must be a list of files")
@@ -119,14 +130,38 @@ async fn expected(
       guard @fs.exists("\{source}/\{file}") else {
         die(2, "copies.\{dir}.\{pkg} names \{file}, which \{source} lacks")
       }
+      let text = @fs.read_text("\{source}/\{file}")
       out["\{target}/\{file}"] = copy_of(
-        pkg,
+        from,
         file,
-        @fs.read_text("\{source}/\{file}"),
+        if from == pkg {
+          text
+        } else {
+          text.replace_all(old="@\{from}.", new="@\{pkg}.")
+        },
       )
     }
   }
   out
+}
+
+///|
+/// The package of parts/ that the copy `pkg` of `copies.<dir>` comes from.
+fn source_of(dir : String, pkg : String, entry : Json) -> String {
+  match entry {
+    Array(_) => pkg
+    { "from": String(from), "files": Array(_), .. } => from
+    _ => die(2, "copies.\{dir}.\{pkg} must be a list of files or { \"from\", \"files\" }")
+  }
+}
+
+///|
+/// The files that the copy `pkg` of `copies.<dir>` takes.
+fn files_of(dir : String, pkg : String, entry : Json) -> Array[Json] {
+  match entry {
+    Array(files) | { "files": Array(files), .. } => files
+    _ => die(2, "copies.\{dir}.\{pkg} must be a list of files or { \"from\", \"files\" }")
+  }
 }
 
 ///|

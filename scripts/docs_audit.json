@@ -1,6 +1,8 @@
 {
   "modules": ["codec", "codec_bytes", "codec_image", "zstd", "brotli", "deflate", "png"],
   "generated": [
+    "zstd/src/internal/bits",
+    "zstd/src/internal/huffman_code",
     "zstd/src/internal/proof_bits",
     "zstd/src/internal/proof_codes",
     "zstd/src/internal/proof_fields",

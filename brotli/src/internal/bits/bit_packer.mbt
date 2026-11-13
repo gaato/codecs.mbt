@@ -122,6 +122,17 @@ pub fn BitPacker::align(self : BitPacker) -> Unit {
 }
 
 ///|
+/// Ends a Zstandard bitstream, which is read backward from its last byte
+/// (RFC 8878 section 4.1): writes a 1 bit, the end mark, and pads with zero
+/// bits to the next byte boundary. The reader finds the end mark as the
+/// highest set bit of the last byte, so the bits before it are the stream's,
+/// with nothing between them and the mark.
+pub fn BitPacker::write_end_mark(self : BitPacker) -> Unit {
+  self.write(1, 1)
+  self.align()
+}
+
+///|
 /// Whether the bits written so far end on a byte boundary.
 pub fn BitPacker::is_aligned(self : BitPacker) -> Bool {
   self.nbits == 0

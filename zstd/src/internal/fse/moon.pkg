@@ -1,0 +1,14 @@
+// Finite State Entropy (RFC 8878 section 4.1) for both sides of Zstandard:
+// the spreading of symbols over a table's states, which the decoder's
+// tables and the encoder's must agree on to the state, so it lives here
+// once; and the encoder's normalization of counts, coding tables, streams
+// and table descriptions. `moon prove` checks the functions with contracts
+// (zstd/PROOFS.md).
+
+import {
+  "gaato/zstd/internal/bits",
+}
+
+proof_enabled = true
+
+supported_targets = "js + native + wasm + wasm-gc"

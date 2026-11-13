@@ -1,0 +1,23 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/zstd/internal/huffman_code"
+
+// Values
+pub fn canonical_codes(FixedArray[Int32], Int32, FixedArray[Int32]) -> Unit
+
+pub fn code_lengths(FixedArray[Int32], Int32, Int32, FixedArray[Int32]) -> Unit
+
+pub fn reverse_bits(Int32, Int32) -> Int32
+
+// Errors
+
+// Types and methods
+pub struct CodeMaker {
+  // private fields
+}
+pub fn CodeMaker::CodeMaker(max_alphabet~ : Int32) -> Self
+pub fn CodeMaker::make(Self, FixedArray[Int32], Int32, Int32, FixedArray[Int32], FixedArray[Int32]) -> Unit
+pub fn CodeMaker::memory_usage(Self) -> Int32
+
+// Type aliases
+
+// Traits
