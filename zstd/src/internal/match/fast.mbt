@@ -15,8 +15,8 @@ pub struct Fast {
 
 ///|
 /// A fast finder with the level's hashLog, minMatch, targetLength and
-/// windowLog. targetLength supplies the minimum search step, as fast's
-/// acceleration does in the reference encoder.
+/// windowLog. The gap between search pairs starts at max(targetLength, 1)
+/// plus one, as in the reference encoder.
 pub fn Fast::Fast(
   hash_log~ : Int32,
   min_match~ : Int32,
@@ -103,88 +103,129 @@ pub fn Fast::find(
   block.reset(repeats, n)
   self.repeats.copy_from(repeats)
   let mut anchor = start
-  let mut p = start
-  // Complete hashes that straddle the preceding block boundary only now:
-  // their lookahead did not exist when that block was parsed.
-  for q in (start - self.min_match + 1).max(0)..<start {
-    if q + self.min_match <= end {
-      self.hash[self.hash_at(q)] = q
-    }
+  let mut p = start.max(1)
+  let @seqenc.Distance(first) = self.repeats.get(0)
+  let @seqenc.Distance(second) = self.repeats.get(1)
+  let mut rep1 = if first.reinterpret_as_int() <= p {
+    first.reinterpret_as_int()
+  } else {
+    0
   }
-  while p + self.min_match <= end {
-    let h = self.hash_at(p)
-    let candidate = self.hash[h]
-    self.hash[h] = p
-    let mut best = self.length(p, candidate, end)
-    let mut distance = p - candidate
-    let @seqenc.Distance(recent) = self.repeats.get(0)
-    let @seqenc.Distance(second) = self.repeats.get(1)
-    let immediate = if p == anchor && block.count > 0 {
-      self.length(p, p - second.reinterpret_as_int(), end)
-    } else {
-      0
+  let mut rep2 = if second.reinterpret_as_int() <= p {
+    second.reinterpret_as_int()
+  } else {
+    0
+  }
+  // ZSTD_compressBlock_fast_noDict_generic, v1.5.7. Pairs of adjacent
+  // positions share an accelerating step. Preserve the pipeline's
+  // lookup/insertion order even though the loads here are checked.
+  let limit = end - 8
+  while p < limit {
+    let mut step = self.acceleration + 1
+    let mut next_step = p + 128
+    let mut p1 = p + 1
+    let mut p2 = p + step
+    let mut p3 = p2 + 1
+    if p3 >= limit {
+      break
     }
-    let ahead = p + 2
-    let rep_length = self.length(
-      ahead,
-      ahead - recent.reinterpret_as_int(),
-      end,
-    )
-    // Reference fast gives a recent-offset match two bytes ahead priority
-    // over a hash match here. Two cheap literals often avoid a much more
-    // expensive new offset; choosing only the longest match loses on nci.
-    if immediate >= 4 {
-      // The reference's immediate repeat-2 loop runs before restarting
-      // the general search, where the zero-literal shift makes it code 1.
-      best = immediate
-      distance = second.reinterpret_as_int()
-    } else if rep_length >= 4 {
-      if p + 1 + self.min_match <= end {
-        self.hash[self.hash_at(p + 1)] = p + 1
+    let mut h0 = self.hash_at(p)
+    let mut h1 = self.hash_at(p1)
+    let mut candidate = self.hash[h0]
+    let mut current = p
+    let mut best = 0
+    let mut distance = 0
+    let mut is_repeat = false
+    while p3 < limit {
+      current = p
+      self.hash[h0] = p
+      if rep1 > 0 {
+        best = self.length(p2, p2 - rep1, end)
+        if best >= 4 {
+          p = p2
+          distance = rep1
+          is_repeat = true
+          // A repeat catches back at most one byte, unlike a hash match.
+          if p - distance > 0 && self.data[p - 1] == self.data[p - distance - 1] {
+            p -= 1
+            best += 1
+          }
+          self.hash[h1] = p1
+          break
+        }
       }
-      p = ahead
-      best = rep_length
-      distance = recent.reinterpret_as_int()
-    }
-    // Recent offsets are especially useful on the next sequence with no
-    // literals; their eligibility is decided by seqenc's sole conversion.
-    for r in 0..<3 {
-      if immediate >= 4 || rep_length >= 4 {
+      best = self.length(p, candidate, end)
+      if best >= 4 {
+        distance = p - candidate
+        self.hash[h1] = p1
         break
       }
-      let @seqenc.Distance(d) = self.repeats.get(r)
-      let len = self.length(p, p - d.reinterpret_as_int(), end)
-      if len >= 4 && len > best {
-        best = len
-        distance = d.reinterpret_as_int()
+      candidate = self.hash[h1]
+      h0 = h1
+      h1 = self.hash_at(p2)
+      p = p1
+      p1 = p2
+      p2 = p3
+      current = p
+      self.hash[h0] = p
+      best = self.length(p, candidate, end)
+      if best >= 4 {
+        distance = p - candidate
+        if step <= 4 {
+          self.hash[h1] = p1
+        }
+        break
+      }
+      candidate = self.hash[h1]
+      h0 = h1
+      h1 = self.hash_at(p2)
+      p = p1
+      p1 = p2
+      p2 = p + step
+      p3 = p1 + step
+      if p2 >= next_step {
+        step += 1
+        next_step += 128
       }
     }
-    if best < 4 {
-      p += self.acceleration + ((p - anchor) >> 8)
-      continue
+    if distance == 0 {
+      break
     }
-    // Extend back over literals already skipped, within the frame/window.
-    while p > anchor &&
-          p - distance > 0 &&
-          self.data[p - 1] == self.data[p - distance - 1] {
-      p -= 1
-      best += 1
+    if !is_repeat {
+      rep2 = rep1
+      rep1 = distance
+      while p > anchor &&
+            p - distance > 0 &&
+            self.data[p - 1] == self.data[p - distance - 1] {
+        p -= 1
+        best += 1
+      }
     }
-    let ll = p - anchor
     for i in anchor..<p {
       block.literal(self.data[i])
     }
-    let raw = @seqenc.Distance(distance.reinterpret_as_uint())
-    block.add(ll, best, raw)
-    self.repeats.copy_from(block.repeats)
-    let previous = p
+    block.add(
+      p - anchor,
+      best,
+      @seqenc.Distance(distance.reinterpret_as_uint()),
+    )
     p += best
     anchor = p
-    // Reference fast updates a few positions rather than every byte of a
-    // long match: bounded work and a useful hash for its end.
-    for q in [previous + 2, p - 2] {
-      if q < p && q + self.min_match <= end {
-        self.hash[self.hash_at(q)] = q
+    if p <= limit {
+      self.hash[self.hash_at(current + 2)] = current + 2
+      self.hash[self.hash_at(p - 2)] = p - 2
+      while p <= limit && rep2 > 0 {
+        let len = self.length(p, p - rep2, end)
+        if len < 4 {
+          break
+        }
+        self.hash[self.hash_at(p)] = p
+        block.add(0, len, @seqenc.Distance(rep2.reinterpret_as_uint()))
+        let old = rep1
+        rep1 = rep2
+        rep2 = old
+        p += len
+        anchor = p
       }
     }
   }

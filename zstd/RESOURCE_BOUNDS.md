@@ -78,7 +78,12 @@ row has windowLog 21, hashLog 18, chainLog 18. Its terms in bytes are:
 
 The full-window test reaches the 4,325,376-byte matcher allocation.
 All twelve levels and the four size classes are checked against the
-maximum. Sequence bitstream capacity retains the shared BitPacker's
+maximum. Known-size adjustment reduces hashLog and chainLog using the
+shrunken window before its frame minimum is restored. The tests in
+`src/params_wbtest.mbt` pin adjusted reference rows and verify that window,
+hash and chain logs only shrink, including tiny inputs and tree cycle
+logs. This does not change the maximum above. Sequence bitstream capacity
+retains the shared BitPacker's
 doubling allowance; exact reservation is a possible later reduction.
 
 ## Left to the caller

@@ -79,3 +79,84 @@ test "fast permits the exact window distance and refuses older hash candidates" 
   assert_eq(finder.length(1025, 0, 1026), 0)
   assert_eq(finder.length(10, 10, 11), 0)
 }
+
+///|
+test "fast follows reference paired searches and hash insertion order" {
+  let data = FixedArray::make(8192, b'\x00')
+  let mut seed = 8878U
+  for i in 0..<8192 {
+    seed = seed * 1664525 + 1013904223
+    data[i] = if i >= 256 && i % 47 < 31 {
+      data[i - 193]
+    } else {
+      ((seed >> 24) % 16).to_byte()
+    }
+  }
+  let rows = []
+  for width in [4, 5, 6, 7] {
+    for acceleration in [0, 8] {
+      let finder = Fast(
+        hash_log=6,
+        min_match=width,
+        target_length=acceleration,
+        window_log=14,
+      )
+      let block = @seqenc.Block()
+      let repeats = @seqenc.Repeats()
+      finder.find(data, data.length(), repeats, block)
+      let mut hash = 14695981039346656037UL
+      for i in 0..<block.count {
+        let @seqenc.Distance(distance) = repeats.resolve(
+          block.offsets[i],
+          block.ll[i],
+        )
+        for
+          value in [
+            block.ll[i].to_uint64(),
+            block.ml[i].to_uint64(),
+            distance.to_uint64(),
+          ] {
+          hash = (hash ^ value) * 1099511628211UL
+        }
+      }
+      rows.push(
+        "\{width}/\{acceleration}: \{block.count} \{block.literal_count} \{hash}",
+      )
+    }
+  }
+  // Instrumented v1.5.7 ZSTD_compressBlock_fast_noDict_generic with
+  // wlog=14,hlog=6,minMatch=width,tlen=acceleration on the data above.
+  // Hash every (LL, ML, raw distance), including immediate repeat matches.
+  inspect(
+    rows.join("\n"),
+    content=(
+      #|4/0: 172 2938 15773209400949746909
+      #|4/8: 167 3198 14087964872031600058
+      #|5/0: 169 2949 10804152474017949082
+      #|5/8: 170 3129 11810505664092879323
+      #|6/0: 170 2939 10877654047666845925
+      #|6/8: 167 3198 14087964872031600058
+      #|7/0: 167 3011 7132836729279216012
+      #|7/8: 170 3129 11810505664092879323
+    ),
+  )
+}
+
+///|
+test "fast disables search repeats outside the retained prefix" {
+  let repeats = @seqenc.Repeats()
+  repeats.resolve(@seqenc.OffsetValue(2003), 1) |> ignore
+  repeats.resolve(@seqenc.OffsetValue(3003), 1) |> ignore
+  let finder = Fast(hash_log=6, min_match=4, target_length=0, window_log=10)
+  let block = @seqenc.Block()
+  finder.find(FixedArray::make(128, b'x'), 128, repeats, block)
+  assert_true(block.count > 0)
+  // The invalid repeats are ignored by search, not rewritten in the
+  // committed history. The first match must point into its own literals.
+  assert_true(repeats.get(0) == @seqenc.Distance(3000))
+  let @seqenc.Distance(distance) = repeats.resolve(
+    block.offsets[0],
+    block.ll[0],
+  )
+  assert_true(distance > 0 && distance <= block.ll[0].reinterpret_as_uint())
+}

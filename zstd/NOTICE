@@ -8,14 +8,15 @@ them. They are used under facebook/zstd's BSD license, testdata/upstream/LICENSE
   Copyright (c) Meta Platforms, Inc. and affiliates. All rights reserved.
 
 src/params.mbt transcribes the compression parameters of levels 1 to 12 from
-facebook/zstd v1.5.7, lib/compress/clevels.h (ZSTD_defaultCParameters), under
-the same BSD license.
+facebook/zstd v1.5.7, lib/compress/clevels.h (ZSTD_defaultCParameters), and
+the no-dictionary adjustments in lib/compress/zstd_compress.c
+(ZSTD_adjustCParams_internal), under the same BSD license.
 
-src/internal/match/fast.mbt uses the hash constants and recent-offset
-search ordering of facebook/zstd v1.5.7, lib/compress/zstd_fast.c and
-zstd_compress_internal.h, under that BSD license. It is a scalar MoonBit
-implementation with bounded rebased positions, rather than the reference's
-pipelined pointer loop.
+src/internal/match/fast.mbt transcribes the no-dictionary fast search loop
+and hash constants of facebook/zstd v1.5.7, lib/compress/zstd_fast.c and
+zstd_compress_internal.h, under that BSD license. The scalar MoonBit
+implementation preserves pipeline lookup and insertion order using checked,
+bounded rebased positions.
 
 src/internal/match/dfast.mbt transcribes the no-dictionary double-fast
 search loop and hash constants of facebook/zstd v1.5.7,

@@ -134,8 +134,8 @@ let level_tables : FixedArray[FixedArray[Params]] = [
 /// `size` bytes, or of unknown size.
 ///
 /// As `ZSTD_getCParams` does, a known size picks the table for its size
-/// class, and the window then shrinks to the smallest power of 2 that holds
-/// the input (at least 1 KiB), as `ZSTD_adjustCParams` does; an unknown size
+/// class, and the window and tables then shrink as `ZSTD_adjustCParams`
+/// does (without a dictionary); an unknown size
 /// takes the table for large inputs as it is. The size is known only when
 /// the caller states it, so the parameters, and the output, never depend on
 /// how the input is split.
@@ -148,9 +148,27 @@ fn params_for(level : Int32, size : Int64?) -> Params {
   // The smallest log whose power of 2 holds `size`, at least 6 (the
   // smallest hash log), as `ZSTD_adjustCParams_internal` computes it; sizes
   // above 2^30 are not resized.
-  guard size <= 1L << 30 else { return params }
-  let size_log = if size < 64 { 6 } else { 64 - (size - 1).clz() }
-  { ..params, window_log: params.window_log.min(size_log).max(10), }
+  let window_log = if size <= 1L << 30 {
+    let size_log = if size < 64 { 6 } else { 64 - (size - 1).clz() }
+    params.window_log.min(size_log)
+  } else {
+    params.window_log
+  }
+  let bt_scale = match params.strategy {
+    Btlazy2 | Btopt => 1
+    _ => 0
+  }
+  let cycle_log = params.chain_log - bt_scale
+  // Reduce the tables BEFORE restoring the frame's minimum windowLog.
+  // Otherwise tiny inputs retain tables sized for 1 KiB instead of 64 B.
+  // Dictionary tagging is inapplicable, and the row-finder hash cap (28
+  // or more) cannot reduce any of the level 1..12 rows (at most 23).
+  {
+    ..params,
+    window_log: window_log.max(10),
+    hash_log: params.hash_log.min(window_log + 1),
+    chain_log: params.chain_log - (cycle_log - window_log).max(0),
+  }
 }
 
 ///|

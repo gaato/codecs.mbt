@@ -654,8 +654,8 @@ test "every target writes the same bytes" {
   inspect(
     digests.join("\n"),
     content=(
-      #|24994fc06736764210c6dcebbebaae003ebc74e1924aee76ecd5ba424ccbb989
-      #|73863e2a2aff3d4e1373e6de10a0f1f47c89b05e8280c7fc3db9e1700ac156f7
+      #|61e3eab58e2eec4632a275433b78538f2c768e9b666cd5604a4c54a212037cb8
+      #|0770bb9d029235955caab0fd7f2f1cefb24b4ce7edfd7f8b4387888578dd9183
       #|9d4f9cf68ba54bd7b5bb9be86fdbc454a43ace8d0d249d43216bda1bb18a5733
       #|a5eecad5b3f5b444bea4726e76c9502dbc7bd8a07bb6773ecd06d1e79a9ae475
       #|2f30bdd49e97b38915bc17d9e3b92f5c39a1baaa90559546b298c7292453d5b2

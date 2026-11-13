@@ -49,7 +49,7 @@ and corruptions.
   `MOON_CC=cc` unless it is already set.
 
 Snapshot at the last full measurement (2026-11-13): **99.2 %**
-(1787/1801 lines); the remaining 14 lines are the same
+(1849/1863 lines); the remaining 14 lines are the same
 accepted defensive and JS-only lines below.
 
 ## Policy
@@ -108,6 +108,26 @@ levels and size classes. The shared harness and one-byte split tests run
 levels 3 and 4 as well as the existing levels. External crosscheck adds
 level-four frames, flushes, bytewise input and distant cross-block
 prefixes. No additional uncovered-line allowance is needed.
+
+Known-size parameter tests pin the adjusted window/chain/hash rows at ten
+sizes for all twelve levels and check that table sizes and the derived
+memory bound only shrink through every size-class boundary. Fast matching
+now pins every (LL, ML, distance) by a fingerprint against instrumented
+v1.5.7 reference output over a deterministic collision/repetition input,
+for all four hash widths and targetLength 0/8. It also checks that search
+disables repeats outside the retained prefix without changing committed
+history. These cover the paired-search schedule and insertion ordering.
+
+The shared `repeat-fse` and `repeat-rle` fixtures now insert raw, RLE and
+zero-sequence compressed blocks between each sequence-bearing block.
+Tests parse their actual block headers, sequence counts and table modes,
+and require Repeat after those boundaries. A separate shared fixture
+establishes [10, 1, 4] with LL=64, ML=64, distance=10, crosses all three
+boundaries, then encodes LL=0 with Offset_Value=3. Tests check the retained
+decoder history after every block, the final distance 9 and history
+[9, 10, 1], and the actual OF symbol (an erroneous reset would resolve to
+distance 0). All three fixtures are also decoded by `zstd -d` and Node in
+the external crosscheck. No uncovered-line budget was added.
 
 Accepted as uncovered (needs a row):
 

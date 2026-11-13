@@ -23,9 +23,119 @@ test "sequence sections: every mode, large counts, long extras and near-window o
       #|long-extras: [(1, 1, 1)]
       #|window-offset: [(1, 1, 1)]
       #|repeat-edges: [(0, 2, 2)]
+      #|repeat-history-across-raw-rle-zero: [(1, 1, 1), (1, 1, 3)]
       #|treeless-across-raw-rle: []
     ),
   )
+}
+
+///|
+test "sequence repeats and tables persist across raw RLE and zero-sequence blocks" {
+  for c in @seqcases.cases() {
+    if c.name != "repeat-fse" &&
+      c.name != "repeat-rle" &&
+      c.name != "repeat-history-across-raw-rle-zero" {
+      continue
+    }
+    let decoder = Decoder()
+    let out = FixedArray::make(131072, b'\x00')
+    let mut pos = 4 + frame_header_of(c.frame).header_len
+    let mut begin = 0
+    let types = []
+    let counts = []
+    let modes = []
+    let mut index = 0
+    for ;; {
+      let value = c.frame[pos].to_int() |
+        (c.frame[pos + 1].to_int() << 8) |
+        (c.frame[pos + 2].to_int() << 16)
+      let h = @header.parse_block_header(value).unwrap()
+      types.push(h.block_type)
+      let end = pos + 3 + (if h.block_type is Rle { 1 } else { h.size })
+      if h.block_type is Compressed {
+        let bytes = FixedArray::makei(h.size, i => c.frame[pos + 3 + i])
+        let lh = @header.parse_literals_header(bytes[:], 131072).unwrap()
+        let at = pos + 3 + lh.header_len + lh.compressed
+        let first = c.frame[at].to_int()
+        let count = if first < 128 {
+          first
+        } else {
+          ((first - 128) << 8) + c.frame[at + 1].to_int()
+        }
+        counts.push(count)
+        if count > 0 {
+          let mode = c.frame[at + (if first < 128 { 1 } else { 2 })].to_int()
+          modes.push(((mode >> 6) & 3, (mode >> 4) & 3, (mode >> 2) & 3))
+          if h.last && c.name == "repeat-history-across-raw-rle-zero" {
+            // LL and OF are RLE, ML is Repeat. OF symbol 1 restricts the
+            // value to 2..3; the decoded distance 9 below proves value 3.
+            assert_eq(c.frame[at + 3].to_int(), 1)
+          }
+        }
+      }
+      let status = decoder.step_into(c.frame[begin:end], out, end=h.last)
+      if h.last {
+        assert_true(status is Done)
+      } else {
+        assert_true(status is NeedMoreInput)
+      }
+      if c.name == "repeat-history-across-raw-rle-zero" {
+        let expected = if index < 4 { [10U, 1, 4] } else { [9U, 10, 1] }
+        for i in 0..<3 {
+          assert_true(decoder.rep.get(i) == @seqenc.Distance(expected[i]))
+        }
+      }
+      begin = end
+      pos = end
+      index += 1
+      if h.last {
+        break
+      }
+    }
+    // These are parsed from the actual bytes, not fixture metadata.
+    assert_eq(modes, c.modes)
+    if c.name == "repeat-history-across-raw-rle-zero" {
+      assert_eq(types, [Compressed, Raw, Rle, Compressed, Compressed])
+      assert_eq(counts, [1, 0, 1])
+      let reset = @seqenc.Repeats()
+      assert_true(
+        reset.resolve(@seqenc.OffsetValue(3), 0) == @seqenc.Distance(0),
+      )
+      reset.reset()
+      let block = @seqenc.Block()
+      block.reset(reset, 128)
+      block.add(64, 64, @seqenc.Distance(10))
+      for i, distance in [10U, 1, 4] {
+        assert_true(block.repeats.get(i) == @seqenc.Distance(distance))
+      }
+      block.add(0, 64, @seqenc.Distance(9))
+      let @seqenc.OffsetValue(value) = block.offsets[1]
+      assert_eq(value, 3U)
+    } else {
+      assert_eq(types, [
+        Compressed,
+        Raw,
+        Rle,
+        Compressed,
+        Compressed,
+        Raw,
+        Rle,
+        Compressed,
+        Compressed,
+      ])
+      assert_eq(
+        counts,
+        if c.name == "repeat-fse" {
+          [2000, 0, 2000, 0, 2000]
+        } else {
+          [200, 0, 200, 0, 200]
+        },
+      )
+      assert_eq(modes[2], (3, 3, 3))
+      assert_eq(modes[1].1, 3)
+      assert_eq(modes[1].2, 3)
+    }
+  }
 }
 
 ///|

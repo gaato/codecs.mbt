@@ -36,6 +36,9 @@ pub fn cases() -> Array[Case] {
     }
     let blocks = if kind == 2 || kind == 3 { 3 } else { 1 }
     for b in 0..<blocks {
+      if b > 0 {
+        history_boundaries(out, plain, writer, block)
+      }
       block.reset(writer.repeats, 131072)
       let count = match kind {
         0 => 4
@@ -142,8 +145,100 @@ pub fn cases() -> Array[Case] {
       modes,
     })
   }
+  result.push(repeat_history())
   result.push(treeless())
   result
+}
+
+///|
+fn history_boundaries(
+  out : @bits.BitPacker,
+  plain : Array[Byte],
+  writer : @seqenc.Writer,
+  block : @seqenc.Block,
+) -> Unit {
+  out.write(24, 10 << 3) // raw, non-final
+  for i in 0..<10 {
+    out.write(8, 65 + i)
+    plain.push((65 + i).to_byte())
+  }
+  out.write(24, (20 << 3) | 2) // RLE, non-final
+  out.write(8, 42)
+  for _ in 0..<20 {
+    plain.push(b'\x2a')
+  }
+  // Compressed literals with zero sequences also preserve tables/repeats.
+  block.reset(writer.repeats, 10)
+  for i in 0..<10 {
+    let byte = (97 + i).to_byte()
+    block.literal(byte)
+    plain.push(byte)
+  }
+  out.write(24, (12 << 3) | 4)
+  out.write(8, 10 << 3) // raw literals, one-byte header
+  out.write_bytes(block.literals, 0, 10)
+  writer.write(out, block)
+  writer.commit(block)
+}
+
+///|
+fn repeat_history() -> Case {
+  let out = @bits.BitPacker()
+  out.write(32, 0xfd2fb528U.reinterpret_as_int())
+  out.write(8, 0)
+  out.write(8, 56)
+  let writer = @seqenc.Writer()
+  let block = @seqenc.Block()
+  let plain : Array[Byte] = []
+  let modes = []
+  block.reset(writer.repeats, 128)
+  for i in 0..<64 {
+    let byte = (i + 32).to_byte()
+    block.literal(byte)
+    plain.push(byte)
+  }
+  block.add(64, 64, @seqenc.Distance(10))
+  for _ in 0..<64 {
+    plain.push(plain[plain.length() - 10])
+  }
+  write_sequence_block(out, writer, block, false)
+  modes.push(writer.modes())
+  history_boundaries(out, plain, writer, block)
+  block.reset(writer.repeats, 64)
+  block.add(0, 64, @seqenc.Distance(9))
+  for _ in 0..<64 {
+    plain.push(plain[plain.length() - 9])
+  }
+  write_sequence_block(out, writer, block, true)
+  modes.push(writer.modes())
+  let bytes = FixedArray::make(out.pending(), b'\x00')
+  out.drain_into(bytes, 0) |> ignore
+  {
+    name: "repeat-history-across-raw-rle-zero",
+    input: Bytes::from_array(plain),
+    frame: Bytes::from_array(bytes[:]),
+    modes,
+  }
+}
+
+///|
+fn write_sequence_block(
+  out : @bits.BitPacker,
+  writer : @seqenc.Writer,
+  block : @seqenc.Block,
+  last : Bool,
+) -> Unit {
+  let body = @bits.BitPacker()
+  let n = block.literal_count
+  body.write(4, 4)
+  body.write(12, n)
+  body.write_bytes(block.literals, 0, n)
+  writer.write(body, block)
+  writer.commit(block)
+  out.write(24, (body.pending() << 3) | 4 | (if last { 1 } else { 0 }))
+  let bytes = FixedArray::make(body.pending(), b'\x00')
+  body.drain_into(bytes, 0) |> ignore
+  out.write_bytes(bytes, 0, bytes.length())
 }
 
 ///|
