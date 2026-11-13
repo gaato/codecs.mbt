@@ -407,3 +407,41 @@ becomes 118,323 bytes versus reference 118,359 (-0.03%). At levels three
 and four, kennedy's earlier small entropy differences remain: 112,060
 versus 111,831 and 111,064 versus 110,925 bytes. Those double-fast paths
 were not changed by the fast-search correction.
+
+## Speed
+
+Encoding speed, measured on an Intel Core i5-10400F pinned to one CPU
+(`taskset -c 2`), with MoonBit 0.10.20 (GCC for native, moonrun for Wasm
+and Wasm GC, Node 26 for JS), through codec_bench's "zstd encode": the
+bench text (512 KiB) and binary (128 KiB), their size unknown to the
+encoder, so the largest parameter class. The reference is zstd 1.5.7's
+`zstd -b<level>` on the same files.
+
+### Starting point
+
+| Input, level | Native | Wasm | Wasm GC | JS | zstd 1.5.7 |
+|---|---:|---:|---:|---:|---:|
+| text, 1 | 11.85 ms (44 MB/s) | 40.00 ms | 13.67 ms | 94.08 ms | 303.6 MB/s |
+| text, 3 | 12.98 ms (40 MB/s) | 42.53 ms | 14.94 ms | 117.13 ms | 228.5 MB/s |
+| text, 5 | 22.38 ms (23 MB/s) | 70.91 ms | 21.89 ms | 149.87 ms | 107.6 MB/s |
+| text, 8 | 47.62 ms (11 MB/s) | 125.83 ms | 49.46 ms | 206.25 ms | 46.8 MB/s |
+| text, 12 | 105.01 ms (5.0 MB/s) | 192.79 ms | 105.26 ms | 306.97 ms | 24.8 MB/s |
+| binary, 1 | 1.55 ms (85 MB/s) | 4.12 ms | 1.82 ms | 9.80 ms | 724.8 MB/s |
+| binary, 3 | 4.28 ms (31 MB/s) | 12.09 ms | 4.95 ms | 47.68 ms | 185.2 MB/s |
+| binary, 12 | 21.90 ms (6.0 MB/s) | 23.51 ms | 20.41 ms | 104.12 ms | 36.5 MB/s |
+
+Where native time goes (`perf record -e cycles:u`, the text, share of
+samples by function):
+
+| Level | Largest shares |
+|---|---|
+| 1 | block loop with the inlined fast search 27.3%, `Fast::hash_at` 15.6%, allocation (`malloc`, `free`, `moonbit_drop_object`) 15.6%, `Fast::length` 9.3%, `Block::add` 8.0%, `BitPacker::write` 8.0%, `CTable::encode` 4.9% |
+| 3 | block loop with the inlined dfast search 35.8%, allocation 16.6%, `Block::add` 8.1%, `Dfast::length` 8.0%, `BitPacker::write` 6.5%, `Dfast::hash_at` 5.8% |
+| 5 | `Lazy::search` 37.2%, `Lazy::hash_at` 13.9%, block loop 10.5%, allocation 13.0%, `Lazy::length` 5.2% |
+| 12 | `Lazy::search` 78.5%, `moonbit_make_int32_array` 4.0%, `Lazy::length` 3.8%, `Lazy::hash_at` 3.5% |
+
+The allocation comes from functions returning tuples, which native
+MoonBit boxes on the heap unless inlined: `offset_code` (once or more a
+sequence) and `Lazy::search` (once a search). Wasm runs about three times
+as long as native and Wasm GC because each bounds-checked array access
+there calls two out-of-line helpers (the length and the range check).

@@ -104,6 +104,26 @@ fn deflate_encode(input : Bytes) -> Int32 {
 }
 
 ///|
+/// Encodes `input` at `level` into 64 KiB slices, its size unknown to the
+/// encoder (the largest parameter class), and returns the bytes written.
+fn zstd_encode(input : Bytes, level : Int32) -> Int32 {
+  let encoder = @zstd.Encoder(level~)
+  let out = FixedArray::make(1 << 16, b'\x00')
+  let mut rest = input[:]
+  let mut total = 0
+  for ;; {
+    let status = encoder.step_into(rest, out, action=Finish) catch {
+      _ => abort("zstd: content size")
+    }
+    rest = rest[encoder.last_consumed():]
+    total += encoder.last_produced()
+    if status is Done {
+      return total
+    }
+  }
+}
+
+///|
 test "decode" (b : @bench.T) {
   let zt = decode64(zstd_text)
   let zb = decode64(zstd_binary)
@@ -193,4 +213,26 @@ test "png" (b : @bench.T) {
   b.bench(name="typst png 512x384 rgb8 adam7", () => {
     b.keep(typst_decode(interlaced))
   })
+}
+
+///|
+test "zstd encode" (b : @bench.T) {
+  let text = @zstd.decompress(decode64(zstd_text)) catch {
+    _ => abort("zstd: bad stream")
+  }
+  let binary = @zstd.decompress(decode64(zstd_binary)) catch {
+    _ => abort("zstd: bad stream")
+  }
+  assert_eq(text.length(), text_size)
+  assert_eq(binary.length(), binary_size)
+  for level in [1, 3, 5, 8, 12] {
+    b.bench(name="zstd encode text 512 KiB level \{level}", () => {
+      b.keep(zstd_encode(text, level))
+    })
+  }
+  for level in [1, 3, 12] {
+    b.bench(name="zstd encode binary 128 KiB level \{level}", () => {
+      b.keep(zstd_encode(binary, level))
+    })
+  }
 }
