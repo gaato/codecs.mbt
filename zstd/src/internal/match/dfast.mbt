@@ -10,8 +10,7 @@ pub struct Dfast {
   priv hash_shift : Int32
   priv hash_prime : UInt64
   priv window : Int32
-  priv mut data : FixedArray[Byte]
-  priv mut history : Int32
+  priv history : History
 }
 
 ///|
@@ -24,8 +23,7 @@ pub struct Dfast {
   priv chain_log : Int32
   priv min_match : Int32
   priv window : Int32
-  priv mut data : FixedArray[Byte]
-  priv mut history : Int32
+  priv history : History
 }
 
 ///|
@@ -38,16 +36,17 @@ pub fn Dfast::Dfast(
   min_match~ : Int32,
   window_log~ : Int32,
 ) -> Dfast {
+  let long = FixedArray::make(1 << hash_log, -1)
+  let short = FixedArray::make(1 << chain_log, -1)
   {
-    long: FixedArray::make(1 << hash_log, -1),
-    short: FixedArray::make(1 << chain_log, -1),
+    long,
+    short,
     hash_log,
     chain_log,
     hash_shift: 64 - min_match.clamp(min=4, max=7) * 8,
     hash_prime: hash_prime(min_match.clamp(min=4, max=7)),
     window: 1 << window_log,
-    data: [],
-    history: 0,
+    history: History::new(1 << window_log, long, short),
   }
 }
 
@@ -60,25 +59,23 @@ pub fn Dfast::Dfast(
   min_match~ : Int32,
   window_log~ : Int32,
 ) -> Dfast {
+  let long = FixedArray::make(1 << hash_log, -1)
+  let short = FixedArray::make(1 << chain_log, -1)
   {
-    long: FixedArray::make(1 << hash_log, -1),
-    short: FixedArray::make(1 << chain_log, -1),
+    long,
+    short,
     hash_log,
     chain_log,
     min_match: min_match.clamp(min=4, max=7),
     window: 1 << window_log,
-    data: [],
-    history: 0,
+    history: History::new(1 << window_log, long, short),
   }
 }
 
 ///|
 /// Releases frame history and invalidates both tables before another frame.
 pub fn Dfast::reset(self : Dfast) -> Unit {
-  self.long.fill(-1)
-  self.short.fill(-1)
-  self.data = []
-  self.history = 0
+  self.history.reset()
 }
 
 ///|
@@ -86,7 +83,7 @@ pub fn Dfast::reset(self : Dfast) -> Unit {
 fn Dfast::hash_at(self : Dfast, p : Int32, width : Int32, log : Int32) -> Int32 {
   let mut word = 0UL
   for i in 0..<width {
-    word = word | (self.data[p + i].to_uint64() << (8 * i))
+    word = word | (self.history.data[p + i].to_uint64() << (8 * i))
   }
   if width == 4 {
     ((word.to_uint() * 2654435761U) >> (32 - log)).reinterpret_as_int()
@@ -106,7 +103,7 @@ fn Dfast::hash_at(self : Dfast, p : Int32, width : Int32, log : Int32) -> Int32 
 #inline
 fn Dfast::long_hash(self : Dfast, p : Int32) -> Int32 {
   // All callers leave eight bytes through end (including tail catch-up).
-  ((load64(self.data, p) * 0xcf1bbcdcb7a56463UL) >> (64 - self.hash_log)).to_int()
+  ((load64(self.history.data, p) * 0xcf1bbcdcb7a56463UL) >> (64 - self.hash_log)).to_int()
 }
 
 ///|
@@ -114,7 +111,7 @@ fn Dfast::long_hash(self : Dfast, p : Int32) -> Int32 {
 #inline
 fn Dfast::short_hash(self : Dfast, p : Int32) -> Int32 {
   // p - 1 after a match precedes an end checked to leave eight bytes.
-  (((load64(self.data, p) << self.hash_shift) * self.hash_prime) >>
+  (((load64(self.history.data, p) << self.hash_shift) * self.hash_prime) >>
   (64 - self.chain_log)).to_int()
 }
 
@@ -137,7 +134,7 @@ fn Dfast::length(self : Dfast, p : Int32, q : Int32, end : Int32) -> Int32 {
   if q < 0 || q >= p || p - q > self.window {
     return 0
   }
-  match_length(self.data, p, q, end)
+  match_length(self.history.data, p, q, end)
 }
 
 ///|
@@ -158,17 +155,25 @@ pub fn Dfast::find(
   repeats : @seqenc.Repeats,
   block : @seqenc.Block,
 ) -> Unit {
-  let start = self.history
+  self.prepare(self.window.min(131072))
+  self.history.append_fixed(input, n)
+  self.find_buffered(n, repeats, block)
+  self.history.finish_block()
+}
+
+///|
+/// Parses bytes already appended to the shared history by the block cutter.
+pub fn Dfast::find_buffered(
+  self : Dfast,
+  n : Int32,
+  repeats : @seqenc.Repeats,
+  block : @seqenc.Block,
+) -> Unit {
+  let start = self.history.start
   let end = start + n
-  if self.data.length() < end {
-    let grown = FixedArray::make(
-      end.max(self.data.length() * 2).min(self.window + 131072),
-      b'\x00',
-    )
-    FixedArray::unsafe_blit(grown, 0, self.data, 0, start)
-    self.data = grown
-  }
-  FixedArray::unsafe_blit(self.data, start, input, 0, n)
+  // Preserve the old per-block retained prefix during backward extension
+  // and repeat initialization, even when slack still holds older bytes.
+  let floor = (start - self.window).max(0)
   block.reset(repeats, n)
   for q in (start - 7).max(0)..<start {
     if q + 8 <= end {
@@ -179,12 +184,12 @@ pub fn Dfast::find(
   let mut p = start.max(1)
   let @seqenc.Distance(first) = repeats.get(0)
   let @seqenc.Distance(second) = repeats.get(1)
-  let mut rep1 = if first.reinterpret_as_int() <= p {
+  let mut rep1 = if first.reinterpret_as_int() <= p - floor {
     first.reinterpret_as_int()
   } else {
     0
   }
-  let mut rep2 = if second.reinterpret_as_int() <= p {
+  let mut rep2 = if second.reinterpret_as_int() <= p - floor {
     second.reinterpret_as_int()
   } else {
     0
@@ -250,9 +255,10 @@ pub fn Dfast::find(
         }
       }
       while p > anchor &&
-            p - distance > 0 &&
+            p - distance > floor &&
             // 0 < p - distance <= p < end, so both predecessors fit.
-            read(self.data, p - 1) == read(self.data, p - distance - 1) {
+            read(self.history.data, p - 1) ==
+            read(self.history.data, p - distance - 1) {
         p -= 1
         best += 1
       }
@@ -267,7 +273,7 @@ pub fn Dfast::find(
     }
     for i in anchor..<p {
       // anchor <= i < p <= end.
-      block.literal(read(self.data, i))
+      block.literal(read(self.history.data, i))
     }
     block.add(
       p - anchor,
@@ -302,26 +308,24 @@ pub fn Dfast::find(
   }
   for i in anchor..<end {
     // anchor <= i < end.
-    block.literal(read(self.data, i))
+    block.literal(read(self.history.data, i))
   }
-  let drop = (end - self.window).max(0)
-  if drop > 0 {
-    for i in drop..<end {
-      self.data[i - drop] = self.data[i]
-    }
-    // Separate loops avoid allocating an array of tables at each rebase.
-    for i in 0..<self.long.length() {
-      self.long[i] = (self.long[i] - drop).max(-1)
-    }
-    for i in 0..<self.short.length() {
-      self.short[i] = (self.short[i] - drop).max(-1)
-    }
-  }
-  self.history = end - drop
 }
 
 ///|
 /// Retained bytes and both four-byte position tables.
 pub fn Dfast::memory_usage(self : Dfast) -> Int32 {
-  self.data.length() + 4 * (self.long.length() + self.short.length())
+  self.history.data.length() + 4 * (self.long.length() + self.short.length())
+}
+
+///|
+/// Shared input storage; append only after reserving the next cutter block.
+pub fn Dfast::history(self : Dfast) -> History {
+  self.history
+}
+
+///|
+/// Makes room for a whole cutter block, independently of input step sizes.
+pub fn Dfast::prepare(self : Dfast, block_max : Int32) -> Unit {
+  self.history.prepare(block_max) |> ignore
 }

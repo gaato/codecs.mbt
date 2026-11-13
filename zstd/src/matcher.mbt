@@ -65,14 +65,36 @@ fn Matcher::memory_usage(self : Matcher) -> Int32 {
 ///|
 fn Matcher::find(
   self : Matcher,
-  input : FixedArray[Byte],
   n : Int32,
   repeats : @seqenc.Repeats,
   block : @seqenc.Block,
 ) -> Unit {
   match self {
-    Fast(f) => f.find(input, n, repeats, block)
-    Dfast(f) => f.find(input, n, repeats, block)
-    Lazy(f) => f.find(input, n, repeats, block)
+    Fast(f) => f.find_buffered(n, repeats, block)
+    Dfast(f) => f.find_buffered(n, repeats, block)
+    Lazy(f) => f.find_buffered(n, repeats, block)
   }
+}
+
+///|
+fn Matcher::history(self : Matcher) -> @matcher.History {
+  match self {
+    Fast(f) => f.history()
+    Dfast(f) => f.history()
+    Lazy(f) => f.history()
+  }
+}
+
+///|
+fn Matcher::prepare(self : Matcher, block_max : Int32) -> Unit {
+  match self {
+    Fast(f) => f.prepare(block_max)
+    Dfast(f) => f.prepare(block_max)
+    Lazy(f) => f.prepare(block_max)
+  }
+}
+
+///|
+fn Matcher::finish(self : Matcher) -> Unit {
+  self.history().finish_block()
 }

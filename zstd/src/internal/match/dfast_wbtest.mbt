@@ -45,16 +45,18 @@ test "dfast history wraps within the window and resets before another frame" {
     if history.length() > 1024 {
       history = history[history.length() - 1024:].to_owned()
     }
-    assert_eq(finder.history, total.min(1024))
-    assert_true(finder.data.length() <= 1024 + 131072)
-    assert_eq(finder.memory_usage(), finder.data.length() + 8 * 64)
+    assert_true(
+      finder.history.start >= total.min(1024) && finder.history.start <= 3072,
+    )
+    assert_true(finder.history.data.length() <= 3072)
+    assert_eq(finder.memory_usage(), finder.history.data.length() + 8 * 64)
   }
   assert_true(matched > 30)
   finder.reset()
   repeats.reset()
   finder.find(FixedArray::make(100, b'x'), 100, repeats, block)
   assert_true(block.ll[0] > 0)
-  assert_true(finder.history == 100)
+  assert_true(finder.history.start == 100)
 }
 
 ///|
@@ -145,6 +147,8 @@ test "dfast ignores repeat offsets before the frame start" {
 
 ///|
 test "dfast rebased lookups invalidate evicted entries and retain surviving ranges" {
+  // Logical eviction applies even while slack delays the physical slide.
+  // history_wbtest checks both tables and replay at repeated physical cuts.
   // Separate replays keep the retained range eligible: placing it after
   // the evicted replay would itself move its distance outside the window.
   for offset in [0, 100] {
@@ -161,8 +165,6 @@ test "dfast rebased lookups invalidate evicted entries and retain surviving rang
     finder.find(original, 1024, repeats, block)
     reconstruct_matches(block, original, frame, reps, 1024)
     repeats.copy_from(block.repeats)
-    let old_long = finder.long.copy()
-    let old_short = finder.short.copy()
     let unrelated = FixedArray::makei(64, _ => {
       seed = seed * 1664525 + 1013904223
       (seed >> 24).to_byte()
@@ -170,20 +172,6 @@ test "dfast rebased lookups invalidate evicted entries and retain surviving rang
     finder.find(unrelated, 64, repeats, block)
     reconstruct_matches(block, unrelated, frame, reps, 1024)
     repeats.copy_from(block.repeats)
-    let mut discarded = 0
-    for pair in [(old_long, finder.long, 8), (old_short, finder.short, 4)] {
-      let (old, table, width) = pair
-      for h in 0..<table.length() {
-        if old[h] >= 0 && old[h] < 64 && table[h] == -1 {
-          discarded += 1
-        }
-        if table[h] >= 0 {
-          assert_eq(reference_hash(finder.data, table[h], width, 12), h)
-          assert_true(table[h] < 1024)
-        }
-      }
-    }
-    assert_true(discarded > 0)
     let replay = FixedArray::makei(64, i => original[offset + i])
     finder.find(replay, 64, repeats, block)
     reconstruct_matches(block, replay, frame, reps, 1024)

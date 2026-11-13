@@ -164,12 +164,11 @@ const ENCODER_PENDING_MAX : Int32 = 4 + 10 + 3 + MAX_BLOCK_SIZE + 4
 /// and both entropy coders. Packer capacities include doubling and the
 /// extra 5 bytes reserved by a write.
 fn encoder_memory_bound(params~ : Params = encoder_params(12, None)) -> Int32 {
-  MAX_BLOCK_SIZE +
   2 * (ENCODER_PENDING_MAX + 5) +
   LiteralsWriter::new().memory_usage() +
   2 * 2 * (512 + 5) +
-  (1 << params.window_log) +
-  MAX_BLOCK_SIZE +
+  2 * (1 << params.window_log) +
+  (1 << params.window_log).min(MAX_BLOCK_SIZE) +
   4 * (1 << params.hash_log) +
   (if params.strategy is Fast { 12 } else { 4 * (1 << params.chain_log) }) +
   MAX_BLOCK_SIZE +
@@ -184,13 +183,18 @@ fn encoder_memory_bound(params~ : Params = encoder_params(12, None)) -> Int32 {
 ///|
 /// Checks the encoder's bounds after a step.
 fn check_encoder_bounds(e : Encoder, _room : Int32) -> Unit raise {
-  assert_true(e.data.length() <= e.block_max)
+  let h = e.matcher.history()
+  assert_true(
+    h.capacity() <=
+    2 * (1 << e.params.window_log) +
+    (1 << e.params.window_log).min(MAX_BLOCK_SIZE),
+  )
   assert_true(e.block_max <= MAX_BLOCK_SIZE)
-  assert_true(e.data_len <= e.data.length())
+  assert_true(e.data_len <= e.block_max)
+  assert_true(h.block_start() + e.data_len <= h.capacity())
   assert_true(e.writer.pending() <= ENCODER_PENDING_MAX)
   assert_eq(
     e.memory_usage(),
-    e.data.length() +
     e.writer.capacity() +
     e.literals.memory_usage() +
     e.matcher.memory_usage() +
@@ -217,7 +221,7 @@ test "the encoder's fixed tables and its memory bound" {
   inspect(
     encoder_memory_bound(),
     content=(
-      #|56913824
+      #|60977056
     ),
   )
   // A new encoder holds fixed tables and its level's hash table.
@@ -230,37 +234,35 @@ test "the encoder's fixed tables and its memory bound" {
 }
 
 ///|
-test "the encoder's input buffer is at most a block, and grows only with input" {
-  let rng = Rng::new(42)
-  let largest = (input : Bytes, content_size : Int64?) => {
-    let encoder = match content_size {
-      Some(size) => Encoder(content_size=size)
-      None => Encoder()
-    }
-    let mut most = 0
-    encode_drive(encoder, input, next_in=() => 3000, next_out=() => 65536, check=(
-      e,
-      room,
-    ) => {
-      check_encoder_bounds(e, room)
-      most = most.max(e.data.length())
-    })
-    |> ignore
-    most
-  }
-  inspect(largest(sample_text(rng, 500), None), content="1024")
-  inspect(largest(sample_text(rng, 100000), None), content="131072")
-  inspect(largest(sample_text(rng, 400000), None), content="131072")
-  // A single-segment frame's blocks are at most its content.
-  inspect(largest(sample_text(rng, 1500), Some(1500)), content="1500")
-  // `reset` releases it.
+test "unfinished encoder input lives only in bounded shared history" {
   let encoder = Encoder()
-  encode_drive(encoder, sample_text(rng, 100000), next_in=() => 100000, next_out=() => {
-    1 << 20
-  })
-  |> ignore
+  let input = sample_text(Rng::new(42), 400000)
+  let stream = encode_drive(
+    encoder,
+    input,
+    next_in=() => 3000,
+    next_out=() => 65536,
+    check=check_encoder_bounds,
+  )
+  assert_eq(decompress(stream), input)
+  assert_true(encoder.matcher.history().capacity() >= input.length())
   encoder.reset()
-  inspect(encoder.data.length(), content="0")
+  assert_eq(encoder.matcher.history().capacity(), 0)
+  for n in [0, 500, 1500, 100000, 400000] {
+    let input = sample_text(Rng::new(42), n)
+    let e = Encoder(content_size=n.to_int64())
+    let stream = encode_drive(
+      e,
+      input,
+      next_in=() => 37,
+      next_out=() => 65536,
+      check=check_encoder_bounds,
+    )
+    assert_eq(decompress(stream), input)
+    assert_true(e.block_max <= n)
+    e.reset()
+    assert_eq(e.matcher.history().capacity(), 0)
+  }
 }
 
 ///|
@@ -345,8 +347,8 @@ test "the encoder's memory_usage stays within its bound after every step" {
 }
 
 ///|
-test "double-fast memory reaches both tables and the full window plus a block" {
-  let input = Bytes::makei(3 * (1 << 20), i => (i % 251).to_byte())
+test "double-fast memory reaches both tables and the full window slack and a block" {
+  let input = Bytes::makei(6 * (1 << 20), i => (i % 251).to_byte())
   let e = Encoder(level=4)
   let out = encode_drive(
     e,
@@ -358,7 +360,7 @@ test "double-fast memory reaches both tables and the full window plus a block" {
   assert_true(decompress(out) == input)
   assert_eq(
     e.matcher.memory_usage(),
-    (1 << 21) + MAX_BLOCK_SIZE + 4 * (2 << 18),
+    2 * (1 << 21) + MAX_BLOCK_SIZE + 4 * (2 << 18),
   )
   for size in [None, Some(1000L), Some(100000L), Some(200000L), Some(400000L)] {
     for level in 1..<=12 {
@@ -391,8 +393,8 @@ test "double-fast memory reaches both tables and the full window plus a block" {
 }
 
 ///|
-test "lazy memory reaches the maximum chain hash and full window plus a block" {
-  let input = Bytes::makei(5 * (1 << 20), i => (i % 251).to_byte())
+test "lazy memory reaches the maximum chain hash and full window slack and a block" {
+  let input = Bytes::makei(10 * (1 << 20), i => (i % 251).to_byte())
   let e = Encoder(level=12)
   let out = encode_drive(
     e,
@@ -404,7 +406,7 @@ test "lazy memory reaches the maximum chain hash and full window plus a block" {
   assert_true(decompress(out) == input)
   assert_eq(
     e.matcher.memory_usage(),
-    (1 << 22) + MAX_BLOCK_SIZE + 4 * ((1 << 22) + (1 << 23)),
+    2 * (1 << 22) + MAX_BLOCK_SIZE + 4 * ((1 << 22) + (1 << 23)),
   )
-  assert_eq(encoder_memory_bound(), 56913824)
+  assert_eq(encoder_memory_bound(), 60977056)
 }

@@ -1,6 +1,6 @@
 // The streaming encoder.
 //
-// Input is copied into `data`, which holds the block not encoded yet, at
+// Input is copied straight into the matcher's history, which holds the block not encoded yet, at
 // most Block_Maximum_Size (128 KiB). A block ends only when it is full and
 // more input comes, or at `Flush` or `Finish`: never at the boundary of a
 // step, so that the output does not depend on how the input is split. A
@@ -8,11 +8,6 @@
 // be the frame's last. Encoded bytes wait in the bit writer until the
 // caller's buffer takes them, and no more input is taken while they wait:
 // memory stays bounded whatever the caller passes.
-
-///|
-/// The first allocation of the input buffer; it doubles as input grows, up
-/// to a block.
-const INITIAL_BUFFER : Int32 = 1024
 
 ///|
 /// A streaming Zstandard encoder (RFC 8878). Feed it input in chunks of any
@@ -30,8 +25,7 @@ pub struct Encoder {
   priv params : Params
   priv single_segment : Bool
   priv block_max : Int32
-  // The input of the block not encoded yet: `data[0..data_len)`.
-  priv mut data : FixedArray[Byte]
+  // Unfinished block length in the matcher's shared history.
   priv mut data_len : Int32
   priv literals : LiteralsWriter
   priv matcher : Matcher
@@ -94,7 +88,6 @@ pub fn Encoder::Encoder(
     params,
     single_segment,
     block_max,
-    data: FixedArray::make(0, b'\x00'),
     data_len: 0,
     literals: LiteralsWriter::new(),
     matcher: Matcher::new(params),
@@ -118,9 +111,8 @@ pub fn Encoder::Encoder(
 
 ///|
 /// Starts a new frame with the same options, keeping the tables' memory.
-/// The input buffer is released.
+/// The shared input/history buffer is released.
 pub fn Encoder::reset(self : Encoder) -> Unit {
-  self.data = FixedArray::make(0, b'\x00')
   self.data_len = 0
   self.hash.reset()
   self.matcher.reset()
@@ -158,12 +150,11 @@ pub fn Encoder::last_produced(self : Encoder) -> Int32 {
 
 ///|
 /// Bytes the encoder holds in buffers that grow with the stream: the input
-/// buffer (at most one 128 KiB block), the output waiting for the caller,
+/// block in shared history, the output waiting for the caller,
 /// match window and hash, sequence storage, and entropy coding scratch.
 /// Bounds for each are in RESOURCE_BOUNDS.md. `reset` releases the input
 /// and match window buffers.
 pub fn Encoder::memory_usage(self : Encoder) -> Int32 {
-  self.data.length() +
   self.writer.capacity() +
   self.literals.memory_usage() +
   self.matcher.memory_usage() +
@@ -344,20 +335,14 @@ fn Encoder::drain(
 }
 
 ///|
-/// Copies `bytes` (at most what fills a block) after the buffered input,
-/// growing the buffer.
+/// Copies `bytes` (at most what fills a block) directly to match history.
+/// Reserving a whole cutter block first makes sliding independent of steps.
 fn Encoder::append(self : Encoder, bytes : BytesView) -> Unit {
   let n = bytes.length()
-  if self.data_len + n > self.data.length() {
-    let mut size = self.data.length().max(INITIAL_BUFFER)
-    while size < self.data_len + n {
-      size = size * 2
-    }
-    let grown = FixedArray::make(size.min(self.block_max), b'\x00')
-    FixedArray::unsafe_blit(grown, 0, self.data, 0, self.data_len)
-    self.data = grown
+  if self.data_len == 0 {
+    self.matcher.prepare(self.block_max)
   }
-  self.data.blit_from_bytesview(self.data_len, bytes)
+  self.matcher.history().append(bytes)
   self.data_len += n
   self.total_in += n.to_int64()
 }
@@ -401,13 +386,14 @@ fn Encoder::write_header(self : Encoder) -> Unit {
 }
 
 ///|
-/// Encodes `data[0..data_len)` as one block, `last` or not, and empties the
-/// buffer.
+/// Encodes the unfinished history range as one cutter block, `last` or not.
 fn Encoder::encode_block(self : Encoder, last : Bool) -> Unit {
   let n = self.data_len
-  self.hash.update(self.data, 0, n)
-  self.matcher.find(self.data, n, self.sequence_writer.repeats, self.sequences)
+  let history = self.matcher.history()
+  self.hash.update(history.buffer(), history.block_start(), n)
+  self.matcher.find(n, self.sequence_writer.repeats, self.sequences)
   self.write_matched_block(n, last)
+  self.matcher.finish()
   self.data_len = 0
 }
 

@@ -627,3 +627,125 @@ the original byte-wise implementation for exact-end, block-boundary and
 short-input fixtures, then checked on all four targets. The external
 crosscheck additionally decodes these inputs and 1 KiB sliding-window
 frames from all three match finders with both `zstd -d` and Node.
+
+### After sharing input and match history
+
+Fast, double-fast and lazy now use `internal/match/History`: one buffer
+for retained history and the unfinished cutter block. The encoder appends
+caller input directly there. Checksum, raw/RLE fallback and match parsing
+read that block in place; gathered literals keep their existing sequence
+buffer. There is no separate encoder input allocation or block-to-finder
+copy. A whole cutter block is reserved before its first byte, so neither
+input step sizes nor output slice sizes decide when history slides.
+
+The buffer grows up to window + slack + min(window, 128 KiB). Only when
+the next whole block would exceed that limit does one overlapping
+`FixedArray::unsafe_blit` retain the window, followed by one rebase of each
+position table. Lazy adjusts its chain-ring bias and insertion cursor by
+the same cut. Logical per-block floors still limit backward extension,
+repeat eligibility and lazy insertion; delaying physical eviction cannot
+change the original parser decisions.
+
+The slack comparison uses `window_bench_test.mbt`: 24 copies of the bench
+text (12 MiB), with each 257th byte XORed with the copy number. Inputs
+are constructed before timing; every timed iteration creates a fresh
+unknown-size encoder. Same CPU and toolchain as above, targets and
+variants run individually. Times below are means in milliseconds.
+
+| Slack | Native l1 | Native l3 | Native l12 | Wasm l1 | Wasm l3 | Wasm l12 |
+|---|---:|---:|---:|---:|---:|---:|
+| window / 4 | 20.35 | 25.22 | 393.83 | 78.29 | 83.49 | 650.81 |
+| window / 2 | 20.48 | 23.54 | 336.57 | 74.42 | 77.73 | 547.14 |
+| window | 20.30 | 24.58 | 329.05 | 78.50 | 79.63 | 486.27 |
+
+| Slack | Extra history at l1 / l3 / l12 | Maximum encoder bound |
+|---|---|---:|
+| window / 4 | 128 KiB / 512 KiB / 1 MiB | 57,831,328 bytes |
+| window / 2 | 256 KiB / 1 MiB / 2 MiB | 58,879,904 bytes |
+| window | 512 KiB / 2 MiB / 4 MiB | 60,977,056 bytes |
+
+One window of slack is retained: it moves at most about one retained byte
+per input byte after growth, and level twelve is 11.1% faster on Wasm
+than half a window, for another 2 MiB at that row. Native level twelve
+improves 2.2%. Half a window is slightly faster at level three; the full
+window is chosen for its larger-table case, not a uniform speed win.
+The full-window Wasm l1/l3 deviations were 6.33/8.12 ms, so their small
+differences are not reliable advantages for either size.
+
+```sh
+MOON_CC=cc taskset -c 2 moon bench --release --target native -p gaato/codec_bench -f window_bench_test.mbt
+# Repeat with --target wasm. For the slack comparison, only History::limit's
+# second window term was changed to window >> 2 or window >> 1.
+```
+
+| 12 MiB varied text | Native before | Native after | Wasm before | Wasm after |
+|---|---:|---:|---:|---:|
+| level 1 | 53.54 | 20.30 | 387.75 | 78.50 |
+| level 3 | 135.65 | 24.58 | 1,400 | 79.63 |
+| level 12 | 1,160 | 329.05 | 8,230 | 486.27 |
+
+These inputs exceed twice the largest 4 MiB window. The shorter standard
+benchmarks below mostly measure construction and parsing, since their
+512/128 KiB inputs do not fill the large windows. The maximum reported
+encoder bound changes from 56,913,824 to 60,977,056 bytes: add 4 MiB slack
+and remove the separate 128 KiB input buffer. RESOURCE_BOUNDS.md and its
+full-capacity tests derive the same bound, also used by conformance.
+
+The standard codec_bench "zstd encode" run, before and after, in
+milliseconds (same command as the earlier tables):
+
+| Input, level | Native before → after | Wasm before → after | Wasm GC before → after | JS before → after |
+|---|---:|---:|---:|---:|
+| text, 1 | 7.48 → 7.65 | 22.32 → 22.42 | 13.73 → 14.08 | 93.21 → 92.26 |
+| text, 3 | 7.39 → 7.52 | 21.98 → 22.13 | 12.31 → 12.37 | 114.04 → 116.91 |
+| text, 5 | 13.55 → 13.56 | 31.21 → 32.08 | 21.16 → 20.76 | 146.54 → 144.30 |
+| text, 8 | 28.82 → 28.48 | 50.91 → 53.73 | 51.55 → 51.48 | 219.82 → 214.03 |
+| text, 12 | 73.81 → 77.65 | 98.21 → 102.56 | 118.34 → 117.86 | 320.38 → 316.78 |
+| binary, 1 | 1.32 → 1.32 | 3.40 → 3.47 | 1.61 → 1.59 | 9.81 → 9.62 |
+| binary, 3 | 3.01 → 3.12 | 7.45 → 7.37 | 4.70 → 4.66 | 47.41 → 49.68 |
+| binary, 12 | 13.45 → 18.72 | 13.42 → 13.99 | 27.53 → 28.35 | 106.73 → 109.96 |
+
+The first native binary level-twelve difference was not stable: repeating
+the unchanged parent sources and then the changed sources gave
+18.24 → 18.08 ms. The complete refreshed native pair was:
+
+| Input, level | Refreshed native before | Refreshed native after |
+|---|---:|---:|
+| text, 1 | 7.41 | 7.64 |
+| text, 3 | 7.39 | 7.54 |
+| text, 5 | 13.41 | 13.53 |
+| text, 8 | 28.23 | 28.72 |
+| text, 12 | 76.74 | 77.49 |
+| binary, 1 | 1.32 | 1.30 |
+| binary, 3 | 3.01 | 3.06 |
+| binary, 12 | 18.24 | 18.08 |
+
+The short-input results do not establish a general speedup: native text
+means in the refreshed pair rise by 0.9–3.1%, while the first Wasm text
+level-eight mean rises by 5.5%. The large-input improvements come from
+amortizing window and table movement; they do not remove all small-stream
+costs of the shared representation.
+
+Wasm GC was also repeated with unchanged parent sources followed by the
+shared-history sources:
+
+| Input, level | Refreshed Wasm GC before | Refreshed Wasm GC after |
+|---|---:|---:|
+| text, 1 | 13.55 | 14.19 |
+| text, 3 | 12.11 | 12.33 |
+| text, 5 | 21.14 | 21.02 |
+| text, 8 | 51.33 | 52.28 |
+| text, 12 | 116.61 | 120.72 |
+| binary, 1 | 1.60 | 1.60 |
+| binary, 3 | 4.66 | 4.65 |
+| binary, 12 | 27.17 | 29.81 |
+
+The binary level-twelve increase (9.7%, deviations 0.08/0.26 ms) remains
+an open small-input performance cost. Capturing the checked hash buffer
+locally was tried but did not consistently improve the measurements, so
+the original checked hash expressions are retained. Unlike the earlier
+wide-read work, shared input ownership necessarily changes the storage
+representation on every target: restoring the old double-copy path on
+Wasm GC would undo that part of this change. This is a deviation from the
+performance plan's preference to keep slower checked targets unchanged;
+no Wasm GC or JS speedup is claimed.

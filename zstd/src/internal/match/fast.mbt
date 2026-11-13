@@ -10,14 +10,13 @@ pub struct Fast {
   priv hash_shift : Int32
   priv hash_prime : UInt64
   priv acceleration : Int32
-  priv mut data : FixedArray[Byte]
-  priv mut history : Int32
+  priv history : History
   priv repeats : @seqenc.Repeats
 }
 
 ///|
-/// The checked targets retain the original fields and construction too:
-/// even an unused wide-hash field can affect Wasm GC's object layout.
+/// The checked targets keep byte-wise hashes without wide-hash fields:
+/// even an unused multiplier can affect Wasm GC's object layout.
 #cfg(not(any(target="native", target="wasm")))
 pub struct Fast {
   priv hash : FixedArray[Int32]
@@ -25,8 +24,7 @@ pub struct Fast {
   priv window : Int32
   priv min_match : Int32
   priv acceleration : Int32
-  priv mut data : FixedArray[Byte]
-  priv mut history : Int32
+  priv history : History
   priv repeats : @seqenc.Repeats
 }
 
@@ -41,15 +39,15 @@ pub fn Fast::Fast(
   target_length~ : Int32,
   window_log~ : Int32,
 ) -> Fast {
+  let hash = FixedArray::make(1 << hash_log, -1)
   {
-    hash: FixedArray::make(1 << hash_log, -1),
+    hash,
     hash_log,
     window: 1 << window_log,
     hash_shift: 64 - min_match.clamp(min=4, max=7) * 8,
     hash_prime: hash_prime(min_match.clamp(min=4, max=7)),
     acceleration: target_length.max(1),
-    data: [],
-    history: 0,
+    history: History::new(1 << window_log, hash, []),
     repeats: @seqenc.Repeats(),
   }
 }
@@ -63,14 +61,14 @@ pub fn Fast::Fast(
   target_length~ : Int32,
   window_log~ : Int32,
 ) -> Fast {
+  let hash = FixedArray::make(1 << hash_log, -1)
   {
-    hash: FixedArray::make(1 << hash_log, -1),
+    hash,
     hash_log,
     window: 1 << window_log,
     min_match: min_match.clamp(min=4, max=7),
     acceleration: target_length.max(1),
-    data: [],
-    history: 0,
+    history: History::new(1 << window_log, hash, []),
     repeats: @seqenc.Repeats(),
   }
 }
@@ -78,9 +76,7 @@ pub fn Fast::Fast(
 ///|
 /// Starts another frame; no previous frame bytes may be referenced.
 pub fn Fast::reset(self : Fast) -> Unit {
-  self.hash.fill(-1)
-  self.data = []
-  self.history = 0
+  self.history.reset()
   self.repeats.reset()
 }
 
@@ -90,7 +86,7 @@ pub fn Fast::reset(self : Fast) -> Unit {
 fn Fast::hash_at(self : Fast, pos : Int32) -> Int32 {
   // Searches leave eight valid bytes; post-match insertions are no later
   // than the match end, itself checked against end - 8.
-  let word = load64(self.data, pos)
+  let word = load64(self.history.data, pos)
   // For width 4, shifting first keeps exactly the low 32-bit product in
   // the high half, reproducing ZSTD_hash4's UInt32 wrap and final shift.
   (((word << self.hash_shift) * self.hash_prime) >> (64 - self.hash_log)).to_int()
@@ -101,7 +97,7 @@ fn Fast::hash_at(self : Fast, pos : Int32) -> Int32 {
 fn Fast::hash_at(self : Fast, pos : Int32) -> Int32 {
   let mut word = 0UL
   for i in 0..<self.min_match {
-    word = word | (self.data[pos + i].to_uint64() << (i * 8))
+    word = word | (self.history.data[pos + i].to_uint64() << (i * 8))
   }
   // Reference ZSTD_hash{4,5,6,7}; minMatch selects the hash width. The
   // subsequent byte comparison may accept a four-byte match even when
@@ -123,7 +119,7 @@ fn Fast::length(self : Fast, p : Int32, q : Int32, end : Int32) -> Int32 {
   if q < 0 || q >= p || p - q > self.window {
     return 0
   }
-  match_length(self.data, p, q, end)
+  match_length(self.history.data, p, q, end)
 }
 
 ///|
@@ -138,29 +134,37 @@ pub fn Fast::find(
   repeats : @seqenc.Repeats,
   block : @seqenc.Block,
 ) -> Unit {
-  let start = self.history
+  self.prepare(self.window.min(131072))
+  self.history.append_fixed(input, n)
+  self.find_buffered(n, repeats, block)
+  self.history.finish_block()
+}
+
+///|
+/// Parses bytes already appended to the shared history by the block cutter.
+pub fn Fast::find_buffered(
+  self : Fast,
+  n : Int32,
+  repeats : @seqenc.Repeats,
+  block : @seqenc.Block,
+) -> Unit {
+  let start = self.history.start
   let end = start + n
-  if self.data.length() < end {
-    let grown = FixedArray::make(
-      end.max(self.data.length() * 2).min(self.window + 131072),
-      b'\x00',
-    )
-    FixedArray::unsafe_blit(grown, 0, self.data, 0, start)
-    self.data = grown
-  }
-  FixedArray::unsafe_blit(self.data, start, input, 0, n)
+  // Delayed physical slides must not extend matches into bytes the old
+  // per-block slide had discarded. Repeat eligibility uses this floor too.
+  let floor = (start - self.window).max(0)
   block.reset(repeats, n)
   self.repeats.copy_from(repeats)
   let mut anchor = start
   let mut p = start.max(1)
   let @seqenc.Distance(first) = self.repeats.get(0)
   let @seqenc.Distance(second) = self.repeats.get(1)
-  let mut rep1 = if first.reinterpret_as_int() <= p {
+  let mut rep1 = if first.reinterpret_as_int() <= p - floor {
     first.reinterpret_as_int()
   } else {
     0
   }
-  let mut rep2 = if second.reinterpret_as_int() <= p {
+  let mut rep2 = if second.reinterpret_as_int() <= p - floor {
     second.reinterpret_as_int()
   } else {
     0
@@ -198,8 +202,9 @@ pub fn Fast::find(
           is_repeat = true
           // A repeat catches back at most one byte, unlike a hash match.
           // 0 < p - distance <= p < end, so both predecessors fit.
-          if p - distance > 0 &&
-            read(self.data, p - 1) == read(self.data, p - distance - 1) {
+          if p - distance > floor &&
+            read(self.history.data, p - 1) ==
+            read(self.history.data, p - distance - 1) {
             p -= 1
             best += 1
           }
@@ -248,16 +253,17 @@ pub fn Fast::find(
       rep2 = rep1
       rep1 = distance
       while p > anchor &&
-            p - distance > 0 &&
+            p - distance > floor &&
             // 0 < p - distance <= p < end, so both predecessors fit.
-            read(self.data, p - 1) == read(self.data, p - distance - 1) {
+            read(self.history.data, p - 1) ==
+            read(self.history.data, p - distance - 1) {
         p -= 1
         best += 1
       }
     }
     for i in anchor..<p {
       // anchor <= i < p <= end.
-      block.literal(read(self.data, i))
+      block.literal(read(self.history.data, i))
     }
     block.add(
       p - anchor,
@@ -288,23 +294,24 @@ pub fn Fast::find(
   }
   for i in anchor..<end {
     // anchor <= i < end.
-    block.literal(read(self.data, i))
+    block.literal(read(self.history.data, i))
   }
-  let drop = (end - self.window).max(0)
-  if drop > 0 {
-    // Forward copy is safe for overlapping regions.
-    for i in drop..<end {
-      self.data[i - drop] = self.data[i]
-    }
-    for i in 0..<self.hash.length() {
-      self.hash[i] = (self.hash[i] - drop).max(-1)
-    }
-  }
-  self.history = end - drop
 }
 
 ///|
-/// Window allocation (at most window + one block), hash table and repeats.
+/// Shared window, slack and block capacity, hash table and repeats.
 pub fn Fast::memory_usage(self : Fast) -> Int32 {
-  self.data.length() + 4 * self.hash.length() + 12
+  self.history.data.length() + 4 * self.hash.length() + 12
+}
+
+///|
+/// Shared input storage; append only after reserving the next cutter block.
+pub fn Fast::history(self : Fast) -> History {
+  self.history
+}
+
+///|
+/// Makes room for a whole cutter block, independently of input step sizes.
+pub fn Fast::prepare(self : Fast, block_max : Int32) -> Unit {
+  self.history.prepare(block_max) |> ignore
 }

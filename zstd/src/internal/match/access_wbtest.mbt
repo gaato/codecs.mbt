@@ -41,9 +41,9 @@ test "wide hashes preserve every width at every alignment and valid tail" {
       depth=2,
       window_log=10,
     )
-    f.data = data
-    d.data = data
-    l.data = data
+    f.history.data = data
+    d.history.data = data
+    l.history.data = data
     for p in 0..<=(data.length() - 8) {
       assert_eq(f.hash_at(p), reference_hash(data, p, width, 8))
       assert_eq(d.short_hash(p), reference_hash(data, p, width, 7))

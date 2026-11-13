@@ -15,7 +15,10 @@ pub struct Dfast {
 }
 pub fn Dfast::Dfast(hash_log~ : Int32, chain_log~ : Int32, min_match~ : Int32, window_log~ : Int32) -> Self
 pub fn Dfast::find(Self, FixedArray[Byte], Int32, @seqenc.Repeats, @seqenc.Block) -> Unit
+pub fn Dfast::find_buffered(Self, Int32, @seqenc.Repeats, @seqenc.Block) -> Unit
+pub fn Dfast::history(Self) -> History
 pub fn Dfast::memory_usage(Self) -> Int32
+pub fn Dfast::prepare(Self, Int32) -> Unit
 pub fn Dfast::reset(Self) -> Unit
 
 pub struct Fast {
@@ -23,15 +26,30 @@ pub struct Fast {
 }
 pub fn Fast::Fast(hash_log~ : Int32, min_match~ : Int32, target_length~ : Int32, window_log~ : Int32) -> Self
 pub fn Fast::find(Self, FixedArray[Byte], Int32, @seqenc.Repeats, @seqenc.Block) -> Unit
+pub fn Fast::find_buffered(Self, Int32, @seqenc.Repeats, @seqenc.Block) -> Unit
+pub fn Fast::history(Self) -> History
 pub fn Fast::memory_usage(Self) -> Int32
+pub fn Fast::prepare(Self, Int32) -> Unit
 pub fn Fast::reset(Self) -> Unit
+
+pub struct History {
+  // private fields
+}
+pub fn History::append(Self, BytesView) -> Unit
+pub fn History::block_start(Self) -> Int32
+pub fn History::buffer(Self) -> FixedArray[Byte]
+pub fn History::capacity(Self) -> Int32
+pub fn History::finish_block(Self) -> Unit
 
 pub struct Lazy {
   // private fields
 }
 pub fn Lazy::Lazy(hash_log~ : Int32, chain_log~ : Int32, min_match~ : Int32, search_log~ : Int32, depth~ : Int32, window_log~ : Int32) -> Self
 pub fn Lazy::find(Self, FixedArray[Byte], Int32, @seqenc.Repeats, @seqenc.Block) -> Unit
+pub fn Lazy::find_buffered(Self, Int32, @seqenc.Repeats, @seqenc.Block) -> Unit
+pub fn Lazy::history(Self) -> History
 pub fn Lazy::memory_usage(Self) -> Int32
+pub fn Lazy::prepare(Self, Int32) -> Unit
 pub fn Lazy::reset(Self) -> Unit
 
 // Type aliases

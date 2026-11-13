@@ -104,6 +104,16 @@ fn streamed(
 
 ///|
 fn main {
+  let sliding = @seqcases.sliding_input()
+  for level in [1, 3, 5, 12] {
+    streamed(
+      "sliding-mixed l\{level}",
+      @zstd.Encoder(level~),
+      sliding,
+      131071,
+      0,
+    )
+  }
   for c in @seqcases.window_cases() {
     emit(c.name, c.input, c.frame)
   }

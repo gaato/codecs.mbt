@@ -81,13 +81,16 @@ test "lazy depths reconstruct across history rebasing and frame reset" {
         finder.find(data, data.length(), repeats, block)
         reconstruct_matches(block, data, frame, reps, 1024)
         repeats.copy_from(block.repeats)
-        assert_eq(finder.history, ((b + 1) * 997).min(1024))
-        assert_true(finder.memory_usage() <= 1024 + 131072 + 8 * 256)
+        assert_true(
+          finder.history.start >= ((b + 1) * 997).min(1024) &&
+          finder.history.start <= 3072,
+        )
+        assert_true(finder.memory_usage() <= 3072 + 8 * 256)
         for q in finder.hash {
-          assert_true(q >= -1 && q < finder.history)
+          assert_true(q >= -1 && q < finder.history.start)
         }
         for q in finder.chain {
-          assert_true(q >= -1 && q < finder.history)
+          assert_true(q >= -1 && q < finder.history.start)
         }
       }
       finder.reset()
@@ -136,13 +139,13 @@ test "hash chain search stops at searchLog and ring limits" {
       depth=2,
       window_log=10,
     )
-    f.data = FixedArray::make(400, b'x')
+    f.history.data = FixedArray::make(400, b'x')
     // All candidates share four bytes; the oldest alone matches 20.
     for p in [32, 64, 96, 128, 160, 192, 224, 256] {
-      f.data[p + 4] = b'y'
+      f.history.data[p + 4] = b'y'
     }
     for i in 0..<20 {
-      f.data[32 + i] = f.data[300 + i]
+      f.history.data[32 + i] = f.history.data[300 + i]
     }
     let h = f.hash_at(300)
     f.hash[h] = 256
@@ -175,7 +178,7 @@ test "hash chain search stops at searchLog and ring limits" {
     depth=0,
     window_log=10,
   )
-  f.data = FixedArray::make(1100, b'x')
+  f.history.data = FixedArray::make(1100, b'x')
   f.next_update = 1050
   f.hash[f.hash_at(1050)] = 26
   f.search(1050, 1060, false)
@@ -231,8 +234,8 @@ test "lazy disables repeats before retained history and does not follow overwrit
   f.find(data, 32, repeats, block)
   reconstruct_matches(block, data, [], [200, 100, 1], 1024)
   assert_eq(block.count, 0)
-  f.data = FixedArray::make(400, b'x')
-  f.data[228] = b'y'
+  f.history.data = FixedArray::make(400, b'x')
+  f.history.data[228] = b'y'
   f.hash[f.hash_at(300)] = 224
   f.chain[f.slot(224)] = 32
   f.next_update = 300
@@ -250,12 +253,13 @@ test "greedy repeat priority preserves literals and immediately swaps repeat two
     depth=0,
     window_log=10,
   )
-  f.data = FixedArray::makei(200, i => i.to_byte())
+  f.history.data = FixedArray::makei(200, i => i.to_byte())
   for i in 0..<4 {
-    f.data[93 + i] = b"abcd"[i]
+    f.history.data[93 + i] = b"abcd"[i]
   }
-  f.data[97] = b'z'
-  f.history = 100
+  f.history.data[97] = b'z'
+  f.history.start = 100
+  f.history.end = 100
   f.next_update = 100
   let repeats = @seqenc.Repeats()
   repeats.encode(@seqenc.Distance(4U), 1) |> ignore
@@ -268,7 +272,7 @@ test "greedy repeat priority preserves literals and immediately swaps repeat two
       b"abcd"[(i - 1) % 4]
     }
   })
-  let frame = Array::makei(100, i => f.data[i])
+  let frame = Array::makei(100, i => f.history.data[i])
   f.find(data, data.length(), repeats, block)
   reconstruct_matches(block, data, frame, [8, 4, 1], 1024)
   assert_eq(block.count, 2)

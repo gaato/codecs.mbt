@@ -12,8 +12,7 @@ pub struct Lazy {
   priv attempts : Int32
   priv depth : Int32
   priv window : Int32
-  priv mut data : FixedArray[Byte]
-  priv mut history : Int32
+  priv history : History
   priv mut next_update : Int32
   priv mut bias : Int32
   // Search results live here: returning a tuple allocates a box per search
@@ -33,8 +32,7 @@ pub struct Lazy {
   priv attempts : Int32
   priv depth : Int32
   priv window : Int32
-  priv mut data : FixedArray[Byte]
-  priv mut history : Int32
+  priv history : History
   priv mut next_update : Int32
   priv mut bias : Int32
   priv mut match_length : Int32
@@ -55,17 +53,18 @@ pub fn Lazy::Lazy(
   depth~ : Int32,
   window_log~ : Int32,
 ) -> Lazy {
+  let hash = FixedArray::make(1 << hash_log, -1)
+  let chain = FixedArray::make(1 << chain_log, -1)
   {
-    hash: FixedArray::make(1 << hash_log, -1),
-    chain: FixedArray::make(1 << chain_log, -1),
+    hash,
+    chain,
     hash_log,
     hash_shift: 64 - min_match.clamp(min=4, max=6) * 8,
     hash_prime: hash_prime(min_match.clamp(min=4, max=6)),
     attempts: 1 << search_log,
     depth,
     window: 1 << window_log,
-    data: [],
-    history: 0,
+    history: History::new(1 << window_log, hash, chain),
     next_update: 0,
     bias: 0,
     match_length: 3,
@@ -84,16 +83,17 @@ pub fn Lazy::Lazy(
   depth~ : Int32,
   window_log~ : Int32,
 ) -> Lazy {
+  let hash = FixedArray::make(1 << hash_log, -1)
+  let chain = FixedArray::make(1 << chain_log, -1)
   {
-    hash: FixedArray::make(1 << hash_log, -1),
-    chain: FixedArray::make(1 << chain_log, -1),
+    hash,
+    chain,
     hash_log,
     min_match: min_match.clamp(min=4, max=6),
     attempts: 1 << search_log,
     depth,
     window: 1 << window_log,
-    data: [],
-    history: 0,
+    history: History::new(1 << window_log, hash, chain),
     next_update: 0,
     bias: 0,
     match_length: 3,
@@ -104,10 +104,7 @@ pub fn Lazy::Lazy(
 ///|
 /// Invalidates all frame positions and releases retained bytes.
 pub fn Lazy::reset(self : Lazy) -> Unit {
-  self.hash.fill(-1)
-  self.chain.fill(-1)
-  self.data = []
-  self.history = 0
+  self.history.reset()
   self.next_update = 0
   self.bias = 0
 }
@@ -117,7 +114,7 @@ pub fn Lazy::reset(self : Lazy) -> Unit {
 #inline
 fn Lazy::hash_at(self : Lazy, p : Int32) -> Int32 {
   // search's p <= end - 8; catch-up insertion i < p has more lookahead.
-  (((load64(self.data, p) << self.hash_shift) * self.hash_prime) >>
+  (((load64(self.history.data, p) << self.hash_shift) * self.hash_prime) >>
   (64 - self.hash_log)).to_int()
 }
 
@@ -126,7 +123,7 @@ fn Lazy::hash_at(self : Lazy, p : Int32) -> Int32 {
 fn Lazy::hash_at(self : Lazy, p : Int32) -> Int32 {
   let mut word = 0UL
   for i in 0..<self.min_match {
-    word = word | (self.data[p + i].to_uint64() << (8 * i))
+    word = word | (self.history.data[p + i].to_uint64() << (8 * i))
   }
   if self.min_match == 4 {
     ((word.to_uint() * 2654435761U) >> (32 - self.hash_log)).reinterpret_as_int()
@@ -150,7 +147,7 @@ fn Lazy::length(self : Lazy, p : Int32, q : Int32, end : Int32) -> Int32 {
   if q < 0 || q >= p || p - q > self.window {
     return 0
   }
-  match_length(self.data, p, q, end)
+  match_length(self.history.data, p, q, end)
 }
 
 ///|
@@ -172,14 +169,16 @@ fn Lazy::search(self : Lazy, p : Int32, end : Int32, skipping : Bool) -> Unit {
   // The hash result fits the power-of-two head table.
   let mut q = read(self.hash, self.hash_at(p))
   let low = (p - self.window).max(0)
-  let min_chain = (p - self.chain.length()).max(0)
+  let min_chain = (p - self.chain.length()).max(
+    (self.history.start - self.window).max(0),
+  )
   let mut best = 3
   let mut distance = 0
   let mut attempts = self.attempts
   while q >= low && q < p && attempts > 0 {
     // The reference tests four bytes at the current best's tail before
     // recounting from the start; this avoids quadratic work on long ties.
-    let n = if may_beat(self.data, p, q, best) {
+    let n = if may_beat(self.history.data, p, q, best) {
       self.length(p, q, end)
     } else {
       0
@@ -223,17 +222,26 @@ pub fn Lazy::find(
   repeats : @seqenc.Repeats,
   block : @seqenc.Block,
 ) -> Unit {
-  let start = self.history
+  self.prepare(self.window.min(131072))
+  self.history.append_fixed(input, n)
+  self.find_buffered(n, repeats, block)
+  self.history.finish_block()
+}
+
+///|
+/// Parses bytes already appended to the shared history by the block cutter.
+pub fn Lazy::find_buffered(
+  self : Lazy,
+  n : Int32,
+  repeats : @seqenc.Repeats,
+  block : @seqenc.Block,
+) -> Unit {
+  let start = self.history.start
   let end = start + n
-  if self.data.length() < end {
-    let grown = FixedArray::make(
-      end.max(self.data.length() * 2).min(self.window + 131072),
-      b'\x00',
-    )
-    FixedArray::unsafe_blit(grown, 0, self.data, 0, start)
-    self.data = grown
-  }
-  FixedArray::unsafe_blit(self.data, start, input, 0, n)
+  let floor = (start - self.window).max(0)
+  // The old per-block slide clipped this cursor even when no bytes were
+  // inserted. Keep the same logical floor while physical sliding is delayed.
+  self.next_update = self.next_update.max(floor)
   block.reset(repeats, n)
   let mut anchor = start
   let mut p = start.max(1)
@@ -326,10 +334,10 @@ pub fn Lazy::find(
       }
       if distance != 0 {
         while chosen > anchor &&
-              chosen - distance > 0 &&
+              chosen - distance > floor &&
               // 0 < chosen - distance <= chosen < end: predecessors fit.
-              read(self.data, chosen - 1) ==
-              read(self.data, chosen - distance - 1) {
+              read(self.history.data, chosen - 1) ==
+              read(self.history.data, chosen - distance - 1) {
           chosen -= 1
           best += 1
         }
@@ -339,7 +347,7 @@ pub fn Lazy::find(
     }
     for i in anchor..<chosen {
       // anchor <= i < chosen <= end.
-      block.literal(read(self.data, i))
+      block.literal(read(self.history.data, i))
     }
     block.add(
       chosen - anchor,
@@ -364,28 +372,26 @@ pub fn Lazy::find(
   }
   for i in anchor..<end {
     // anchor <= i < end.
-    block.literal(read(self.data, i))
+    block.literal(read(self.history.data, i))
   }
-  let drop = (end - self.window).max(0)
-  if drop > 0 {
-    for i in drop..<end {
-      self.data[i - drop] = self.data[i]
-    }
-    // Separate loops avoid allocating an array of tables at each rebase.
-    for i in 0..<self.hash.length() {
-      self.hash[i] = (self.hash[i] - drop).max(-1)
-    }
-    for i in 0..<self.chain.length() {
-      self.chain[i] = (self.chain[i] - drop).max(-1)
-    }
-    self.bias = (self.bias + drop) & (self.chain.length() - 1)
-    self.next_update = (self.next_update - drop).max(0)
-  }
-  self.history = end - drop
 }
 
 ///|
 /// Retained byte capacity plus four bytes per hash head and chain link.
 pub fn Lazy::memory_usage(self : Lazy) -> Int32 {
-  self.data.length() + 4 * (self.hash.length() + self.chain.length())
+  self.history.data.length() + 4 * (self.hash.length() + self.chain.length())
+}
+
+///|
+/// Shared input storage; append only after reserving the next cutter block.
+pub fn Lazy::history(self : Lazy) -> History {
+  self.history
+}
+
+///|
+/// Makes room for a whole cutter block, independently of input step sizes.
+pub fn Lazy::prepare(self : Lazy, block_max : Int32) -> Unit {
+  let cut = self.history.prepare(block_max)
+  self.bias = (self.bias + cut) & (self.chain.length() - 1)
+  self.next_update = (self.next_update - cut).max(0)
 }

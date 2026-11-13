@@ -6,6 +6,8 @@ pub fn boundary_inputs() -> Array[(String, Bytes)]
 
 pub fn cases() -> Array[Case]
 
+pub fn sliding_input() -> Bytes
+
 pub fn window_cases() -> Array[Case]
 
 // Errors

@@ -310,7 +310,7 @@ fn write_block_header(
 }
 
 ///|
-/// Writes `data[0:n]` as one block, the smallest of three: raw; RLE when
+/// Writes the unfinished history range as one block, the smallest of three: raw; RLE when
 /// every byte is the same (and there are at least two); compressed, with
 /// gathered literals and sequences, when it is smaller than raw.
 /// A compressed block is thus never larger than the block limit. An empty
@@ -318,14 +318,15 @@ fn write_block_header(
 fn Encoder::write_matched_block(self : Encoder, n : Int32, last : Bool) -> Unit {
   let out = self.writer
   let literals = self.literals
-  let data = self.data
+  let data = self.matcher.history().buffer()
+  let start = self.matcher.history().block_start()
   guard n > 0 else {
     write_block_header(out, last, RAW_BLOCK, 0)
     return
   }
   let mut same = n > 1
   for i in 1..<n {
-    if data[i] != data[0] {
+    if data[start + i] != data[start] {
       same = false
       break
     }
@@ -333,7 +334,7 @@ fn Encoder::write_matched_block(self : Encoder, n : Int32, last : Bool) -> Unit 
   if same {
     // RLE is strictly smaller than raw for more than one byte.
     write_block_header(out, last, RLE_BLOCK, n)
-    out.write(8, data[0].to_int())
+    out.write(8, data[start].to_int())
   } else {
     let block = self.sequences
     self.sequence_bits.reset()
@@ -351,7 +352,7 @@ fn Encoder::write_matched_block(self : Encoder, n : Int32, last : Bool) -> Unit 
       self.sequence_writer.commit(block)
     } else {
       write_block_header(out, last, RAW_BLOCK, n)
-      out.write_bytes(data, 0, n)
+      out.write_bytes(data, start, n)
     }
   }
 }

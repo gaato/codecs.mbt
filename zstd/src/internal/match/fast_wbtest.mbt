@@ -45,16 +45,18 @@ test "fast history wraps within the window and resets before another frame" {
     if history.length() > 1024 {
       history = history[history.length() - 1024:].to_owned()
     }
-    assert_eq(finder.history, total.min(1024))
-    assert_true(finder.data.length() <= 1024 + 131072)
-    assert_eq(finder.memory_usage(), finder.data.length() + 4 * 64 + 12)
+    assert_true(
+      finder.history.start >= total.min(1024) && finder.history.start <= 3072,
+    )
+    assert_true(finder.history.data.length() <= 3072)
+    assert_eq(finder.memory_usage(), finder.history.data.length() + 4 * 64 + 12)
   }
   assert_true(matched > 30)
   finder.reset()
   repeats.reset()
   finder.find(FixedArray::make(100, b'x'), 100, repeats, block)
   assert_true(block.ll[0] > 0)
-  assert_true(finder.history == 100)
+  assert_true(finder.history.start == 100)
 }
 
 ///|

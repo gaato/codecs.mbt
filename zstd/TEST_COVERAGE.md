@@ -180,6 +180,16 @@ JS/Wasm GC alternatives that the native coverage run cannot compile.
 
 ## Accepted uncovered
 
+The encoder and all three finders share one history buffer. Tests fill its
+window, slack and block capacity, check both tables at the physical cut,
+and replay bytes just above and below six successive cuts for fast,
+double-fast and both lazy depths. A 12 MiB mixed production input has
+SHA-256 pins established with the original per-block sliding code; levels
+1, 3, 5 and 12 decode it and preserve those bytes on every target. The
+external corpus includes the same input and repeated small-window cycles.
+Input splitting with identical flush positions is compared at all levels.
+No uncovered-line budget is added for shared history.
+
 | File | Budget | Reason |
 | --- | --- | --- |
 | src/internal/match/access.mbt | 5 | Checked `read`, `write`, `match_length` and `may_beat` for JS/Wasm GC, excluded by native's cfg. The gates run the same matcher tests and unchanged SHA-256 pins on both checked targets. |
