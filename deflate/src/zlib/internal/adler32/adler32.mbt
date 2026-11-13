@@ -18,7 +18,8 @@ pub fn update(adler : UInt32, data : ArrayView[Byte]) -> UInt32 {
   let mut b = adler >> 16
   let mut i = 0
   while i < data.length() {
-    let end = (i + NMAX).min(data.length())
+    // Not `(i + NMAX).min(..)`: past 2^31 - 1 - NMAX, `i + NMAX` wraps.
+    let end = if data.length() - i < NMAX { data.length() } else { i + NMAX }
     for j in i..<end {
       a = a + data[j].to_uint()
       b = b + a

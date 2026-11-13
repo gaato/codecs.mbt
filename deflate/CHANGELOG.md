@@ -16,6 +16,7 @@ never does. Every breaking change is listed with a migration note.
 ### Fixed
 
 - **mooncakes.io shows the README once.** The README was both the module README and the root package's `README.mbt.md`, so the module page showed it twice; it is now `src/overview.mbt.md`, with `README.md` linked to it and named in `moon.mod`.
+- zlib's decoder no longer wraps an index past the largest `Int` while summing the Adler-32 of a single piece of output of nearly 2 GiB (from 2,147,478,096 bytes), where it read before the data.
 
 ## [0.1.0] - 2026-10-22
 
