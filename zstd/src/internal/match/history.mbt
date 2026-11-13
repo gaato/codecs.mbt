@@ -106,8 +106,11 @@ pub fn History::finish_block(self : History) -> Unit {
 }
 
 ///|
+/// Forgets the frame's history, keeping the buffer's capacity: positions
+/// are dropped from both tables, and matches compare only bytes below
+/// `end`, so the bytes left in the buffer are never matched against. (A
+/// wide literal copy may read them, into literals past those it keeps.)
 fn History::reset(self : History) -> Unit {
-  self.data = []
   self.start = 0
   self.end = 0
   self.first.fill(-1)

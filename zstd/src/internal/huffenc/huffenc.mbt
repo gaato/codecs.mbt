@@ -313,6 +313,40 @@ pub fn HuffmanEncoder::write_literals(
     }
     out.write(16, bits / 8 + 1)
   }
+  self.write_four_streams(out, data, start, len)
+}
+
+///|
+/// Writes the jump table `sizes` (the byte sizes of the first three
+/// streams, which the caller computed from their counts with `cost`), then
+/// the four streams of `data[start:start + len]` as `write_literals` splits
+/// them.
+pub fn HuffmanEncoder::write_four_streams_sized(
+  self : HuffmanEncoder,
+  out : @bits.BitPacker,
+  data : FixedArray[Byte],
+  start : Int32,
+  len : Int32,
+  size0 : Int32,
+  size1 : Int32,
+  size2 : Int32,
+) -> Unit {
+  out.write(16, size0)
+  out.write(16, size1)
+  out.write(16, size2)
+  self.write_four_streams(out, data, start, len)
+}
+
+///|
+/// The four streams of `data[start:start + len]`, after their jump table.
+fn HuffmanEncoder::write_four_streams(
+  self : HuffmanEncoder,
+  out : @bits.BitPacker,
+  data : FixedArray[Byte],
+  start : Int32,
+  len : Int32,
+) -> Unit {
+  let segment = (len + 3) / 4
   for i in 0..<4 {
     let from = start + i * segment
     let until = if i < 3 { from + segment } else { start + len }

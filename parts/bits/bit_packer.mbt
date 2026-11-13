@@ -151,6 +151,18 @@ pub fn BitPacker::write_bytes(
 }
 
 ///|
+/// Appends the complete bytes `other` waits to hand out and hands them out
+/// of it, in one copy; this writer is byte-aligned.
+pub fn BitPacker::write_pending(self : BitPacker, other : BitPacker) -> Unit {
+  let n = other.pending()
+  self.reserve(n)
+  FixedArray::unsafe_blit(self.buf, self.len, other.buf, other.drained, n)
+  self.len += n
+  other.drained += n
+  other.empty_if_drained()
+}
+
+///|
 /// Bits written since the buffer was last empty.
 pub fn BitPacker::position(self : BitPacker) -> Int32 {
   self.len * 8 + self.nbits
@@ -199,8 +211,11 @@ pub fn BitPacker::drain(
   pos : Int32,
 ) -> Int32 {
   let n = self.pending().min(output.length() - pos)
-  for i in 0..<n {
-    output[pos + i] = self.buf[self.drained + i]
+  if n > 0 {
+    output.blit_from_array(
+      self.buf[self.drained:self.drained + n],
+      dst_offset=pos,
+    )
   }
   self.drained += n
   self.empty_if_drained()

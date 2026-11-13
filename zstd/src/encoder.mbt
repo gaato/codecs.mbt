@@ -32,7 +32,6 @@ pub struct Encoder {
   priv sequences : @seqenc.Block
   priv sequence_writer : @seqenc.Writer
   priv sequence_bits : @bits.BitPacker
-  priv mut sequence_copy : FixedArray[Byte]
   priv hash : @xxhash.Xxh64
   // Input taken so far in the frame.
   priv mut total_in : Int64
@@ -94,7 +93,6 @@ pub fn Encoder::Encoder(
     sequences: @seqenc.Block(),
     sequence_writer: @seqenc.Writer(),
     sequence_bits: @bits.BitPacker(),
-    sequence_copy: [],
     hash: @xxhash.Xxh64(),
     total_in: 0,
     writer: @bits.BitPacker(),
@@ -110,8 +108,9 @@ pub fn Encoder::Encoder(
 }
 
 ///|
-/// Starts a new frame with the same options, keeping the tables' memory.
-/// The shared input/history buffer is released.
+/// Starts a new frame with the same options, keeping the memory of its
+/// buffers and tables: the next frame's bytes are those a new encoder
+/// writes, and `memory_usage` still counts what is kept.
 pub fn Encoder::reset(self : Encoder) -> Unit {
   self.data_len = 0
   self.hash.reset()
@@ -152,16 +151,16 @@ pub fn Encoder::last_produced(self : Encoder) -> Int32 {
 /// Bytes the encoder holds in buffers that grow with the stream: the input
 /// block in shared history, the output waiting for the caller,
 /// match window and hash, sequence storage, and entropy coding scratch.
-/// Bounds for each are in RESOURCE_BOUNDS.md. `reset` releases the input
-/// and match window buffers.
+/// Bounds for each are in RESOURCE_BOUNDS.md. `reset` keeps every buffer's
+/// capacity, so the count does not drop then; it stays within the bound of
+/// the encoder's options.
 pub fn Encoder::memory_usage(self : Encoder) -> Int32 {
   self.writer.capacity() +
   self.literals.memory_usage() +
   self.matcher.memory_usage() +
   self.sequences.memory_usage() +
   self.sequence_writer.memory_usage() +
-  self.sequence_bits.capacity() +
-  self.sequence_copy.length()
+  self.sequence_bits.capacity()
 }
 
 ///|

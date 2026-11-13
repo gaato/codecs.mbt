@@ -176,8 +176,7 @@ fn encoder_memory_bound(params~ : Params = encoder_params(12, None)) -> Int32 {
   12 +
   @seqenc.Writer().memory_usage() +
   3 * 2 * (512 + 5) +
-  2 * ((1 << 19) + 5) +
-  MAX_BLOCK_SIZE
+  2 * ((1 << 19) + 5)
 }
 
 ///|
@@ -200,8 +199,7 @@ fn check_encoder_bounds(e : Encoder, _room : Int32) -> Unit raise {
     e.matcher.memory_usage() +
     e.sequences.memory_usage() +
     e.sequence_writer.memory_usage() +
-    e.sequence_bits.capacity() +
-    e.sequence_copy.length(),
+    e.sequence_bits.capacity(),
   )
   assert_true(e.sequence_bits.pending() <= 1 << 19)
   assert_true(e.sequences.count <= MAX_BLOCK_SIZE / 3)
@@ -215,20 +213,20 @@ test "the encoder's fixed tables and its memory bound" {
   inspect(
     LiteralsWriter::new().memory_usage(),
     content=(
-      #|14024
+      #|17096
     ),
   )
   inspect(
     encoder_memory_bound(),
     content=(
-      #|60977056
+      #|60849056
     ),
   )
   // A new encoder holds fixed tables and its level's hash table.
   inspect(
     Encoder().memory_usage(),
     content=(
-      #|809784
+      #|812856
     ),
   )
 }
@@ -245,9 +243,14 @@ test "unfinished encoder input lives only in bounded shared history" {
     check=check_encoder_bounds,
   )
   assert_eq(decompress(stream), input)
-  assert_true(encoder.matcher.history().capacity() >= input.length())
+  let capacity = encoder.matcher.history().capacity()
+  assert_true(capacity >= input.length())
+  // reset keeps the buffer, within the same bound, and counts it.
+  let before = encoder.memory_usage()
   encoder.reset()
-  assert_eq(encoder.matcher.history().capacity(), 0)
+  assert_eq(encoder.matcher.history().capacity(), capacity)
+  assert_eq(encoder.memory_usage(), before)
+  check_encoder_bounds(encoder, 0)
   for n in [0, 500, 1500, 100000, 400000] {
     let input = sample_text(Rng::new(42), n)
     let e = Encoder(content_size=n.to_int64())
@@ -260,8 +263,9 @@ test "unfinished encoder input lives only in bounded shared history" {
     )
     assert_eq(decompress(stream), input)
     assert_true(e.block_max <= n)
+    let capacity = e.matcher.history().capacity()
     e.reset()
-    assert_eq(e.matcher.history().capacity(), 0)
+    assert_eq(e.matcher.history().capacity(), capacity)
   }
 }
 
@@ -408,5 +412,5 @@ test "lazy memory reaches the maximum chain hash and full window slack and a blo
     e.matcher.memory_usage(),
     2 * (1 << 22) + MAX_BLOCK_SIZE + 4 * ((1 << 22) + (1 << 23)),
   )
-  assert_eq(encoder_memory_bound(), 60977056)
+  assert_eq(encoder_memory_bound(), 60849056)
 }

@@ -261,10 +261,8 @@ pub fn Fast::find_buffered(
         best += 1
       }
     }
-    for i in anchor..<p {
-      // anchor <= i < p <= end.
-      block.literal(read(self.history.data, i))
-    }
+    // anchor <= p <= end <= the buffer's length.
+    block.literals_from(self.history.data, anchor, p)
     block.add(
       p - anchor,
       best,
@@ -292,10 +290,8 @@ pub fn Fast::find_buffered(
       }
     }
   }
-  for i in anchor..<end {
-    // anchor <= i < end.
-    block.literal(read(self.history.data, i))
-  }
+  // anchor <= end <= the buffer's length.
+  block.literals_from(self.history.data, anchor, end)
 }
 
 ///|

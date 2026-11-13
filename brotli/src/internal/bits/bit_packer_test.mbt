@@ -211,3 +211,27 @@ test "the end mark is the highest set bit of the last byte" {
     }
   }
 }
+
+///|
+test "write_pending moves the waiting bytes of another writer" {
+  let w = @bits.BitPacker()
+  let other = @bits.BitPacker()
+  w.write(8, 0x11)
+  for i in 0..<6 {
+    other.write(8, i)
+  }
+  other.write(3, 5)
+  // Part of the other's bytes already handed out: only the rest moves.
+  let out = FixedArray::make(2, b'\x00')
+  inspect(other.drain_into(out, 0), content="2")
+  w.write_pending(other)
+  inspect(other.pending(), content="0")
+  inspect(other.buffered(), content="0")
+  inspect(other.position(), content="3")
+  debug_inspect(
+    take(w, 16),
+    content=(
+      #|<Bytes: [0x11, 0x02, 0x03, 0x04, 0x05]>
+    ),
+  )
+}

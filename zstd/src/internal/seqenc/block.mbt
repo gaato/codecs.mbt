@@ -74,13 +74,69 @@ pub fn Block::literal(self : Block, byte : Byte) -> Unit {
 }
 
 ///|
+/// Appends `src[from:until]` as literals in sequence order, at most the
+/// original block size in all. Eight bytes at a time; the last partial
+/// group is one eight-byte copy when both arrays have room past its end
+/// (the extra bytes land past `literal_count` and are overwritten or never
+/// read), else byte by byte.
+#cfg(any(target="native", target="wasm"))
+pub fn Block::literals_from(
+  self : Block,
+  src : FixedArray[Byte],
+  from : Int32,
+  until : Int32,
+) -> Unit {
+  let n = until - from
+  let dst = self.literals
+  let at = self.literal_count
+  let bytes = src.unsafe_reinterpret_as_bytes()
+  let mut k = 0
+  // 0 <= from <= until <= src.length() (the caller's range), and the
+  // literals so far plus n are at most the block, dst.length(): every
+  // eight-byte group below lies within both arrays.
+  while k + 8 <= n {
+    dst.unsafe_write_uint64_le(at + k, bytes.unsafe_read_uint64_le(from + k))
+    k += 8
+  }
+  if k < n {
+    if from + k + 8 <= src.length() && at + k + 8 <= dst.length() {
+      dst.unsafe_write_uint64_le(at + k, bytes.unsafe_read_uint64_le(from + k))
+    } else {
+      for i in k..<n {
+        // k <= i < n: within both ranges.
+        dst.unsafe_set(at + i, src.unsafe_get(from + i))
+      }
+    }
+  }
+  self.literal_count = at + n
+}
+
+///|
+/// Appends `src[from:until]` as literals in sequence order, at most the
+/// original block size in all; byte by byte, with checked accesses.
+#cfg(not(any(target="native", target="wasm")))
+pub fn Block::literals_from(
+  self : Block,
+  src : FixedArray[Byte],
+  from : Int32,
+  until : Int32,
+) -> Unit {
+  for i in from..<until {
+    self.literals[self.literal_count] = src[i]
+    self.literal_count += 1
+  }
+}
+
+///|
 /// Bytes of retained arrays and repeat history.
 pub fn Block::memory_usage(self : Block) -> Int32 {
   self.literals.length() + 12 * self.ll.length() + 12
 }
 
 ///|
-/// Code whose baseline is the last one no larger than `value`.
+/// Code whose baseline is the last one no larger than `value`, by scanning
+/// `bases`: the reference that `ll_code` and `ml_code` are built from and
+/// tested against.
 pub fn length_code(value : Int32, bases : FixedArray[Int32]) -> Int32 {
   let mut code = 0
   while code + 1 < bases.length() && bases[code + 1] <= value {

@@ -20,11 +20,15 @@ pub let ll_base : FixedArray[Int32]
 
 pub let ll_bits : FixedArray[Int32]
 
+pub fn ll_code(Int32) -> Int32
+
 pub let ll_default : FixedArray[Int32]
 
 pub let ml_base : FixedArray[Int32]
 
 pub let ml_bits : FixedArray[Int32]
+
+pub fn ml_code(Int32) -> Int32
 
 pub let ml_default : FixedArray[Int32]
 
@@ -51,6 +55,7 @@ pub struct Block {
 pub fn Block::Block() -> Self
 pub fn Block::add(Self, Int32, Int32, Distance) -> Unit
 pub fn Block::literal(Self, Byte) -> Unit
+pub fn Block::literals_from(Self, FixedArray[Byte], Int32, Int32) -> Unit
 pub fn Block::memory_usage(Self) -> Int32
 pub fn Block::reset(Self, Repeats, Int32) -> Unit
 

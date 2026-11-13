@@ -749,3 +749,109 @@ representation on every target: restoring the old double-copy path on
 Wasm GC would undo that part of this change. This is a deviation from the
 performance plan's preference to keep slower checked targets unchanged;
 no Wasm GC or JS speedup is claimed.
+
+### After entropy coding without extra passes or copies
+
+Literals and match length codes come from a table below 64 literals and
+131 matched bytes, and above that from the highest set bit, as zstd's
+`ZSTD_LLcode` and `ZSTD_MLcode` compute them, instead of scanning the
+baseline table. A test compares both with the scan for every length from
+0 to 131,072 on all four targets.
+
+A block's literals are counted in one pass. Each step counts one byte of
+each of the four Huffman streams into that stream's own table, which
+spreads consecutive increments over four tables as zstd's
+`HIST_count_parallel` does; native and Wasm read four bytes of each
+stream at once. The block's counts are the sum of the four tables. Both
+candidate codes' four-stream sizes and the jump table come from these
+counts. Before, the literals were counted once for the block, once more
+for each candidate code's streams, and three quarters of them again to
+write the jump table. Blocks below 256 literals use one stream and keep
+the single count. The four tables add 3,072 bytes to the literals writer.
+
+The RLE block test compares eight bytes at a time on native and Wasm.
+The finders gather literals in eight-byte copies there; the last partial
+group is one eight-byte copy when both arrays have room past it (the
+extra bytes land past the literals kept), otherwise byte by byte. JS and
+Wasm GC keep the checked byte loops for both.
+
+The sequence section is still written aside before the block. Its size
+goes in the block header and decides between a compressed and a raw
+block. That size cannot be computed exactly beforehand: how many bits
+each FSE symbol takes depends on the state the symbols after it left,
+so only encoding every sequence gives it. The table costs that choose the
+modes are estimates rounded towards simpler tables. The accepted section
+is now copied once, from its bit writer straight into the waiting output.
+The separate 128 KiB section copy is gone.
+
+`compress` steps the encoder into one array of the frame's bound: the
+input, 3 bytes for each block and one more empty block, and 22 header and
+checksum bytes. One copy trims it to the frame, or none when it fits
+exactly; a test grows a too-small array. Before, each 64 KiB chunk was
+copied to a `Bytes`, then into a `Buffer`, then out of it.
+
+`reset` keeps the history buffer's capacity, as it already kept the
+other buffers and tables. CONTRACT.md asks that a reset codec behave as a
+new one with the same options: the output is the same, since a reset
+drops every table position and matches compare only bytes below the
+history's end. The `reset` tests compare frames with a new encoder's at
+every level. `memory_usage` still counts the kept buffer, and the bound
+is that of the encoder's own options, so a reset encoder stays within
+it. The brotli encoder still releases its input buffer at `reset`.
+
+MoonBit core 0.10.20 has a public bulk copy into a `MutArrayView`,
+`MutArrayView::blit_from_array`. The shared bit writer's `drain` uses it
+instead of a byte loop, for brotli's encoder as well.
+
+The maximum encoder bound changes from 60,977,056 to 60,849,056 bytes:
+the section copy's 131,072 bytes go, the four count tables' 3,072 come.
+
+The same codec_bench "zstd encode" command as above, on each target
+the parent sources and the changed sources alternately, twice
+(the parent from an unchanged copy of the sources, without Jujutsu).
+Means of the two runs on each side, in milliseconds:
+
+| Input, level | Native before → after | Wasm before → after | Wasm GC before → after | JS before → after |
+|---|---:|---:|---:|---:|
+| text, 1 | 7.52 → 6.00 | 22.25 → 17.48 | 13.86 → 11.80 | 90.88 → 90.91 |
+| text, 3 | 7.56 → 6.48 | 22.32 → 18.48 | 12.30 → 11.09 | 118.55 → 112.08 |
+| text, 5 | 13.53 → 12.63 | 32.35 → 28.32 | 20.80 → 19.16 | 145.84 → 141.27 |
+| text, 8 | 28.50 → 27.40 | 52.14 → 48.30 | 50.87 → 49.34 | 206.44 → 203.31 |
+| text, 12 | 69.34 → 67.96 | 95.32 → 90.62 | 113.10 → 112.99 | 311.88 → 307.45 |
+| binary, 1 | 1.31 → 1.06 | 3.46 → 2.25 | 1.62 → 1.65 | 9.70 → 8.95 |
+| binary, 3 | 3.09 → 2.88 | 7.30 → 5.69 | 4.67 → 4.71 | 47.62 → 47.76 |
+| binary, 12 | 11.23 → 11.32 | 13.09 → 11.88 | 24.64 → 24.52 | 109.62 → 106.88 |
+
+Native text is 2–20% faster, most at the fast levels, where entropy
+coding is a larger share; Wasm is 5–35% faster. Native binary level
+twelve is not a change: its runs were 11.81 and 10.64 ms before and 10.27
+and 12.38 ms after, the last with a 1.64 ms deviation. Wasm GC text is
+up to 15% faster; its binary levels one and three are 1–2% slower, within
+the spread between its before runs (1.60–1.64 and 4.63–4.76 ms). JS text
+levels three to twelve and binary levels one and twelve are 1–8% faster;
+text level one and binary level three are unchanged. A
+first before run at the start of the session gave the same picture.
+
+Sequences stay at 12 bytes each. Storing both lengths in one 32-bit word,
+with the one length per block that may exceed 16 bits kept aside as zstd
+does, was measured on native in the same session against the code above:
+
+| Input, level | 12 bytes, two runs | 8 bytes |
+|---|---:|---:|
+| text, 1 | 6.02, 6.02 | 5.97 |
+| text, 3 | 6.51, 6.52 | 6.42 |
+| text, 5 | 12.53, 12.75 | 12.38 |
+| text, 8 | 27.23, 27.84 | 27.38 |
+| text, 12 | 67.82, 67.74 | 67.44 |
+| binary, 1 | 1.05, 1.05 | 1.05 |
+| binary, 3 | 2.74, 2.73 | 2.72 |
+| binary, 12 | 10.29, 10.22 | 10.45 |
+
+The differences are below 2% (at most 1.5% outside text level five,
+whose first 12-byte run had a 0.54 ms deviation) and within run-to-run
+spread, against a long-length case in every reader of the lengths and a
+second representation in the tests. The packing is not done.
+
+Unchanged: the 276 published compression counts (all 300 frames decode
+with gaato and `zstd -d`), the SHA-256 pins on all four targets, and the
+crosscheck (2,360 streams through `zstd -d` and Node).

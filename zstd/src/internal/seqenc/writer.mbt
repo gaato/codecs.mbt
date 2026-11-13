@@ -53,8 +53,8 @@ pub fn Writer::write(
   self.ml.counts.fill(0)
   self.of.counts.fill(0)
   for i in 0..<n {
-    self.ll.counts[length_code(block.ll[i], ll_base)] += 1
-    self.ml.counts[length_code(block.ml[i], ml_base)] += 1
+    self.ll.counts[ll_code(block.ll[i])] += 1
+    self.ml.counts[ml_code(block.ml[i])] += 1
     self.of.counts[offset_code(block.offsets[i])] += 1
   }
   self.ll.select(n)
@@ -67,12 +67,12 @@ pub fn Writer::write(
   let lt = self.ll.table
   let mt = self.ml.table
   let ot = self.of.table
-  let mut ls = lt.start(length_code(block.ll[n - 1], ll_base))
-  let mut ms = mt.start(length_code(block.ml[n - 1], ml_base))
+  let mut ls = lt.start(ll_code(block.ll[n - 1]))
+  let mut ms = mt.start(ml_code(block.ml[n - 1]))
   let mut os = ot.start(offset_code(block.offsets[n - 1]))
   for i = n - 1; i >= 0; i = i - 1 {
-    let lc = length_code(block.ll[i], ll_base)
-    let mc = length_code(block.ml[i], ml_base)
+    let lc = ll_code(block.ll[i])
+    let mc = ml_code(block.ml[i])
     let oc = offset_code(block.offsets[i])
     let extra = offset_extra(block.offsets[i], oc)
     if i < n - 1 {

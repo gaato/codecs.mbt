@@ -345,10 +345,8 @@ pub fn Lazy::find_buffered(
         rep1 = distance
       }
     }
-    for i in anchor..<chosen {
-      // anchor <= i < chosen <= end.
-      block.literal(read(self.history.data, i))
-    }
+    // anchor <= chosen <= end <= the buffer's length.
+    block.literals_from(self.history.data, anchor, chosen)
     block.add(
       chosen - anchor,
       best,
@@ -370,10 +368,8 @@ pub fn Lazy::find_buffered(
       anchor = p
     }
   }
-  for i in anchor..<end {
-    // anchor <= i < end.
-    block.literal(read(self.history.data, i))
-  }
+  // anchor <= end <= the buffer's length.
+  block.literals_from(self.history.data, anchor, end)
 }
 
 ///|

@@ -360,6 +360,34 @@ test "incompressible input costs 3 bytes a block and the frame's header and chec
 }
 
 ///|
+test "compress writes into one array, grown only when its bound is too small" {
+  let rng = Rng::new(17)
+  let input = sample_text(rng, 5000) + sample_random(rng, 3000)
+  let expected = encode_drive(
+    Encoder(content_size=input.length().to_int64()),
+    input,
+    next_in=() => 1 << 20,
+    next_out=() => 1 << 20,
+  )
+  assert_true(compress(input) == expected)
+  // Too small an array doubles until the frame fits, as many times as it
+  // takes, and an exact fit needs no trimming copy.
+  for capacity in [0, 1, 7, expected.length()] {
+    let encoder = Encoder(content_size=input.length().to_int64())
+    assert_true(
+      encode_whole(encoder, input, capacity) == expected,
+      msg="\{capacity}",
+    )
+  }
+  // Incompressible input reaches the bound's raw blocks, and an empty
+  // input its empty block.
+  for n in [0, 131072, 300000] {
+    let random = sample_random(rng, n)
+    assert_true(decompress(compress(random)) == random, msg="\{n}")
+  }
+}
+
+///|
 test "frame headers: the window from the level, the content size when known" {
   let header = (stream : Bytes) => {
     let fh = frame_header_of(stream)

@@ -22,7 +22,7 @@ test "shared history slides only for a whole block and rebases both tables once"
   assert_eq(h.data[1024], b'y')
   h.finish_block()
   h.reset()
-  assert_eq(h.capacity(), 0)
+  assert_eq(h.capacity(), 3072)
   assert_eq(h.start, 0)
   assert_eq(h.end, 0)
   assert_true(first.iter().all(p => p == -1))

@@ -33,10 +33,10 @@ priv struct LiteralsWriter {
   mut huffman : @huffenc.HuffmanEncoder
   mut previous : @huffenc.HuffmanEncoder
   mut previous_valid : Bool
-  // The counts of each byte value in the literals, and in one of their four
-  // streams.
+  // The counts of each byte value in the literals, and, for four streams,
+  // in each stream.
   counts : FixedArray[Int32]
-  segment : FixedArray[Int32]
+  quarters : FixedArray[FixedArray[Int32]]
 }
 
 ///|
@@ -46,7 +46,7 @@ fn LiteralsWriter::new() -> LiteralsWriter {
     previous: @huffenc.HuffmanEncoder(),
     previous_valid: false,
     counts: FixedArray::make(256, 0),
-    segment: FixedArray::make(256, 0),
+    quarters: FixedArray::makei(4, _ => FixedArray::make(256, 0)),
   }
 }
 
@@ -60,7 +60,8 @@ fn LiteralsWriter::reset(self : LiteralsWriter) -> Unit {
 fn LiteralsWriter::memory_usage(self : LiteralsWriter) -> Int32 {
   self.huffman.memory_usage() +
   self.previous.memory_usage() +
-  4 * (self.counts.length() + self.segment.length())
+  4 * self.counts.length() +
+  4 * 4 * self.quarters[0].length()
 }
 
 ///|
@@ -81,9 +82,14 @@ fn LiteralsWriter::plan(
   len : Int32,
 ) -> LiteralsPlan {
   let counts = self.counts
-  counts.fill(0)
-  for i in start..<(start + len) {
-    counts[data[i].to_int()] += 1
+  let four = len >= FOUR_STREAMS_FROM
+  if four {
+    count_quarters(data, start, len, counts, self.quarters)
+  } else {
+    counts.fill(0)
+    for i in start..<(start + len) {
+      counts[data[i].to_int()] += 1
+    }
   }
   let mut distinct = 0
   for c in counts {
@@ -97,9 +103,8 @@ fn LiteralsWriter::plan(
     best = { kind: LitRle, size: header + 1, payload: 1, }
   }
   if self.huffman.build(counts) {
-    let four = len >= FOUR_STREAMS_FROM
     let streams = if four {
-      self.four_streams_size(self.huffman, data, start, len)
+      self.four_streams_size(self.huffman)
     } else {
       stream_size(self.huffman.cost(counts))
     }
@@ -110,9 +115,8 @@ fn LiteralsWriter::plan(
     }
   }
   if self.previous_valid && self.previous.accepts(counts) && len > 0 {
-    let four = len >= FOUR_STREAMS_FROM
     let payload = if four {
-      self.four_streams_size(self.previous, data, start, len)
+      self.four_streams_size(self.previous)
     } else {
       stream_size(self.previous.cost(counts))
     }
@@ -132,35 +136,45 @@ fn stream_size(bits : Int32) -> Int32 {
 }
 
 ///|
-/// The bytes of four Huffman streams and their jump table, with the code
-/// the writer built last, split as `HuffmanEncoder::write_literals` splits
-/// them.
+/// The bytes of four Huffman streams and their jump table with `coder`,
+/// from the counts of each stream that `plan` took.
 fn LiteralsWriter::four_streams_size(
   self : LiteralsWriter,
   coder : @huffenc.HuffmanEncoder,
+) -> Int32 {
+  6 +
+  stream_size(coder.cost(self.quarters[0])) +
+  stream_size(coder.cost(self.quarters[1])) +
+  stream_size(coder.cost(self.quarters[2])) +
+  stream_size(coder.cost(self.quarters[3]))
+}
+
+///|
+/// Writes four Huffman streams with `coder`, their jump table from the
+/// counts of each stream that `plan` took.
+fn LiteralsWriter::write_four_streams(
+  self : LiteralsWriter,
+  coder : @huffenc.HuffmanEncoder,
+  out : @bits.BitPacker,
   data : FixedArray[Byte],
   start : Int32,
   len : Int32,
-) -> Int32 {
-  let segment = (len + 3) / 4
-  let counts = self.segment
-  let mut size = 6
-  for i in 0..<4 {
-    let from = start + i * segment
-    let until = if i < 3 { from + segment } else { start + len }
-    counts.fill(0)
-    for j in from..<until {
-      counts[data[j].to_int()] += 1
-    }
-    size += stream_size(coder.cost(counts))
-  }
-  size
+) -> Unit {
+  coder.write_four_streams_sized(
+    out,
+    data,
+    start,
+    len,
+    stream_size(coder.cost(self.quarters[0])),
+    stream_size(coder.cost(self.quarters[1])),
+    stream_size(coder.cost(self.quarters[2])),
+  )
 }
 
 ///|
 /// Writes the literals section `plan` describes for
 /// `data[start:start + len]`; for a Huffman plan, `plan` must be the
-/// writer's latest.
+/// writer's latest, whose stream counts it uses.
 fn LiteralsWriter::write(
   self : LiteralsWriter,
   out : @bits.BitPacker,
@@ -181,7 +195,11 @@ fn LiteralsWriter::write(
     LitHuffman(four~) => {
       write_compressed_literals_header(out, len, plan.payload, four)
       self.huffman.write_description(out)
-      self.huffman.write_literals(out, data, start, len, four_streams=four)
+      if four {
+        self.write_four_streams(self.huffman, out, data, start, len)
+      } else {
+        self.huffman.write_literals(out, data, start, len, four_streams=false)
+      }
       let old = self.previous
       self.previous = self.huffman
       self.huffman = old
@@ -191,7 +209,11 @@ fn LiteralsWriter::write(
       // The header differs only in Literals_Block_Type.
       out.write(2, 3)
       write_compressed_literals_sizes(out, len, plan.payload, four)
-      self.previous.write_literals(out, data, start, len, four_streams=four)
+      if four {
+        self.write_four_streams(self.previous, out, data, start, len)
+      } else {
+        self.previous.write_literals(out, data, start, len, four_streams=false)
+      }
     }
   }
 }
@@ -324,19 +346,15 @@ fn Encoder::write_matched_block(self : Encoder, n : Int32, last : Bool) -> Unit 
     write_block_header(out, last, RAW_BLOCK, 0)
     return
   }
-  let mut same = n > 1
-  for i in 1..<n {
-    if data[start + i] != data[start] {
-      same = false
-      break
-    }
-  }
-  if same {
+  if n > 1 && all_same(data, start, n) {
     // RLE is strictly smaller than raw for more than one byte.
     write_block_header(out, last, RLE_BLOCK, n)
     out.write(8, data[start].to_int())
   } else {
     let block = self.sequences
+    // The section's size decides the block header and the block's type, so
+    // it is written aside first: its FSE states, and with them its size,
+    // are known only by encoding every sequence.
     self.sequence_bits.reset()
     self.sequence_writer.write(self.sequence_bits, block)
     let size = self.sequence_bits.pending()
@@ -344,17 +362,51 @@ fn Encoder::write_matched_block(self : Encoder, n : Int32, last : Bool) -> Unit 
     if plan.size + size < n {
       write_block_header(out, last, COMPRESSED_BLOCK, plan.size + size)
       literals.write(out, plan, block.literals, 0, block.literal_count)
-      if self.sequence_copy.length() < size {
-        self.sequence_copy = FixedArray::make(size, b'\x00')
-      }
-      self.sequence_bits.drain_into(self.sequence_copy, 0) |> ignore
-      out.write_bytes(self.sequence_copy, 0, size)
+      out.write_pending(self.sequence_bits)
       self.sequence_writer.commit(block)
     } else {
       write_block_header(out, last, RAW_BLOCK, n)
       out.write_bytes(data, start, n)
     }
   }
+}
+
+///|
+/// Whether the `n` bytes of `data` from `start` all equal the first.
+/// Native and Wasm compare eight at a time, unchecked.
+#cfg(any(target="native", target="wasm"))
+fn all_same(data : FixedArray[Byte], start : Int32, n : Int32) -> Bool {
+  let bytes = data.unsafe_reinterpret_as_bytes()
+  let first = data[start]
+  let word = first.to_uint64() * 0x0101010101010101UL
+  let end = start + n
+  let mut i = start
+  // data[start:end] is the caller's valid range: each load ends by `end`.
+  while i + 8 <= end {
+    if bytes.unsafe_read_uint64_le(i) != word {
+      return false
+    }
+    i += 8
+  }
+  while i < end {
+    // start <= i < end.
+    if data.unsafe_get(i) != first {
+      return false
+    }
+    i += 1
+  }
+  true
+}
+
+///|
+#cfg(not(any(target="native", target="wasm")))
+fn all_same(data : FixedArray[Byte], start : Int32, n : Int32) -> Bool {
+  for i in 1..<n {
+    if data[start + i] != data[start] {
+      return false
+    }
+  }
+  true
 }
 
 ///|
