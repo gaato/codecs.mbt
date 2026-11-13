@@ -1,0 +1,21 @@
+// PNG's unfilter for the decoder: the Up filter sixteen bytes at a time
+// with SIMD on native and Wasm, every other case handed to ../filter, whose
+// result it equals (the tests check it). `moon prove` checks that the SIMD
+// loads and stores stay within both rows; the SIMD operations themselves sit
+// behind the trusted bridges of bridges.mbt, as a proved function's body
+// cannot hold them.
+
+import {
+  "gaato/png/internal/filter",
+  "moonbitlang/core/v128",
+}
+
+// core's @v128 is experimental: every use would warn. It is confined to
+// this package, so that a change to it touches nothing else. @v128 is used
+// on native and Wasm only, and would warn as unused on JS and Wasm GC.
+
+warnings = "-alert_experimental-unused_package"
+
+proof_enabled = true
+
+supported_targets = "js + native + wasm + wasm-gc"

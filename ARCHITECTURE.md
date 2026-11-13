@@ -114,6 +114,38 @@ Each module also keeps two ledgers that scripts enforce: RESOURCE_BOUNDS.md
 names the tests that hold every bound, and TEST_COVERAGE.md explains every
 line that tests do not reach.
 
+## SIMD
+
+A few loops run sixteen bytes at a time with core's `@v128`: the zlib
+decoder's Adler-32 (`deflate/src/zlib/internal/adler32_fast`) and PNG's Up
+filter (`png/src/internal/filter_fast`). They follow these rules:
+
+- **Native and Wasm only**, through `#cfg(any(target="native", target="wasm"))`.
+  On JS, `@v128` falls back to code some 300 times slower than a plain loop;
+  Wasm GC cannot load sixteen bytes from an array at once, so it gains
+  nothing. The other targets keep the plain loop.
+- **Operations that native lowers to few instructions.** Native lowers
+  `@v128` through `moonbit_simd.h` (in the toolchain's `include`), one branch
+  for SSE2 and one for NEON, where some Wasm instructions become several:
+  Adler-32 written with `extmul` and `extadd_pairwise` ran 1.7 times as long
+  on x86 as with widening and `i32x4_dot_i16x8_s` (one `pmaddwd` on SSE2,
+  three instructions on NEON). Read both branches of that header before
+  choosing; the timings are from x86 only, and arm64 runs the tests.
+- **In a package of its own, next to the proved reference.** A proved
+  function's body cannot hold a SIMD operation (`moon prove` refuses them as
+  primitives), so the reference stays as it is, and the fast package's tests
+  compare the two at every alignment, around every block boundary and on the
+  inputs with the largest sums. Where the fast code reads a `FixedArray`, it
+  is proved too: the SIMD operations sit behind trusted bridges whose
+  contracts state only where they read and write, and `moon prove` checks
+  that every sixteen-byte access lies within the array (`filter_fast`).
+  Adler-32's reads go through `ArrayView`, which the prover does not model,
+  so `adler32_fast` rests on its tests.
+- **Confined, because `@v128` is experimental.** The fast package silences
+  the experimental alert for itself only. If core changes `@v128`, pointing
+  the `#cfg` branch at the reference restores the plain loop without
+  touching anything else.
+
 ## Where things are not
 
 Archives and containers with entries or random access (tar, zip) build on

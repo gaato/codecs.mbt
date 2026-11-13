@@ -7,6 +7,10 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+### Changed
+
+- The decoder reverses the Up filter sixteen bytes at a time with SIMD on native and Wasm (core's `@v128`, experimental): the 226 Up rows of a 512 × 384 RGB image take 18 µs in place of 175 µs on native and 26 µs in place of 271 µs on Wasm. With `gaato/deflate`'s faster Adler-32, that image decodes in 1.89 ms in place of 2.34 ms on native and 2.88 ms in place of 3.62 ms on Wasm. `moon prove` checks that its sixteen-byte loads and stores stay within the rows. JS and Wasm GC, where SIMD does not pay, are unchanged, as are the output and the errors.
+
 ## [0.1.0] - 2026-10-23
 
 ### Added

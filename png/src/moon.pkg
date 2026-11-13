@@ -4,7 +4,7 @@ import {
   "gaato/deflate/zlib",
   "gaato/png/internal/convert",
   "gaato/png/internal/crc32",
-  "gaato/png/internal/filter",
+  "gaato/png/internal/filter_fast",
   "gaato/png/internal/rules",
   "moonbitlang/core/debug",
 }

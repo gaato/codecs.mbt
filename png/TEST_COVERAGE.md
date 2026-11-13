@@ -29,6 +29,7 @@ ledger OK, 1 = an unexplained or over-budget file, 2 = the run itself failed
   packages `src/internal/rules/` (chunk types and their order, IHDR's
   fields, row sizes, Adam7's passes, fcTL's rectangle),
   `src/internal/filter/` (the filters' reverse and its bridges),
+  `src/internal/filter_fast/` (the decoder's faster Up filter),
   `src/internal/convert/` (a sample's arithmetic) and `src/internal/sizes/`
   (a row's bytes and a frame's rectangle, proved), and of the copies of the shared parts
   `src/internal/crc32/` and `src/internal/proof_bits/` (generated from
@@ -39,8 +40,8 @@ ledger OK, 1 = an unexplained or over-budget file, 2 = the run itself failed
 The pitfalls the script pins (stale counters, `-f summary` skewing totals,
 tcc on openSUSE) are described in zstd's ledger, `zstd/TEST_COVERAGE.md`.
 
-Snapshot at the last full measurement (2026-10-23): **99.8 %** (918/920
-lines), the two uncovered lines ledgered below.
+Snapshot at the last full measurement (2026-11-13): **99.7 %** (928/931
+lines), the three uncovered lines ledgered below.
 
 ## Policy
 
@@ -74,3 +75,4 @@ broken files from typst, image-png and libspng.
 | File | Budget | Reason |
 |---|---|---|
 | src/decoder.mbt | 2 | `blit` for JS (`#cfg(target="js")`), which copies a row byte by byte: the ledger measures native, which compiles the block copy instead. The gates run the same tests on JS, among them "step_into writes what step writes, into a whole array". |
+| src/internal/filter_fast/filter_fast.mbt | 1 | `unfilter` for JS and Wasm GC (`#cfg(not(any(target="native", target="wasm")))`), which calls `@filter.unfilter`: the ledger measures native, which compiles the SIMD one instead. The gates run the package's tests, which compare it with `@filter.unfilter`, on JS and Wasm GC too. |

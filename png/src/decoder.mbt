@@ -1342,7 +1342,13 @@ fn Decoder::consume(self : Decoder, data : BytesView, n : Int32) -> Unit {
 /// be handed out.
 fn Decoder::finish_row(self : Decoder) -> Unit raise Stop {
   let kind = self.cur[0]
-  if !@filter.unfilter(kind, self.cur, self.prev, self.pass_bytes, self.unit) {
+  if !@filter_fast.unfilter(
+      kind,
+      self.cur,
+      self.prev,
+      self.pass_bytes,
+      self.unit,
+    ) {
     raise Fail(Corrupt, "filter type \{kind.to_int()}")
   }
   let row = self.cur

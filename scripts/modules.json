@@ -50,6 +50,7 @@
       "src/internal/convert",
       "src/internal/crc32",
       "src/internal/filter",
+      "src/internal/filter_fast",
       "src/internal/proof_bits",
       "src/internal/rules",
       "src/internal/sizes"
@@ -144,6 +145,7 @@
     "png": {
       "src/internal/convert": { "prelude": "unbounded", "solvers": ["z3", "cvc5"] },
       "src/internal/filter": { "prelude": "unbounded", "solvers": ["z3", "cvc5"] },
+      "src/internal/filter_fast": { "prelude": "unbounded", "solvers": ["z3", "cvc5"] },
       "src/internal/rules": { "prelude": "unbounded", "solvers": ["z3", "cvc5"] },
       "src/internal/sizes": { "prelude": "unbounded", "solvers": ["z3", "cvc5"] }
     }

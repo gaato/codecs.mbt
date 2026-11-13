@@ -6,6 +6,8 @@ pub fn paeth(Int32, Int32, Int32) -> Int32
 
 pub fn unfilter(Byte, FixedArray[Byte], FixedArray[Byte], Int32, Int32) -> Bool
 
+pub fn up_from(FixedArray[Byte], FixedArray[Byte], Int32, Int32) -> Unit
+
 // Errors
 
 // Types and methods

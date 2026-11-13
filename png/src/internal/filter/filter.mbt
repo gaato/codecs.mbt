@@ -131,12 +131,28 @@ fn up(
   proof_require: 0 <= stop && stop <= cur.length() && stop <= prev.length(),
   proof_ensure: true,
 } {
-  for i = 1; i < stop; {
+  up_from(cur, prev, 1, stop)
+}
+
+///|
+/// Up from byte `from` (at least 1) to below `stop` (at most both rows'
+/// lengths): each byte plus the one above it. `up` is `up_from` from 1; the
+/// SIMD Up filter of ../filter_fast ends with it, for the last bytes.
+pub fn up_from(
+  cur : FixedArray[Byte],
+  prev : FixedArray[Byte],
+  from : Int32,
+  stop : Int32,
+) -> Unit where {
+  proof_require: 1 <= from && stop <= cur.length() && stop <= prev.length(),
+  proof_ensure: true,
+} {
+  for i = from; i < stop; {
     proof_assert in_row(i, cur.length()) && in_row(i, prev.length())
     cur.unsafe_set(i, byte_add(cur.unsafe_get(i), prev.unsafe_get(i)))
     continue i + 1
   } where {
-    proof_invariant: 1 <= i,
+    proof_invariant: from <= i,
   }
 }
 
