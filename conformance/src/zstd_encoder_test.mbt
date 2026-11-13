@@ -1,7 +1,7 @@
 ///|
 /// What gaato/zstd/RESOURCE_BOUNDS.md gives for an encoder's
 /// `memory_usage`.
-let zstd_encoder_memory : Int32 = 3698604
+let zstd_encoder_memory : Int32 = 6582176
 
 ///|
 /// Inputs for the encoder: empty, one byte, runs, text, random bytes, and
@@ -53,6 +53,8 @@ test "the zstd encoder keeps the byte-stream contract" {
       (3, false, true),
       (3, true, true),
       (3, false, false),
+      (4, false, true),
+      (4, true, true),
       (12, false, true),
       (12, true, false),
     ]

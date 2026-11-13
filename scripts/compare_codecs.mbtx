@@ -1278,11 +1278,11 @@ async fn ratio(
       }
     }
   }
-  // The reference encoder at three settings, for scale (Brotli only: the
-  // DEFLATE table has no reference row). The file is named, not piped, as
+  // Zstandard at levels one through four and Brotli at three settings;
+  // the DEFLATE table has no reference row. The file is named, not piped, as
   // brotli then knows its size, which changes some streams.
   if format == "zstd" && (only == "" || only == "gaato/zstd") {
-    for level in [1, 2] {
+    for level in [1, 2, 3, 4] {
       for path in paths {
         let out = @shell.Cmd("zstd", ["-\{level}", "--check", "-c", "-q", path]).output(max_output_bytes=1 << 28)
         out.check()

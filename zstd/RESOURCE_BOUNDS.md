@@ -32,11 +32,11 @@ checked against the limits before anything is allocated from them.
 | One-shot output (`decompress`, `max_output`) | `max_output` bytes when given; unlimited by default | `LimitExceeded({ resource: Output, needed: None, limit: max_output })` | `src/decode_wbtest.mbt`: "decompress honours max_output" |
 | Encoder input buffer (`src/encoder.mbt`, `data`) | One block not encoded yet: Block_Maximum_Size, min(window, 128 KiB), and for a single-segment frame no more than its content size. Allocated from 1 KiB, doubling only as input arrives; released at `reset` | Cannot overflow: a step takes no more input than fills a block, and a full block is encoded before more is taken | `src/bounds_wbtest.mbt`: "the encoder's input buffer is at most a block, and grows only with input" |
 | Encoder output waiting (`src/encoder.mbt`, `writer`, a `BitPacker` of `src/internal/bits`) | One block (3 + 128 KiB: a compressed block is chosen only when smaller than the raw one), with the magic number and the frame header (at most 14 bytes) before the first and the checksum (4) after the last: at most 131,093 bytes. The buffer doubles as it grows, so it may be up to twice that and 5 bytes | `NeedMoreOutput`; no input is taken and no block encoded until the caller has taken it all | `src/bounds_wbtest.mbt`: "the encoder's waiting output is at most a block and the frame's header and checksum" |
-| Encoder match window and hash (`src/internal/match`) | window + one block bytes, plus `4 * 2^hashLog` hash bytes and 12 repeat bytes. P3's largest parameters are windowLog 20 and hashLog 16: 1,441,804 bytes. Positions rebase after each block; only bytes retained in this frame are eligible, at distance at most window | Cannot overflow; old history is discarded and its hash positions invalidated | `src/internal/match/fast_wbtest.mbt`: "fast history wraps within the window and resets before another frame"; `src/bounds_wbtest.mbt`: "the encoder's memory_usage stays within its bound after every step" |
+| Encoder match window and hash (`src/internal/match`) | window + one block bytes; fast adds `4 * 2^hashLog` hash bytes and 12 repeat bytes, double-fast adds `4 * (2^hashLog + 2^chainLog)` hash bytes. Largest selected row: windowLog 21, hashLog 18, chainLog 18, totaling 4,325,376 bytes. Positions rebase after each block; only bytes retained in this frame are eligible, at distance at most window | Cannot overflow; old history is discarded and both tables' positions invalidated | `src/internal/match/fast_wbtest.mbt`: "fast history wraps within the window and resets before another frame"; `src/internal/match/dfast_wbtest.mbt`: "dfast history wraps within the window and resets before another frame", "dfast permits the exact window distance and refuses older hash candidates"; `src/bounds_wbtest.mbt`: "double-fast memory reaches both tables and the full window plus a block", "the encoder's memory_usage stays within its bound after every step" |
 | Encoder sequences and literals (`src/internal/seqenc/Block`) | At most floor(128 KiB / 3) sequences, three 4-byte arrays, one block of gathered literals, and 12 repeat bytes: 655,364 bytes. Fast actually emits matches of at least 4 bytes; the bound also admits RFC minimum length 3 | Cannot overflow: array growth is capped at the sequence limit | `src/internal/seqenc/block_wbtest.mbt`: "sequence storage reaches its RFC block capacity and keeps bounded arrays"; `src/bounds_wbtest.mbt`: "the encoder's memory_usage stays within its bound after every step" |
 | Encoder sequence scratch (`sequence_bits`, `sequence_copy`) | Bitstream below 512 KiB: at most 43,690 sequences times (9 + 9 + 8 state bits + 16 + 16 + 31 extra bits), plus three descriptions below 512 bytes, states, header and sentinel. Packer capacity below `2 * (512 KiB + 5)`. The copy is allocated only for an accepted compressed block, smaller than 128 KiB | Candidate too large is discarded for raw | `src/bounds_wbtest.mbt`: "the encoder's memory_usage stays within its bound after every step"; `src/sequence_encode_wbtest.mbt`: "sequence sections: every mode, large counts, long extras and near-window offsets" |
 | Entropy scratch (`seqenc/Stream`, `huffenc`) | Three FSE description packers and two Huffman weight packers, each with at most 512 bytes of payload (at most 53 normalized counts, or 255 weights with codes at most 6 bits). Each retains at most `2 * (512 + 5)` bytes. Literal streams go directly to the output, with no private stream copy | Cannot overflow: fixed alphabets and weight count | `src/bounds_wbtest.mbt`: "the encoder's memory_usage stays within its bound after every step", "the encoder's fixed tables and its memory bound" |
-| Encoder memory (`Encoder::memory_usage`) | All retained arrays: input, waiting output, match window and hash, sequence arrays and scratch, and fixed entropy tables. The conservative sum in `encoder_memory_bound` is **3,698,604 bytes**, for all P3 levels, including temporary level-2 mapping at 3..12. It includes capacity retained from larger prior blocks and across reset | Cannot overflow: each part is bounded by its own row | `src/bounds_wbtest.mbt`: "the encoder's memory_usage stays within its bound after every step", "the encoder's fixed tables and its memory bound" |
+| Encoder memory (`Encoder::memory_usage`) | All retained arrays: input, waiting output, match window and hash, sequence arrays and scratch, and fixed entropy tables. `encoder_memory_bound(params)` derives the bound from each selected row; the maximum is **6,582,176 bytes**, at the large-input level-four double-fast row. Later strategies temporarily use no larger row. Includes capacity retained from larger prior blocks and across reset | Cannot overflow: each part is bounded by its own row | `src/bounds_wbtest.mbt`: "the encoder's memory_usage stays within its bound after every step", "the encoder's fixed tables and its memory bound", "double-fast memory reaches both tables and the full window plus a block" |
 | Encoded size | A block is the smallest of raw, RLE and compressed, so a frame is at most its input, 3 bytes a block (an empty block for no input), the frame header and the checksum | Cannot overflow | `src/encode_wbtest.mbt`: "incompressible input costs 3 bytes a block and the frame's header and checksum" |
 | Encoder input against its content size (`Encoder(content_size=..)`) | Exactly the content size given, which the frame header declares | `ChecksumMismatch`, once the input passes it (the bytes up to it are taken as with `Continue` and the output they decide is handed out first, so the output before the error does not depend on the splits) or at `Finish` short of it | `src/encode_wbtest.mbt`: "the input must match the content size given", "input past the content size raises after the same output, however it is split" |
 
@@ -56,6 +56,30 @@ checked against the limits before anything is allocated from them.
 | Literals writer (`src/block_writer.mbt`, `LiteralsWriter`) | 14,024 bytes initially, counted by `memory_usage`: candidate and previous Huffman encoders, and two arrays of 256 byte counts. Only a committed compressed literals section replaces the previous tree |
 | Sequence writer (`src/internal/seqenc`) | LL/ML tables up to 512 states, OF up to 256, their counts, candidate and committed normalized distributions, and repeat history. Initial 9,316 bytes; description packer capacities are counted separately above |
 | XXH64 state, flags | Under 100 bytes |
+
+## Encoder bound derivation
+
+`src/bounds_wbtest.mbt` computes the sum from the effective row (including
+the temporary fallback), then checks it after every step. The largest
+row has windowLog 21, hashLog 18, chainLog 18. Its terms in bytes are:
+
+| Structure | Bytes |
+|---|---:|
+| Input | 131,072 |
+| Waiting output, `2 * (131093 + 5)` | 262,196 |
+| Fixed literals writer | 14,024 |
+| Five entropy description packers, `5 * 2 * (512 + 5)` | 5,170 |
+| Match window + block + two position tables, `2^21 + 131072 + 4 * (2^18 + 2^18)` | 4,325,376 |
+| Sequence arrays, literals and repeats, `12 * floor(131072 / 3) + 131072 + 12` | 655,364 |
+| Fixed sequence writer | 9,316 |
+| Sequence bitstream packer, `2 * (2^19 + 5)` | 1,048,586 |
+| Accepted sequence copy | 131,072 |
+| **Total** | **6,582,176** |
+
+The full-window test reaches the 4,325,376-byte matcher allocation.
+All twelve levels and the four size classes are checked against the
+maximum. Sequence bitstream capacity retains the shared BitPacker's
+doubling allowance; exact reservation is a possible later reduction.
 
 ## Left to the caller
 

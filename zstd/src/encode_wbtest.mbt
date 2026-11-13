@@ -182,7 +182,7 @@ fn frame_blocks(
 test "compress round-trips through the decoder at every level" {
   for sample in encoder_inputs() {
     let (name, input) = sample
-    for level in [1, 3, 12] {
+    for level in [1, 3, 4, 12] {
       for checksum in [true, false] {
         let compressed = compress(input, level~, checksum~)
         let got = decompress(compressed)
@@ -255,10 +255,10 @@ test "a flush makes the frame so far decode to the input so far" {
   let mut flushes = 0
   for sample in encoder_inputs() {
     let (name, input) = sample
-    for round in 0..<3 {
-      let max_in = [1, 300, 70000][round]
-      let max_out = [7, 5000, 1 << 17][round]
-      let every = [97, 1000, 1][round]
+    for round in 0..<4 {
+      let max_in = [1, 300, 70000, 70000][round]
+      let max_out = [7, 5000, 1 << 17, 1 << 17][round]
+      let every = [97, 1000, 1, 1][round]
       if round == 0 && input.length() > 50000 {
         continue
       }
@@ -266,7 +266,7 @@ test "a flush makes the frame so far decode to the input so far" {
       let decoded = Buffer()
       let mut fed = 0
       let stream = encode_drive(
-        Encoder(level=[1, 3, 12][round]),
+        Encoder(level=[1, 3, 4, 12][round]),
         input,
         next_in=() => 1 + rng.below(max_in),
         next_out=() => 1 + rng.below(max_out),
@@ -323,21 +323,21 @@ test "blocks: raw, RLE or sequences, whichever is smallest, at most 128 KiB" {
   inspect(
     summary(sample_text(rng, 1000)),
     content=(
-      #|compressed 326/326 last
+      #|compressed 319/319 last
     ),
   )
   // A block ends at 128 KiB, and only there.
   inspect(
     summary(sample_text(rng, 262145)),
     content=(
-      #|compressed 26919/26919, compressed 26748/26748, raw 1/1 last
+      #|compressed 24976/24976, compressed 24565/24565, raw 1/1 last
     ),
   )
   // Few literals: Huffman costs more than it saves.
   inspect(
     summary(b"abcabcabcabc"),
     content=(
-      #|compressed 10/10 last
+      #|raw 12/12 last
     ),
   )
 }
@@ -373,7 +373,7 @@ test "frame headers: the window from the level, the content size when known" {
     encode_drive(encoder, input, next_in=() => 1 << 20, next_out=() => 1 << 20)
   }
   // Unknown size: the window of the table for large inputs, 512 KiB at
-  // level 1 and 1 MiB at levels 2..12 during P3's temporary fast mapping.
+  // level 1, 1 MiB at level 2 and 2 MiB for the double-fast rows.
   let windows = [
     for level in [-5, 0, 1, 2, 3, 8, 9, 12, 13, 22] => {
       let fh = frame_header_of(stream(Encoder(level~), b"abc"))
@@ -383,13 +383,13 @@ test "frame headers: the window from the level, the content size when known" {
   inspect(
     windows.join(" "),
     content=(
-      #|524288 524288 524288 1048576 1048576 1048576 1048576 1048576 1048576 1048576
+      #|524288 524288 524288 1048576 2097152 2097152 2097152 2097152 2097152 2097152
     ),
   )
   inspect(
     header(stream(Encoder(checksum=false), b"abc")),
     content=(
-      #|single false, window 1048576, size none, checksum false
+      #|single false, window 2097152, size none, checksum false
     ),
   )
   // Known size: single-segment, the window is the content.
@@ -406,13 +406,13 @@ test "frame headers: the window from the level, the content size when known" {
   inspect(
     header(compress(big)),
     content=(
-      #|single false, window 1048576, size 3000000, checksum true
+      #|single false, window 2097152, size 3000000, checksum true
     ),
   )
   inspect(
     header(compress(big, level=12)),
     content=(
-      #|single false, window 1048576, size 3000000, checksum true
+      #|single false, window 2097152, size 3000000, checksum true
     ),
   )
   assert_true(decompress(compress(big)) == big)
@@ -608,7 +608,7 @@ test "the input must match the content size given" {
 ///|
 test "the same encoder after reset writes the same frames" {
   let inputs = encoder_inputs()
-  for level in [1, 3, 12] {
+  for level in [1, 3, 4, 12] {
     let encoder = Encoder(level~)
     for sample in inputs {
       let (name, input) = sample
@@ -636,7 +636,7 @@ test "every target writes the same bytes" {
     Bytes::make(70000, b'\x00') +
     sample_text(rng, 50000)
   let digests = []
-  for level in [1, 3, 12] {
+  for level in [1, 3, 4, 12] {
     digests.push(@checksum.sha256(compress(input, level~)))
     let stream = encode_drive(Encoder(level~), input, next_in=() => 1 << 20, next_out=() => {
       1 << 16
@@ -656,11 +656,13 @@ test "every target writes the same bytes" {
     content=(
       #|24994fc06736764210c6dcebbebaae003ebc74e1924aee76ecd5ba424ccbb989
       #|73863e2a2aff3d4e1373e6de10a0f1f47c89b05e8280c7fc3db9e1700ac156f7
-      #|c9fc7367a0d1788366c4b281820c2897035f44c3062508cadebb4bfbd27fe38e
-      #|a0e1c1f32b5653d017f1f95ad7a84f44a22ee51495e30c4db89e334918c14f12
-      #|c9fc7367a0d1788366c4b281820c2897035f44c3062508cadebb4bfbd27fe38e
-      #|a0e1c1f32b5653d017f1f95ad7a84f44a22ee51495e30c4db89e334918c14f12
-      #|86b667be4032ccd4e0d0930203b2b728731f4b0cfe99f9c793c60f00711e97c4
+      #|9d4f9cf68ba54bd7b5bb9be86fdbc454a43ace8d0d249d43216bda1bb18a5733
+      #|a5eecad5b3f5b444bea4726e76c9502dbc7bd8a07bb6773ecd06d1e79a9ae475
+      #|2f30bdd49e97b38915bc17d9e3b92f5c39a1baaa90559546b298c7292453d5b2
+      #|452997d3115fea248699edd64034d36fa191844e2906a9b73a308e533cf2ad9b
+      #|2f30bdd49e97b38915bc17d9e3b92f5c39a1baaa90559546b298c7292453d5b2
+      #|452997d3115fea248699edd64034d36fa191844e2906a9b73a308e533cf2ad9b
+      #|c273ce57ffa9f155fba91e1a4871e47c01aa674d82c8ec45167b767cbcc40f95
     ),
   )
 }

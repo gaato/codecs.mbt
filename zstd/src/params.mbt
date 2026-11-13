@@ -1,13 +1,13 @@
 // The encoder's parameters for each level, transcribed from the reference
 // implementation: facebook/zstd v1.5.7, lib/compress/clevels.h,
 // `ZSTD_defaultCParameters` (BSD license; see NOTICE), levels 1 to 12 of
-// its four tables. P3 uses fast and the level-2 row for levels 3..12;
-// the other rows remain here for the later dedicated strategies.
+// its four tables. Strategies beyond double-fast temporarily use the
+// nearest double-fast row until the hash-chain strategies are available.
 
 ///|
 /// The match-finding strategy of a level, as `ZSTD_strategy` names it.
 /// `Btlazy2` and `Btopt` appear in the tables for small inputs at levels 9
-/// to 12. P3 maps every requested strategy to fast with level-2 parameters.
+/// to 12. Strategies beyond Dfast temporarily use a nearby Dfast row.
 #warnings("-unused_constructor")
 priv enum Strategy {
   Fast
@@ -24,6 +24,8 @@ priv enum Strategy {
 /// table and the hash table, the search depth (log), the shortest match,
 /// the target length and the strategy. Fast reads window_log, hash_log,
 /// min_match (hash width) and target_length (acceleration).
+/// Double-fast additionally uses chain_log for its short hash table and
+/// always hashes eight bytes in its long table.
 #warnings("-unused_field")
 priv struct Params {
   window_log : Int32
@@ -149,4 +151,24 @@ fn params_for(level : Int32, size : Int64?) -> Params {
   guard size <= 1L << 30 else { return params }
   let size_log = if size < 64 { 6 } else { 64 - (size - 1).clz() }
   { ..params, window_log: params.window_log.min(size_log).max(10), }
+}
+
+///|
+/// Selects by the row's strategy, including the small-input level-2 Dfast
+/// row. Until the later strategies are implemented, use level four's row
+/// or the nearest preceding Dfast row in the same size class; this keeps
+/// their temporary memory and window requirements bounded by Dfast's.
+fn encoder_params(level : Int32, size : Int64?) -> Params {
+  let params = params_for(level, size)
+  match params.strategy {
+    Fast | Dfast => params
+    _ => {
+      let fourth = params_for(4, size)
+      if fourth.strategy is Dfast {
+        fourth
+      } else {
+        params_for(3, size)
+      }
+    }
+  }
 }

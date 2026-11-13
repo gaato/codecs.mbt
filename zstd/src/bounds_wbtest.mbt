@@ -163,15 +163,15 @@ const ENCODER_PENDING_MAX : Int32 = 4 + 10 + 3 + MAX_BLOCK_SIZE + 4
 /// buffer, waiting output, match window/hash, sequence arrays and scratch,
 /// and both entropy coders. Packer capacities include doubling and the
 /// extra 5 bytes reserved by a write.
-fn encoder_memory_bound() -> Int32 {
+fn encoder_memory_bound(params~ : Params = encoder_params(4, None)) -> Int32 {
   MAX_BLOCK_SIZE +
   2 * (ENCODER_PENDING_MAX + 5) +
   LiteralsWriter::new().memory_usage() +
   2 * 2 * (512 + 5) +
-  (1 << 20) +
+  (1 << params.window_log) +
   MAX_BLOCK_SIZE +
-  4 * (1 << 16) +
-  12 +
+  4 * (1 << params.hash_log) +
+  (if params.strategy is Dfast { 4 * (1 << params.chain_log) } else { 12 }) +
   MAX_BLOCK_SIZE +
   12 * (MAX_BLOCK_SIZE / 3) +
   12 +
@@ -203,7 +203,7 @@ fn check_encoder_bounds(e : Encoder, _room : Int32) -> Unit raise {
   assert_true(e.sequences.count <= MAX_BLOCK_SIZE / 3)
   assert_true(e.sequences.ll.length() <= MAX_BLOCK_SIZE / 3)
   assert_true(e.sequences.literal_count <= MAX_BLOCK_SIZE)
-  assert_true(e.memory_usage() <= encoder_memory_bound())
+  assert_true(e.memory_usage() <= encoder_memory_bound(params=e.params))
 }
 
 ///|
@@ -217,14 +217,14 @@ test "the encoder's fixed tables and its memory bound" {
   inspect(
     encoder_memory_bound(),
     content=(
-      #|3698604
+      #|6582176
     ),
   )
   // A new encoder holds fixed tables and its level's hash table.
   inspect(
     Encoder().memory_usage(),
     content=(
-      #|285508
+      #|809784
     ),
   )
 }
@@ -314,7 +314,7 @@ test "the encoder's memory_usage stays within its bound after every step" {
   ]
   let mut most = 0
   for input in inputs {
-    for level in [1, 3, 12] {
+    for level in [1, 3, 4, 12] {
       for split in [(1, 65536), (65536, 1), (777, 3000), (1 << 20, 1 << 20)] {
         let (next_in, next_out) = split
         // A byte at a time over the first 20,000 bytes: past a block, the
@@ -342,4 +342,42 @@ test "the encoder's memory_usage stays within its bound after every step" {
   // Each backend's packer may double at different points; the common
   // upper bound includes its retained capacity, not only pending bytes.
   assert_true(most > 600000 && most <= encoder_memory_bound())
+}
+
+///|
+test "double-fast memory reaches both tables and the full window plus a block" {
+  let input = Bytes::makei(3 * (1 << 20), i => (i % 251).to_byte())
+  let e = Encoder(level=4)
+  let out = encode_drive(
+    e,
+    input,
+    next_in=() => 65536,
+    next_out=() => 65536,
+    check=check_encoder_bounds,
+  )
+  assert_true(decompress(out) == input)
+  assert_eq(
+    e.matcher.memory_usage(),
+    (1 << 21) + MAX_BLOCK_SIZE + 4 * (2 << 18),
+  )
+  for size in [None, Some(1000L), Some(100000L), Some(200000L), Some(400000L)] {
+    for level in 1..<=12 {
+      let params = encoder_params(level, size)
+      assert_true(encoder_memory_bound(params~) <= encoder_memory_bound())
+      let requested = params_for(level, size)
+      match requested.strategy {
+        Fast => assert_true(params.strategy is Fast)
+        Dfast => assert_true(params.strategy is Dfast)
+        _ => assert_true(params.strategy is Dfast)
+      }
+      let encoder = match size {
+        Some(size) => Encoder(level~, content_size=size)
+        None => Encoder(level~)
+      }
+      match encoder.matcher {
+        Fast(_) => assert_true(params.strategy is Fast)
+        Dfast(_) => assert_true(params.strategy is Dfast)
+      }
+    }
+  }
 }

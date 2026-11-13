@@ -87,7 +87,8 @@ not.
 
 Bridge budget: 6
 
-P3 adds no trusted bridges or formal proof claims. Length baselines and
+Sequence encoding and fast/double-fast matching add no trusted bridges
+or formal proof claims. Length baselines and
 predefined distributions now live in `src/internal/seqenc/tables.mbt` and
 are referenced by both directions. Repeat history transitions likewise
 have one executable implementation, `Repeats::resolve`; the encoder's
@@ -95,4 +96,4 @@ inverse is checked against independent RFC transitions in
 `src/internal/seqenc/offset_test.mbt`. Sequence interleaving, mode validity,
 and match window eligibility rest on tests and external decoding, rather
 than on the entropy normalization proof above. See
-`docs/p3-fast.md` for the cost model and measured limitations.
+`docs/compression.md` for the cost model and measured limitations.

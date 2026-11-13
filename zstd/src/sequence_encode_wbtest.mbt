@@ -78,9 +78,9 @@ test "31-bit offset extras survive every partial byte alignment" {
 }
 
 ///|
-test "all P3 levels see the same blocks with one-byte input steps" {
+test "fast and double-fast levels see the same blocks with one-byte input steps" {
   let input = sample_text(Rng::new(812), 280000)
-  for level in [1, 2, 3, 12] {
+  for level in [1, 2, 3, 4, 12] {
     let whole = compress(input, level~)
     let split = encode_drive(
       Encoder(level~, content_size=input.length().to_int64()),

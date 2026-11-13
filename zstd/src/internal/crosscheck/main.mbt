@@ -129,7 +129,7 @@ fn main {
   }
   for sample in samples {
     let (name, input) = sample
-    for level in [1, 2, 3, 12] {
+    for level in [1, 2, 3, 4, 12] {
       emit("\{name} l\{level}", input, @zstd.compress(input, level~))
     }
     emit("\{name} l3 nocheck", input, @zstd.compress(input, checksum=false))
@@ -138,6 +138,7 @@ fn main {
   }
   let flushed = text(rng, 200000) + random(rng, 30000) + text(rng, 50000)
   streamed("flushed l1", @zstd.Encoder(level=1), flushed, 777, 10000)
+  streamed("flushed l4", @zstd.Encoder(level=4), flushed, 777, 10000)
   streamed("flushed l12", @zstd.Encoder(level=12), flushed, 65536, 70000)
   streamed(
     "flushed l3 nocheck",
@@ -148,4 +149,18 @@ fn main {
   )
   // A flush after every byte.
   streamed("bytewise l3", @zstd.Encoder(), flushed[:1000].to_owned(), 1, 1)
+  streamed(
+    "bytewise l4",
+    @zstd.Encoder(level=4),
+    flushed[:20000].to_owned(),
+    1,
+    0,
+  )
+  // Reuse a nontrivial prefix across cutter blocks and around a 2 MiB
+  // window. Both long hashes and the history eviction path are exercised.
+  let prefix = random(rng, 100000)
+  let distant = prefix + random(rng, (1 << 21) - 100001) + prefix + prefix
+  for level in [3, 4] {
+    emit("distant l\{level}", distant, @zstd.compress(distant, level~))
+  }
 }

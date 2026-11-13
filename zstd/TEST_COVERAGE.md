@@ -31,7 +31,7 @@ and corruptions.
   the encoder's `src/internal/fse/` and `src/internal/huffenc/`, the copies
   of `parts/` in `src/internal/bits/` and `src/internal/huffman_code/`, and
   the proof packages). The test-only checksum package and the crosscheck
-  tool under `src/internal/` are not measured. P3's shared `seqcases`
+  tool under `src/internal/` are not measured. The shared `seqcases`
   fixture generator is measured alongside `match` and `seqenc`, so every
   new internal package is included apart from those existing tool exclusions.
 - Counts are Coveralls lines: lines with at least one instrumented point,
@@ -48,9 +48,9 @@ and corruptions.
 - moon's bundled tcc cannot link on some hosts (openSUSE); the script sets
   `MOON_CC=cc` unless it is already set.
 
-Snapshot at the last full measurement (2026-11-13): **99.0 %** (1351/1365
-lines). P3 measurement: **99.2 %** (1687/1701 lines); the remaining 14
-lines are the same accepted defensive and JS-only lines below.
+Snapshot at the last full measurement (2026-11-13): **99.2 %**
+(1787/1801 lines); the remaining 14 lines are the same
+accepted defensive and JS-only lines below.
 
 ## Policy
 
@@ -86,7 +86,7 @@ Must be covered by tests:
   three symbols of up to 12 and seeded random ones, and `settle` over
   arbitrary shares (`src/internal/fse/`).
 
-P3 additionally covers every line of `src/internal/match` and
+Sequence encoding additionally covers every line of `src/internal/match` and
 `src/internal/seqenc`: independently executed repeat histories, every
 selected mode (asserted snapshots), rejection of invalid repeated tables,
 1/2/3-byte sequence counts including 32,512 sequences, long LL/ML extras,
@@ -97,6 +97,17 @@ small-window test wraps forty times and reconstructs its matches before
 reset. The existing split/flush/reset and conformance tests now exercise
 real matches; Huffman and Treeless literals include persistence across raw
 and RLE blocks. No new uncovered-line allowance was added.
+
+Double-fast adds independent sequence reconstruction over forty small
+window wraps; exact-window and invalid-candidate checks; a deliberately
+colliding short candidate which loses to the eight-byte long table; a
+repeat-first assertion; every short hash width; empty and tiny blocks.
+The full-window memory test reaches both level-four tables plus a 2 MiB
+window and a block, and checks effective parameter selection across all
+levels and size classes. The shared harness and one-byte split tests run
+levels 3 and 4 as well as the existing levels. External crosscheck adds
+level-four frames, flushes, bytewise input and distant cross-block
+prefixes. No additional uncovered-line allowance is needed.
 
 Accepted as uncovered (needs a row):
 

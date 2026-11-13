@@ -16,3 +16,8 @@ search ordering of facebook/zstd v1.5.7, lib/compress/zstd_fast.c and
 zstd_compress_internal.h, under that BSD license. It is a scalar MoonBit
 implementation with bounded rebased positions, rather than the reference's
 pipelined pointer loop.
+
+src/internal/match/dfast.mbt transcribes the no-dictionary double-fast
+search loop and hash constants of facebook/zstd v1.5.7,
+lib/compress/zstd_double_fast.c and zstd_compress_internal.h, under the
+same BSD license. Pointer lookahead uses checked rebased positions.

@@ -20,8 +20,8 @@ const INITIAL_BUFFER : Int32 = 1024
 /// frame: Raw, RLE or Compressed blocks of at most 128 KiB, whichever is
 /// smallest, and the XXH64 content checksum unless asked not to.
 ///
-/// Levels 1 and 2 use fast matching. Levels 3..12 temporarily use the
-/// level-2 fast parameters until their dedicated strategies are available.
+/// Levels 1..4 select fast or double-fast from their size-class parameters.
+/// Later strategies temporarily use the nearest double-fast row.
 pub struct Encoder {
   priv checksum : Bool
   priv content_size : Int64?
@@ -34,7 +34,7 @@ pub struct Encoder {
   priv mut data : FixedArray[Byte]
   priv mut data_len : Int32
   priv literals : LiteralsWriter
-  priv matcher : @matcher.Fast
+  priv matcher : Matcher
   priv sequences : @seqenc.Block
   priv sequence_writer : @seqenc.Writer
   priv sequence_bits : @bits.BitPacker
@@ -81,7 +81,7 @@ pub fn Encoder::Encoder(
     Some(size) if size >= 0 => Some(size)
     _ => None
   }
-  let params = params_for(level.min(2), content_size)
+  let params = encoder_params(level, content_size)
   let window_log = params.window_log
   let single_segment = content_size is Some(size) && size <= 1L << window_log
   let block_max = match content_size {
@@ -97,12 +97,7 @@ pub fn Encoder::Encoder(
     data: FixedArray::make(0, b'\x00'),
     data_len: 0,
     literals: LiteralsWriter::new(),
-    matcher: @matcher.Fast(
-      hash_log=params.hash_log,
-      min_match=params.min_match,
-      target_length=params.target_length,
-      window_log=params.window_log,
-    ),
+    matcher: Matcher::new(params),
     sequences: @seqenc.Block(),
     sequence_writer: @seqenc.Writer(),
     sequence_bits: @bits.BitPacker(),
