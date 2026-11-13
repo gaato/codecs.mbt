@@ -1,14 +1,13 @@
 // The encoder's parameters for each level, transcribed from the reference
 // implementation: facebook/zstd v1.5.7, lib/compress/clevels.h,
 // `ZSTD_defaultCParameters` (BSD license; see NOTICE), levels 1 to 12 of
-// its four tables. Strategies beyond double-fast temporarily use the
-// nearest double-fast row until the hash-chain strategies are available.
+// its four tables. Tree rows use lazy2 with the same adjusted numbers:
+// binary trees and optimal parsing are outside this encoder's scope.
 
 ///|
 /// The match-finding strategy of a level, as `ZSTD_strategy` names it.
 /// `Btlazy2` and `Btopt` appear in the tables for small inputs at levels 9
-/// to 12. Strategies beyond Dfast temporarily use a nearby Dfast row.
-#warnings("-unused_constructor")
+/// to 12; the encoder maps these to Lazy2, retaining their numeric row.
 priv enum Strategy {
   Fast
   Dfast
@@ -26,7 +25,6 @@ priv enum Strategy {
 /// min_match (hash width) and target_length (acceleration).
 /// Double-fast additionally uses chain_log for its short hash table and
 /// always hashes eight bytes in its long table.
-#warnings("-unused_field")
 priv struct Params {
   window_log : Int32
   chain_log : Int32
@@ -172,21 +170,14 @@ fn params_for(level : Int32, size : Int64?) -> Params {
 }
 
 ///|
-/// Selects by the row's strategy, including the small-input level-2 Dfast
-/// row. Until the later strategies are implemented, use level four's row
-/// or the nearest preceding Dfast row in the same size class; this keeps
-/// their temporary memory and window requirements bounded by Dfast's.
+/// Selects by the adjusted row's strategy. Tree rows retain every numeric
+/// parameter and use Lazy2 because binary trees/optimal parsing are outside
+/// the supported strategies. Adjustment precedes mapping so the reference
+/// tree cycle bit still governs the table sizes.
 fn encoder_params(level : Int32, size : Int64?) -> Params {
   let params = params_for(level, size)
   match params.strategy {
-    Fast | Dfast => params
-    _ => {
-      let fourth = params_for(4, size)
-      if fourth.strategy is Dfast {
-        fourth
-      } else {
-        params_for(3, size)
-      }
-    }
+    Btlazy2 | Btopt => { ..params, strategy: Lazy2, }
+    _ => params
   }
 }

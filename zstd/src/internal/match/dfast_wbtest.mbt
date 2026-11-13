@@ -142,3 +142,55 @@ test "dfast ignores repeat offsets before the frame start" {
   assert_eq(block.count, 0)
   assert_eq(block.literal_count, 32)
 }
+
+///|
+test "dfast rebased lookups invalidate evicted entries and retain surviving ranges" {
+  // Separate replays keep the retained range eligible: placing it after
+  // the evicted replay would itself move its distance outside the window.
+  for offset in [0, 100] {
+    let finder = Dfast(hash_log=12, chain_log=12, min_match=4, window_log=10)
+    let repeats = @seqenc.Repeats()
+    let block = @seqenc.Block()
+    let frame : Array[Byte] = []
+    let reps : FixedArray[Int32] = [1, 4, 8]
+    let mut seed = 8878U
+    let original = FixedArray::makei(1024, _ => {
+      seed = seed * 1664525 + 1013904223
+      (seed >> 24).to_byte()
+    })
+    finder.find(original, 1024, repeats, block)
+    reconstruct_matches(block, original, frame, reps, 1024)
+    repeats.copy_from(block.repeats)
+    let old_long = finder.long.copy()
+    let old_short = finder.short.copy()
+    let unrelated = FixedArray::makei(64, _ => {
+      seed = seed * 1664525 + 1013904223
+      (seed >> 24).to_byte()
+    })
+    finder.find(unrelated, 64, repeats, block)
+    reconstruct_matches(block, unrelated, frame, reps, 1024)
+    repeats.copy_from(block.repeats)
+    let mut discarded = 0
+    for pair in [(old_long, finder.long, 8), (old_short, finder.short, 4)] {
+      let (old, table, width) = pair
+      for h in 0..<table.length() {
+        if old[h] >= 0 && old[h] < 64 && table[h] == -1 {
+          discarded += 1
+        }
+        if table[h] >= 0 {
+          assert_eq(finder.hash_at(table[h], width, 12), h)
+          assert_true(table[h] < 1024)
+        }
+      }
+    }
+    assert_true(discarded > 0)
+    let replay = FixedArray::makei(64, i => original[offset + i])
+    finder.find(replay, 64, repeats, block)
+    reconstruct_matches(block, replay, frame, reps, 1024)
+    if offset == 0 {
+      assert_eq(block.count, 0)
+    } else {
+      assert_true(block.count > 0)
+    }
+  }
+}

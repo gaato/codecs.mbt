@@ -48,8 +48,8 @@ and corruptions.
 - moon's bundled tcc cannot link on some hosts (openSUSE); the script sets
   `MOON_CC=cc` unless it is already set.
 
-Snapshot at the last full measurement (2026-11-13): **99.2 %**
-(1849/1863 lines); the remaining 14 lines are the same
+Snapshot at the last full measurement (2026-11-13): **99.3 %**
+(1944/1958 lines); the remaining 14 lines are the same
 accepted defensive and JS-only lines below.
 
 ## Policy
@@ -108,6 +108,29 @@ levels and size classes. The shared harness and one-byte split tests run
 levels 3 and 4 as well as the existing levels. External crosscheck adds
 level-four frames, flushes, bytewise input and distant cross-block
 prefixes. No additional uncovered-line allowance is needed.
+
+Hash-chain tests cover greedy/lazy/lazy2 depth, a later match beating the
+greedy choice, repeat-one priority and immediate repeat-two swapping,
+searchLog attempt limits, overwritten chain links, exact-window and
+too-old candidates, invalid initial repeats, empty/tiny blocks, minMatch
+3..6 hash selection, and forty small-window wraps with a ring bias.
+Sequences are reconstructed byte by byte using independent RFC repeat
+transitions, retaining the full frame outside the matcher. The additional
+double-fast rebase fixture uses 1,024 seeded random bytes, 64 unrelated
+bytes, and separate replays of [0:64] and [100:164]; it checks invalidated
+entries and the hash identity of every surviving position, then executes
+all sequences independently. Separate replays keep the retained range's
+distance eligible rather than expiring it with the other replay first.
+Every effective parameter row pins all six numbers and the strategy.
+
+Round trips, reset and cross-target SHA-256 snapshots cover all twelve
+levels. The shared harness includes levels 5, 6, 7, 8, 9, 10, 11 and 12,
+with one-byte splits on small inputs, known/unknown sizes, checksums and
+flushes. External crosscheck emits all twelve levels, plus greedy/lazy/
+lazy2 flushes, bytewise input and distant prefixes. The maximum-memory
+test reaches a 4 MiB retained window, one block, 2^22 chain links and
+2^23 hash heads. Hash-chain code has full line coverage; no additional
+uncovered-line allowance is needed.
 
 Known-size parameter tests pin the adjusted window/chain/hash rows at ten
 sizes for all twelve levels and check that table sizes and the derived

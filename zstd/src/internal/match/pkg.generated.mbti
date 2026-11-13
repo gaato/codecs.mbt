@@ -26,6 +26,14 @@ pub fn Fast::find(Self, FixedArray[Byte], Int32, @seqenc.Repeats, @seqenc.Block)
 pub fn Fast::memory_usage(Self) -> Int32
 pub fn Fast::reset(Self) -> Unit
 
+pub struct Lazy {
+  // private fields
+}
+pub fn Lazy::Lazy(hash_log~ : Int32, chain_log~ : Int32, min_match~ : Int32, search_log~ : Int32, depth~ : Int32, window_log~ : Int32) -> Self
+pub fn Lazy::find(Self, FixedArray[Byte], Int32, @seqenc.Repeats, @seqenc.Block) -> Unit
+pub fn Lazy::memory_usage(Self) -> Int32
+pub fn Lazy::reset(Self) -> Unit
+
 // Type aliases
 
 // Traits

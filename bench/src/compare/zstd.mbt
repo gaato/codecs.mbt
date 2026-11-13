@@ -81,7 +81,7 @@ fn[D : @codec_bytes.Decode] run_decode(
 }
 
 ///|
-/// The Zstandard encoder; the ratio driver measures fast levels 1 and 2.
+/// The Zstandard encoder; the ratio driver measures all levels 1..12.
 pub fn zstd_compress() -> Array[Compress] {
   [
     {

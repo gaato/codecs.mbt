@@ -87,7 +87,7 @@ not.
 
 Bridge budget: 6
 
-Sequence encoding and fast/double-fast matching add no trusted bridges
+Sequence encoding and fast/double-fast/hash-chain matching add no trusted bridges
 or formal proof claims. Length baselines and
 predefined distributions now live in `src/internal/seqenc/tables.mbt` and
 are referenced by both directions. Repeat history transitions likewise

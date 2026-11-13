@@ -20,8 +20,8 @@ const INITIAL_BUFFER : Int32 = 1024
 /// frame: Raw, RLE or Compressed blocks of at most 128 KiB, whichever is
 /// smallest, and the XXH64 content checksum unless asked not to.
 ///
-/// Levels 1..4 select fast or double-fast from their size-class parameters.
-/// Later strategies temporarily use the nearest double-fast row.
+/// Levels 1..12 select fast, double-fast, greedy, lazy or lazy2 from their
+/// size-class parameters. Tree rows use lazy2 with the same numeric row.
 pub struct Encoder {
   priv checksum : Bool
   priv content_size : Int64?

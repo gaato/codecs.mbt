@@ -1278,16 +1278,19 @@ async fn ratio(
       }
     }
   }
-  // Zstandard at levels one through four and Brotli at three settings;
+  // Zstandard at levels one through twelve and Brotli at three settings;
   // the DEFLATE table has no reference row. The file is named, not piped, as
   // brotli then knows its size, which changes some streams.
   if format == "zstd" && (only == "" || only == "gaato/zstd") {
-    for level in [1, 2, 3, 4] {
+    for level in 1..<=12 {
       for path in paths {
         let out = @shell.Cmd("zstd", ["-\{level}", "--check", "-c", "-q", path]).output(max_output_bytes=1 << 28)
         out.check()
         let size = @fs.read_binary(path).length()
         println("zstd -\{level}\treference\t\{level}\t\{path}\t\{size}\t\{out.stdout_bytes().length()}\t0\tchecksum on")
+        let hc = @shell.Cmd("zstd", ["-\{level}", "--no-row-match-finder", "--check", "-c", "-q", path]).output(max_output_bytes=1 << 28)
+        hc.check()
+        println("zstd-hc -\{level}\treference\t\{level}\t\{path}\t\{size}\t\{hc.stdout_bytes().length()}\t0\tchecksum on; row finder disabled")
       }
     }
   }

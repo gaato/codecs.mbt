@@ -182,7 +182,7 @@ fn frame_blocks(
 test "compress round-trips through the decoder at every level" {
   for sample in encoder_inputs() {
     let (name, input) = sample
-    for level in [1, 3, 4, 12] {
+    for level in 1..<=12 {
       for checksum in [true, false] {
         let compressed = compress(input, level~, checksum~)
         let got = decompress(compressed)
@@ -383,7 +383,7 @@ test "frame headers: the window from the level, the content size when known" {
   inspect(
     windows.join(" "),
     content=(
-      #|524288 524288 524288 1048576 2097152 2097152 2097152 2097152 2097152 2097152
+      #|524288 524288 524288 1048576 2097152 2097152 4194304 4194304 4194304 4194304
     ),
   )
   inspect(
@@ -412,7 +412,7 @@ test "frame headers: the window from the level, the content size when known" {
   inspect(
     header(compress(big, level=12)),
     content=(
-      #|single false, window 2097152, size 3000000, checksum true
+      #|single true, window 3000000, size 3000000, checksum true
     ),
   )
   assert_true(decompress(compress(big)) == big)
@@ -608,7 +608,7 @@ test "the input must match the content size given" {
 ///|
 test "the same encoder after reset writes the same frames" {
   let inputs = encoder_inputs()
-  for level in [1, 3, 4, 12] {
+  for level in 1..<=12 {
     let encoder = Encoder(level~)
     for sample in inputs {
       let (name, input) = sample
@@ -636,7 +636,7 @@ test "every target writes the same bytes" {
     Bytes::make(70000, b'\x00') +
     sample_text(rng, 50000)
   let digests = []
-  for level in [1, 3, 4, 12] {
+  for level in 1..<=12 {
     digests.push(@checksum.sha256(compress(input, level~)))
     let stream = encode_drive(Encoder(level~), input, next_in=() => 1 << 20, next_out=() => {
       1 << 16
@@ -656,12 +656,28 @@ test "every target writes the same bytes" {
     content=(
       #|61e3eab58e2eec4632a275433b78538f2c768e9b666cd5604a4c54a212037cb8
       #|0770bb9d029235955caab0fd7f2f1cefb24b4ce7edfd7f8b4387888578dd9183
+      #|f18f3fd9d0b98b700e797a0270c17e3f33f1a1d106c75dc66138581bdb1ac401
+      #|8fd8a3bd5db57442874e2a629e3d9118d21376eca8f088b9aab9ed8b9ba328fe
       #|9d4f9cf68ba54bd7b5bb9be86fdbc454a43ace8d0d249d43216bda1bb18a5733
       #|a5eecad5b3f5b444bea4726e76c9502dbc7bd8a07bb6773ecd06d1e79a9ae475
       #|2f30bdd49e97b38915bc17d9e3b92f5c39a1baaa90559546b298c7292453d5b2
       #|452997d3115fea248699edd64034d36fa191844e2906a9b73a308e533cf2ad9b
-      #|2f30bdd49e97b38915bc17d9e3b92f5c39a1baaa90559546b298c7292453d5b2
-      #|452997d3115fea248699edd64034d36fa191844e2906a9b73a308e533cf2ad9b
+      #|f8dbd0ae19f8fa8edd0be32b2b2f1398d2a711f9a0b067dec8c0c45cd319bbdf
+      #|3e644f5a21b039170ad96179b9071570dea78253854c52f7feae1f5e3e05898e
+      #|c07ff459535469446d62add47d3bc695d2b260facec0c47508394da7150f98cc
+      #|f69e9b439ffac9d25ba1d02deb2e1ab0fc6dc94c6e600c520003cd2359975c4a
+      #|847fbbddb2e77fb7f681847f4337f59549f2ee87102590010a1c2e3cd6083bfa
+      #|f31c9189eb3b45a4a69b4488d9287665381a31190a7e6f90df9b41b7e0baa72e
+      #|59359795309946e9866b5dba43a3724369456d2e1c92eb7aeaeb61fbf54858c9
+      #|0da1c7392ad3e6153ecb233741762c04ad1fc0b45437f86855ad9a40a5f4461b
+      #|59359795309946e9866b5dba43a3724369456d2e1c92eb7aeaeb61fbf54858c9
+      #|0091305f566926ae5b675bcd720cd6601016f144d5a27615aa9dc517da3acbec
+      #|f727e95002bc7a65998e7a884d0604a60d9a277a9a044928f792f2f7a806b79a
+      #|e83115e5c2bcb6982d0f9ec04474904f0d9063b4a7e213ae9197d2b3abb097da
+      #|7edfd12e3725f570408696eb569290fb82584728e178274279d97c1a2a3db2c3
+      #|05864ba530465274e7efe1cb5ddb7cc9312c2783056ff5437696dc3f45b88bce
+      #|7edfd12e3725f570408696eb569290fb82584728e178274279d97c1a2a3db2c3
+      #|05864ba530465274e7efe1cb5ddb7cc9312c2783056ff5437696dc3f45b88bce
       #|c273ce57ffa9f155fba91e1a4871e47c01aa674d82c8ec45167b767cbcc40f95
     ),
   )

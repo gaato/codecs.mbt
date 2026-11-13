@@ -122,8 +122,9 @@ pub fn Dfast::find(
     0
   }
   // Scalar transcription of the reference no-dictionary pipeline. Keep the
-  // next long candidate loaded before inserting the current position: this
-  // matters when adjacent hashes collide. kSearchStrength is eight.
+  // current long candidate from before insertion; load the next candidate
+  // after inserting the current position, including collisions.
+  // kSearchStrength is eight.
   while p + 9 <= end {
     let mut step = 1
     let mut next_step = p + 256

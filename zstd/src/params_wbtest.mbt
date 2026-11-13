@@ -65,3 +65,51 @@ test "known sizes adjust tables before the minimum frame window" {
     }
   }
 }
+
+///|
+fn complete_row(p : Params) -> String {
+  let name = match p.strategy {
+    Fast => "Fast"
+    Dfast => "Dfast"
+    Greedy => "Greedy"
+    Lazy => "Lazy"
+    Lazy2 => "Lazy2"
+    Btlazy2 => "Btlazy2"
+    Btopt => "Btopt"
+  }
+  "\{p.window_log}/\{p.chain_log}/\{p.hash_log}/\{p.search_log}/\{p.min_match}/\{p.target_length}/\{name}"
+}
+
+///|
+test "effective strategy rows preserve all numeric parameters including tree rows" {
+  let rows = [
+    for size in [None, Some(16384L), Some(131072L), Some(262144L)] => {
+      [
+        for level in 1..<=12 => encoder_params(level, size)
+      ]
+    }
+  ]
+  let lines = rows.map(ps => ps.map(complete_row).join(" "))
+  inspect(
+    lines.join("\n"),
+    content=(
+      #|19/13/14/1/7/0/Fast 20/15/16/1/6/0/Fast 21/16/17/1/5/0/Dfast 21/18/18/1/5/0/Dfast 21/18/19/3/5/2/Greedy 21/18/19/3/5/4/Lazy 21/19/20/4/5/8/Lazy 21/19/20/4/5/16/Lazy2 22/20/21/4/5/16/Lazy2 22/21/22/5/5/16/Lazy2 22/21/22/6/5/16/Lazy2 22/22/23/6/5/32/Lazy2
+      #|14/14/15/1/5/0/Fast 14/14/15/1/4/0/Fast 14/14/15/2/4/0/Dfast 14/14/14/4/4/2/Greedy 14/14/14/3/4/4/Lazy 14/14/14/4/4/8/Lazy2 14/14/14/6/4/8/Lazy2 14/14/14/8/4/8/Lazy2 14/15/14/5/4/8/Lazy2 14/15/14/9/4/8/Lazy2 14/15/14/3/4/12/Lazy2 14/15/14/4/3/24/Lazy2
+      #|17/12/13/1/6/0/Fast 17/13/15/1/5/0/Fast 17/15/16/2/5/0/Dfast 17/17/17/2/4/0/Dfast 17/16/17/3/4/2/Greedy 17/16/17/3/4/4/Lazy 17/16/17/3/4/8/Lazy2 17/16/17/4/4/8/Lazy2 17/16/17/5/4/8/Lazy2 17/16/17/6/4/8/Lazy2 17/17/17/5/4/8/Lazy2 17/18/17/7/4/12/Lazy2
+      #|18/13/14/1/6/0/Fast 18/14/14/1/5/0/Dfast 18/16/16/1/4/0/Dfast 18/16/17/3/5/2/Greedy 18/17/18/5/5/2/Greedy 18/18/19/3/5/4/Lazy 18/18/19/4/4/4/Lazy 18/18/19/4/4/8/Lazy2 18/18/19/5/4/8/Lazy2 18/18/19/6/4/8/Lazy2 18/18/19/5/4/12/Lazy2 18/19/19/7/4/12/Lazy2
+    ),
+  )
+  for size in [None, Some(1000L), Some(100000L), Some(200000L), Some(400000L)] {
+    for level in 1..<=12 {
+      let p = params_for(level, size)
+      let expected = match p.strategy {
+        Btlazy2 | Btopt => { ..p, strategy: Lazy2, }
+        _ => p
+      }
+      assert_eq(
+        complete_row(encoder_params(level, size)),
+        complete_row(expected),
+      )
+    }
+  }
+}

@@ -163,7 +163,7 @@ const ENCODER_PENDING_MAX : Int32 = 4 + 10 + 3 + MAX_BLOCK_SIZE + 4
 /// buffer, waiting output, match window/hash, sequence arrays and scratch,
 /// and both entropy coders. Packer capacities include doubling and the
 /// extra 5 bytes reserved by a write.
-fn encoder_memory_bound(params~ : Params = encoder_params(4, None)) -> Int32 {
+fn encoder_memory_bound(params~ : Params = encoder_params(12, None)) -> Int32 {
   MAX_BLOCK_SIZE +
   2 * (ENCODER_PENDING_MAX + 5) +
   LiteralsWriter::new().memory_usage() +
@@ -171,7 +171,7 @@ fn encoder_memory_bound(params~ : Params = encoder_params(4, None)) -> Int32 {
   (1 << params.window_log) +
   MAX_BLOCK_SIZE +
   4 * (1 << params.hash_log) +
-  (if params.strategy is Dfast { 4 * (1 << params.chain_log) } else { 12 }) +
+  (if params.strategy is Fast { 12 } else { 4 * (1 << params.chain_log) }) +
   MAX_BLOCK_SIZE +
   12 * (MAX_BLOCK_SIZE / 3) +
   12 +
@@ -217,7 +217,7 @@ test "the encoder's fixed tables and its memory bound" {
   inspect(
     encoder_memory_bound(),
     content=(
-      #|6582176
+      #|56913824
     ),
   )
   // A new encoder holds fixed tables and its level's hash table.
@@ -368,7 +368,9 @@ test "double-fast memory reaches both tables and the full window plus a block" {
       match requested.strategy {
         Fast => assert_true(params.strategy is Fast)
         Dfast => assert_true(params.strategy is Dfast)
-        _ => assert_true(params.strategy is Dfast)
+        Greedy => assert_true(params.strategy is Greedy)
+        Lazy => assert_true(params.strategy is Lazy)
+        _ => assert_true(params.strategy is Lazy2)
       }
       let encoder = match size {
         Some(size) => Encoder(level~, content_size=size)
@@ -377,7 +379,32 @@ test "double-fast memory reaches both tables and the full window plus a block" {
       match encoder.matcher {
         Fast(_) => assert_true(params.strategy is Fast)
         Dfast(_) => assert_true(params.strategy is Dfast)
+        Lazy(_) =>
+          assert_true(
+            params.strategy is Greedy ||
+            params.strategy is Lazy ||
+            params.strategy is Lazy2,
+          )
       }
     }
   }
+}
+
+///|
+test "lazy memory reaches the maximum chain hash and full window plus a block" {
+  let input = Bytes::makei(5 * (1 << 20), i => (i % 251).to_byte())
+  let e = Encoder(level=12)
+  let out = encode_drive(
+    e,
+    input,
+    next_in=() => 65536,
+    next_out=() => 65536,
+    check=check_encoder_bounds,
+  )
+  assert_true(decompress(out) == input)
+  assert_eq(
+    e.matcher.memory_usage(),
+    (1 << 22) + MAX_BLOCK_SIZE + 4 * ((1 << 22) + (1 << 23)),
+  )
+  assert_eq(encoder_memory_bound(), 56913824)
 }
