@@ -152,8 +152,9 @@ test "hash chain search stops at searchLog and ring limits" {
     f.next_update = 300
     // The head may be older than the ring; it can be checked once but its
     // overwritten link must never be followed.
+    f.search(300, 320, false)
     assert_eq(
-      f.search(300, 320, false),
+      (f.match_length, f.match_distance),
       if log < 3 {
         (4, 44)
       } else {
@@ -161,7 +162,8 @@ test "hash chain search stops at searchLog and ring limits" {
       },
     )
     f.hash[h] = 32
-    assert_eq(f.search(300, 320, false), (20, 268))
+    f.search(300, 320, false)
+    assert_eq((f.match_length, f.match_distance), (20, 268))
     assert_eq(f.length(300, -1, 320), 0)
     assert_eq(f.length(300, 300, 320), 0)
   }
@@ -176,9 +178,11 @@ test "hash chain search stops at searchLog and ring limits" {
   f.data = FixedArray::make(1100, b'x')
   f.next_update = 1050
   f.hash[f.hash_at(1050)] = 26
-  assert_eq(f.search(1050, 1060, false), (10, 1024))
+  f.search(1050, 1060, false)
+  assert_eq((f.match_length, f.match_distance), (10, 1024))
   f.hash[f.hash_at(1050)] = 25
-  assert_eq(f.search(1050, 1060, false), (3, 0))
+  f.search(1050, 1060, false)
+  assert_eq((f.match_length, f.match_distance), (3, 0))
 }
 
 ///|
@@ -232,7 +236,8 @@ test "lazy disables repeats before retained history and does not follow overwrit
   f.hash[f.hash_at(300)] = 224
   f.chain[f.slot(224)] = 32
   f.next_update = 300
-  assert_eq(f.search(300, 320, false), (4, 76))
+  f.search(300, 320, false)
+  assert_eq((f.match_length, f.match_distance), (4, 76))
 }
 
 ///|

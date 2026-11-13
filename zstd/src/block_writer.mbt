@@ -6,6 +6,7 @@
 ///|
 /// The literals section of a compressed block (section 3.1.1.3.1): its
 /// literals as they are, one byte repeated, or Huffman-coded.
+#valtype
 priv enum LiteralsKind {
   LitRaw
   LitRle
@@ -17,6 +18,8 @@ priv enum LiteralsKind {
 ///|
 /// How a literals section will be written: its size in bytes, header
 /// included, and the bytes after its header.
+/// Kept as a value so choosing a block allocates neither a plan nor its kind.
+#valtype
 priv struct LiteralsPlan {
   kind : LiteralsKind
   size : Int32

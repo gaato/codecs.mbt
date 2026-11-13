@@ -87,14 +87,19 @@ pub fn Repeats::encode(
   distance : Distance,
   ll : Int32,
 ) -> OffsetValue {
-  let trial = Repeats()
+  // Keep the original history in scalars and undo unsuccessful trials.
+  // A temporary Repeats would allocate an object and array per sequence.
+  let first = self.values[0]
+  let second = self.values[1]
+  let third = self.values[2]
   for v in 1U..<=3U {
-    trial.copy_from(self)
     let value = OffsetValue(v)
-    if trial.resolve(value, ll) == distance {
-      self.copy_from(trial)
+    if self.resolve(value, ll) == distance {
       return value
     }
+    self.values[0] = first
+    self.values[1] = second
+    self.values[2] = third
   }
   let Distance(d) = distance
   let value = OffsetValue(d + 3)

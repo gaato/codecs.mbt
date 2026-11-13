@@ -61,7 +61,9 @@ test "repeat offsets: independent RFC transitions and inverse, including zero li
 ///|
 test "offset extra bits include width 31 and sequence counts have all three formats" {
   for v in [1U, 2U, 3U, 4U, 0x7fffffffU, 0x80000000U, 0xffffffffU] {
-    let (code, extra) = @seqenc.offset_code(@seqenc.OffsetValue(v))
+    let value = @seqenc.OffsetValue(v)
+    let code = @seqenc.offset_code(value)
+    let extra = @seqenc.offset_extra(value, code)
     assert_eq((1U << code) + extra, v)
     let out = @bits.BitPacker()
     // All partial byte alignments exercise the JS 32-bit accumulator.

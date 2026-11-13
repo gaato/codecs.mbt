@@ -445,3 +445,87 @@ MoonBit boxes on the heap unless inlined: `offset_code` (once or more a
 sequence) and `Lazy::search` (once a search). Wasm runs about three times
 as long as native and Wasm GC because each bounds-checked array access
 there calls two out-of-line helpers (the length and the range check).
+
+### After removing allocation from the encoding path
+
+Same command and inputs, targets run one at a time:
+
+```sh
+MOON_CC=cc taskset -c 2 moon bench --release --target native -p gaato/codec_bench -f bench_test.mbt -i 3
+# Repeat with --target wasm, wasm-gc and js.
+```
+
+| Input, level | Native | Wasm | Wasm GC | JS |
+|---|---:|---:|---:|---:|
+| text, 1 | 9.84 ms | 30.05 ms | 13.21 ms | 96.15 ms |
+| text, 3 | 10.31 ms | 33.01 ms | 14.23 ms | 118.43 ms |
+| text, 5 | 18.89 ms | 56.58 ms | 21.49 ms | 148.08 ms |
+| text, 8 | 42.42 ms | 101.87 ms | 50.69 ms | 210.29 ms |
+| text, 12 | 102.73 ms | 175.39 ms | 116.31 ms | 311.11 ms |
+| binary, 1 | 1.53 ms | 4.08 ms | 1.76 ms | 9.72 ms |
+| binary, 3 | 3.96 ms | 11.38 ms | 4.85 ms | 48.54 ms |
+| binary, 12 | 20.53 ms | 20.57 ms | 28.02 ms | 107.37 ms |
+
+The first Wasm GC run appeared slower than the starting point at level
+twelve. To check drift, the unchanged parent sources were measured again
+for Wasm GC and JS, each followed immediately by the changed sources
+(the numbers above). These refreshed baselines were:
+
+| Input, level | Wasm GC before | JS before |
+|---|---:|---:|
+| text, 1 | 13.75 ms | 98.33 ms |
+| text, 3 | 15.01 ms | 114.00 ms |
+| text, 5 | 22.27 ms | 150.44 ms |
+| text, 8 | 52.09 ms | 210.96 ms |
+| text, 12 | 118.67 ms | 316.88 ms |
+| binary, 1 | 1.78 ms | 9.78 ms |
+| binary, 3 | 4.88 ms | 47.60 ms |
+| binary, 12 | 29.80 ms | 108.18 ms |
+
+Native text improves by 2–21%, Wasm by 9–25%; Wasm GC improves against
+the refreshed baseline. JS is roughly unchanged: its text level-three
+mean is 3.9% higher, with standard deviation 10.88 ms after versus
+3.42 ms before, and binary level three is 2.0% higher with 2.52 ms
+versus 1.08 ms deviation. These runs do not establish a JS speedup or
+a repeatable regression. The older level-twelve Wasm GC times should
+not be used to attribute a regression to this change.
+
+`offset_code` and `offset_extra` now return separate scalars: `#inline`
+alone still left a boxed tuple in the generated C with this toolchain.
+`Lazy::search` writes its length and distance into the finder. Another
+per-sequence allocation was `Repeats::encode`'s trial `Repeats` object
+and three-element array: it now saves the original history in scalars
+and restores it after each unsuccessful resolver trial, keeping the
+same resolver and repeat priority. Four-stream Huffman jump-table
+entries are written as they are counted, without a temporary array.
+Literals plans and their kinds are value types, and rebasing the two
+match tables uses separate loops instead of an array of tables.
+
+The release native bench C was inspected after:
+
+```sh
+MOON_CC=cc moon bench --release --target native -p gaato/codec_bench -f bench_test.mbt -i 3 --build-only
+rg -n 'moonbit_malloc|moonbit_make_' _build/native/release/bench/gaato/codec_bench/codec_bench.blackbox_test.c
+```
+
+Following calls from `Encoder::encode_block` reaches 79 generated
+functions. None calls `moonbit_malloc`. The nine remaining `moonbit_make_*`
+sites all grow retained buffers only when capacity is insufficient:
+one history byte buffer in each of Fast, Dfast and Lazy; Block's gathered
+literals and three sequence arrays; the accepted sequence copy; and
+`BitPacker::reserve`. No allocation remains per sequence or search, or
+per block once those capacities suffice. Encoder construction still
+allocates and initializes the parameter-selected hash and chain tables;
+the large level-twelve row's 48 MiB of position tables is unchanged.
+The reported array bounds and compression-size tables are unchanged.
+The size comparison was rerun: all 276 published corpus counts match,
+and all 300 frames (including the two bench inputs at every level)
+decode back with gaato and `zstd -d`.
+
+A `perf record -e cycles:u -F 4000` run over all eight encoding benchmarks
+recorded 43,015 samples: `moonbit_drop_object` is 0.03%, `malloc` 0.02%
+and `cfree` 0.01%. `moonbit_make_int32_array` still accounts for 3.68%
+in this combined run, which includes constructing a fresh encoder for
+every iteration and growing its buffers; it is not a remaining
+per-sequence scratch allocation. These combined shares are not directly
+comparable with the separate per-level starting-point profiles.

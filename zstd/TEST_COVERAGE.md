@@ -49,7 +49,7 @@ and corruptions.
   `MOON_CC=cc` unless it is already set.
 
 Snapshot at the last full measurement (2026-11-13): **99.3 %**
-(1944/1958 lines); the remaining 14 lines are the same
+(1949/1963 lines); the remaining 14 lines are the same
 accepted defensive and JS-only lines below.
 
 ## Policy

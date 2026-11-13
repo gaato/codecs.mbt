@@ -30,7 +30,9 @@ pub let ml_default : FixedArray[Int32]
 
 pub let of_default : FixedArray[Int32]
 
-pub fn offset_code(OffsetValue) -> (Int32, UInt32)
+pub fn offset_code(OffsetValue) -> Int32
+
+pub fn offset_extra(OffsetValue, Int32) -> UInt32
 
 pub fn write_count(@bits.BitPacker, Int32) -> Unit
 

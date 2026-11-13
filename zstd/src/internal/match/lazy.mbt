@@ -14,6 +14,10 @@ pub struct Lazy {
   priv mut history : Int32
   priv mut next_update : Int32
   priv mut bias : Int32
+  // Search results live here: returning a tuple allocates a box per search
+  // on native. Each search overwrites both, including the no-match case.
+  priv mut match_length : Int32
+  priv mut match_distance : Int32
 }
 
 ///|
@@ -41,6 +45,8 @@ pub fn Lazy::Lazy(
     history: 0,
     next_update: 0,
     bias: 0,
+    match_length: 3,
+    match_distance: 0,
   }
 }
 
@@ -93,12 +99,7 @@ fn Lazy::length(self : Lazy, p : Int32, q : Int32, end : Int32) -> Int32 {
 ///|
 /// Catch up to, but exclude, p. Lazy skipping inserts only the previous
 /// searched position after an incompressible gap exceeding 2 KiB.
-fn Lazy::search(
-  self : Lazy,
-  p : Int32,
-  end : Int32,
-  skipping : Bool,
-) -> (Int32, Int32) {
+fn Lazy::search(self : Lazy, p : Int32, end : Int32, skipping : Bool) -> Unit {
   let mut i = self.next_update
   while i < p {
     let h = self.hash_at(i)
@@ -141,7 +142,8 @@ fn Lazy::search(
     q = self.chain[self.slot(q)]
     attempts -= 1
   }
-  (best, distance)
+  self.match_length = best
+  self.match_distance = distance
 }
 
 ///|
@@ -205,7 +207,9 @@ pub fn Lazy::find(
     // Zero denotes a repeat search decision, not a zero raw distance.
     let mut distance = 0
     if self.depth != 0 || best == 0 {
-      let (len, d) = self.search(p, end, skipping)
+      self.search(p, end, skipping)
+      let len = self.match_length
+      let d = self.match_distance
       if len > best {
         best = len
         chosen = p
@@ -230,7 +234,9 @@ pub fn Lazy::find(
               chosen = p
             }
           }
-          let (len, d) = self.search(p, end, skipping)
+          self.search(p, end, skipping)
+          let len = self.match_length
+          let d = self.match_distance
           if len >= 4 &&
             len * 4 - offset_bits(d) > best * 4 - offset_bits(distance) + 4 {
             best = len
@@ -248,7 +254,9 @@ pub fn Lazy::find(
                 chosen = p
               }
             }
-            let (len, d) = self.search(p, end, skipping)
+            self.search(p, end, skipping)
+            let len = self.match_length
+            let d = self.match_distance
             if len >= 4 &&
               len * 4 - offset_bits(d) > best * 4 - offset_bits(distance) + 7 {
               best = len
@@ -303,10 +311,12 @@ pub fn Lazy::find(
     for i in drop..<end {
       self.data[i - drop] = self.data[i]
     }
-    for table in [self.hash, self.chain] {
-      for i in 0..<table.length() {
-        table[i] = (table[i] - drop).max(-1)
-      }
+    // Separate loops avoid allocating an array of tables at each rebase.
+    for i in 0..<self.hash.length() {
+      self.hash[i] = (self.hash[i] - drop).max(-1)
+    }
+    for i in 0..<self.chain.length() {
+      self.chain[i] = (self.chain[i] - drop).max(-1)
     }
     self.bias = (self.bias + drop) & (self.chain.length() - 1)
     self.next_update = (self.next_update - drop).max(0)

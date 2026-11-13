@@ -233,10 +233,12 @@ pub fn Dfast::find(
     for i in drop..<end {
       self.data[i - drop] = self.data[i]
     }
-    for table in [self.long, self.short] {
-      for i in 0..<table.length() {
-        table[i] = (table[i] - drop).max(-1)
-      }
+    // Separate loops avoid allocating an array of tables at each rebase.
+    for i in 0..<self.long.length() {
+      self.long[i] = (self.long[i] - drop).max(-1)
+    }
+    for i in 0..<self.short.length() {
+      self.short[i] = (self.short[i] - drop).max(-1)
     }
   }
   self.history = end - drop

@@ -90,11 +90,18 @@ pub fn length_code(value : Int32, bases : FixedArray[Int32]) -> Int32 {
 }
 
 ///|
-/// Offset code and extra field; no signed shift at width 31.
-pub fn offset_code(value : OffsetValue) -> (Int32, UInt32) {
+/// Offset code, the high bit of a positive Offset_Value.
+/// Code and extra field are separate scalars to avoid native tuple boxing.
+pub fn offset_code(value : OffsetValue) -> Int32 {
   let OffsetValue(v) = value
-  let code = 31 - v.clz()
-  (code, v - (1U << code))
+  31 - v.clz()
+}
+
+///|
+/// Extra field for `value` and its `offset_code`; no signed shift at width 31.
+pub fn offset_extra(value : OffsetValue, code : Int32) -> UInt32 {
+  let OffsetValue(v) = value
+  v - (1U << code)
 }
 
 ///|

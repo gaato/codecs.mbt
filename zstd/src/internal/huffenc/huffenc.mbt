@@ -303,17 +303,15 @@ pub fn HuffmanEncoder::write_literals(
     return
   }
   let segment = (len + 3) / 4
-  let sizes = FixedArray::make(3, 0)
+  // Each jump-table entry can be written as soon as it is counted; keeping
+  // all three in a temporary array would allocate on every literals block.
   for i in 0..<3 {
     let from = start + i * segment
     let mut bits = 0
     for j in from..<(from + segment) {
       bits += self.lengths[data[j].to_int()]
     }
-    sizes[i] = bits / 8 + 1
-  }
-  for i in 0..<3 {
-    out.write(16, sizes[i])
+    out.write(16, bits / 8 + 1)
   }
   for i in 0..<4 {
     let from = start + i * segment
