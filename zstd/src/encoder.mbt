@@ -194,9 +194,10 @@ pub fn Encoder::memory_usage(self : Encoder) -> Int32 {
 /// input and answer `Done`.
 ///
 /// Raises only when the encoder was given `content_size` and the input
-/// does not match it: `ChecksumMismatch`, as soon as the input passes it
-/// (nothing of that step's input is taken) or at `Finish` when it falls
-/// short. The error sticks: later steps raise it again, taking and writing
+/// does not match it: `ChecksumMismatch`, once the input passes it (the
+/// bytes up to it are taken as with `Continue`, and the output they decide
+/// is handed out first, so that the output before the error does not depend
+/// on how input and output are split) or at `Finish` when it falls short. The error sticks: later steps raise it again, taking and writing
 /// nothing, until `reset`.
 pub fn Encoder::step(
   self : Encoder,
@@ -234,10 +235,15 @@ fn Encoder::step_with(
   if self.done {
     return Done
   }
-  if self.content_size is Some(size) &&
-    !self.finish_requested &&
-    self.total_in + input.length().to_int64() > size {
-    self.fail("the input is longer than the content size given, \{size} bytes")
+  // Input past the content size given: the bytes up to it are taken as
+  // with `Continue`, and what they decide is handed out, before the error.
+  // So the output before it is the same however input and output are
+  // split: that of the first `content_size` bytes under `Continue`.
+  let (input, action, over) = match self.content_size {
+    Some(size) if !self.finish_requested &&
+      self.total_in + input.length().to_int64() > size =>
+      (input[:(size - self.total_in).to_int()], EncodeAction::Continue, true)
+    _ => (input, action, false)
   }
   if input.length() == 0 {
     self.latch(action)
@@ -269,6 +275,13 @@ fn Encoder::step_with(
       continue
     }
     if consumed == input.length() {
+      if over {
+        self.step_consumed = consumed
+        self.step_produced = produced
+        self.fail(
+          "the input is longer than the content size given, \{self.total_in} bytes",
+        )
+      }
       return self.finish_step(NeedMoreInput, consumed, produced)
     }
     // A full block is known not to be the last once more input comes.

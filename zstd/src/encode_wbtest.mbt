@@ -561,7 +561,7 @@ test "the input must match the content size given" {
       _ => "no error"
     }
   }
-  // Too long: refused before any of the step's input is taken.
+  // Too long: the bytes up to the content size are taken, then it raises.
   let encoder = Encoder(content_size=5)
   debug_inspect(
     encoder.step_into(b"abc", out, action=Continue),
@@ -571,7 +571,7 @@ test "the input must match the content size given" {
     raised(() => encoder.step_into(b"def", out, action=Continue)),
     content="ChecksumMismatch: the input is longer than the content size given, 5 bytes",
   )
-  inspect(encoder.last_consumed(), content="0")
+  inspect(encoder.last_consumed(), content="2")
   // The error sticks, until reset.
   inspect(
     raised(() => encoder.step_into(b"", out, action=Finish)),
@@ -663,4 +663,77 @@ test "every target writes the same bytes" {
       #|86b667be4032ccd4e0d0930203b2b728731f4b0cfe99f9c793c60f00711e97c4
     ),
   )
+}
+
+///|
+/// Everything an encoder given `content_size` writes, fed `input` in pieces
+/// of `piece` bytes into outputs of `room` bytes, up to the error it raises
+/// (or the end), and that error.
+fn written_until_error(
+  content_size : Int64,
+  input : Bytes,
+  piece : Int32,
+  room : Int32,
+) -> (Bytes, String) {
+  let encoder = Encoder(content_size~)
+  let out = FixedArray::make(room, b'\x00')
+  let written = Buffer()
+  let mut pos = 0
+  for ;; {
+    let end = (pos + piece).min(input.length())
+    let action : EncodeAction = if end == input.length() {
+      Finish
+    } else {
+      Continue
+    }
+    let status = encoder.step_into(input[pos:end], out, action~) catch {
+      @codec.CodecError(kind, message) => {
+        for i in 0..<encoder.last_produced() {
+          written.write_byte(out[i])
+        }
+        return (written.to_bytes(), "\{Repr(kind)}: \{message}")
+      }
+    }
+    for i in 0..<encoder.last_produced() {
+      written.write_byte(out[i])
+    }
+    pos += encoder.last_consumed()
+    if status is Done {
+      return (written.to_bytes(), "no error")
+    }
+  }
+}
+
+///|
+test "input past the content size raises after the same output, however it is split" {
+  // 131,074 bytes declared as 131,073: the first block fills exactly at the
+  // content size, so whether it is written before the error must not
+  // depend on where the pieces end.
+  let input = Bytes::make(131074, b'x')
+  let (expected, error) = written_until_error(
+    131073,
+    input,
+    input.length(),
+    1 << 20,
+  )
+  inspect(
+    error,
+    content="ChecksumMismatch: the input is longer than the content size given, 131073 bytes",
+  )
+  for split in [(131073, 64), (1, 64), (65536, 7), (131074, 1), (4096, 1 << 20)] {
+    let (piece, room) = split
+    let (got, err) = written_until_error(131073, input, piece, room)
+    assert_eq(err, error, msg="piece \{piece} room \{room}")
+    assert_true(got == expected, msg="piece \{piece} room \{room}")
+  }
+  // A short declared size and text: the same.
+  let text = Bytes::from_array(
+    FixedArray::makei(300000, i => (i * 31 % 251).to_byte()),
+  )
+  let (expected, _) = written_until_error(200000, text, text.length(), 1 << 20)
+  for split in [(1000, 33), (199999, 4096), (200000, 1), (3, 1 << 20)] {
+    let (piece, room) = split
+    let (got, _) = written_until_error(200000, text, piece, room)
+    assert_true(got == expected, msg="text piece \{piece} room \{room}")
+  }
 }
