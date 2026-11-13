@@ -2,11 +2,13 @@
 /// Hash-chain search and the reference greedy/lazy/lazy2 parser (depth 0/1/2).
 /// Positions are relative to retained history; a ring bias preserves chain
 /// slots when byte positions rebase, without moving the chain table.
+#cfg(any(target="native", target="wasm"))
 pub struct Lazy {
   priv hash : FixedArray[Int32]
   priv chain : FixedArray[Int32]
   priv hash_log : Int32
-  priv min_match : Int32
+  priv hash_shift : Int32
+  priv hash_prime : UInt64
   priv attempts : Int32
   priv depth : Int32
   priv window : Int32
@@ -21,10 +23,59 @@ pub struct Lazy {
 }
 
 ///|
+/// Original checked-target layout, without the native/Wasm multiplier.
+#cfg(not(any(target="native", target="wasm")))
+pub struct Lazy {
+  priv hash : FixedArray[Int32]
+  priv chain : FixedArray[Int32]
+  priv hash_log : Int32
+  priv min_match : Int32
+  priv attempts : Int32
+  priv depth : Int32
+  priv window : Int32
+  priv mut data : FixedArray[Byte]
+  priv mut history : Int32
+  priv mut next_update : Int32
+  priv mut bias : Int32
+  priv mut match_length : Int32
+  priv mut match_distance : Int32
+}
+
+///|
 /// Allocates 2^hashLog heads and 2^chainLog links. Search examines at most
 /// 2^searchLog candidates. As in ZSTD_HcFindBestMatch, minMatch selects a
 /// 4..6 byte hash, while four-byte matches remain eligible. targetLength
 /// is not an early-exit threshold in the reference hash-chain search.
+#cfg(any(target="native", target="wasm"))
+pub fn Lazy::Lazy(
+  hash_log~ : Int32,
+  chain_log~ : Int32,
+  min_match~ : Int32,
+  search_log~ : Int32,
+  depth~ : Int32,
+  window_log~ : Int32,
+) -> Lazy {
+  {
+    hash: FixedArray::make(1 << hash_log, -1),
+    chain: FixedArray::make(1 << chain_log, -1),
+    hash_log,
+    hash_shift: 64 - min_match.clamp(min=4, max=6) * 8,
+    hash_prime: hash_prime(min_match.clamp(min=4, max=6)),
+    attempts: 1 << search_log,
+    depth,
+    window: 1 << window_log,
+    data: [],
+    history: 0,
+    next_update: 0,
+    bias: 0,
+    match_length: 3,
+    match_distance: 0,
+  }
+}
+
+///|
+/// The same finder with the original checked-target representation.
+#cfg(not(any(target="native", target="wasm")))
 pub fn Lazy::Lazy(
   hash_log~ : Int32,
   chain_log~ : Int32,
@@ -62,6 +113,16 @@ pub fn Lazy::reset(self : Lazy) -> Unit {
 }
 
 ///|
+#cfg(any(target="native", target="wasm"))
+#inline
+fn Lazy::hash_at(self : Lazy, p : Int32) -> Int32 {
+  // search's p <= end - 8; catch-up insertion i < p has more lookahead.
+  (((load64(self.data, p) << self.hash_shift) * self.hash_prime) >>
+  (64 - self.hash_log)).to_int()
+}
+
+///|
+#cfg(not(any(target="native", target="wasm")))
 fn Lazy::hash_at(self : Lazy, p : Int32) -> Int32 {
   let mut word = 0UL
   for i in 0..<self.min_match {
@@ -89,11 +150,7 @@ fn Lazy::length(self : Lazy, p : Int32, q : Int32, end : Int32) -> Int32 {
   if q < 0 || q >= p || p - q > self.window {
     return 0
   }
-  let mut n = 0
-  while p + n < end && self.data[p + n] == self.data[q + n] {
-    n += 1
-  }
-  n
+  match_length(self.data, p, q, end)
 }
 
 ///|
@@ -103,15 +160,17 @@ fn Lazy::search(self : Lazy, p : Int32, end : Int32, skipping : Bool) -> Unit {
   let mut i = self.next_update
   while i < p {
     let h = self.hash_at(i)
-    self.chain[self.slot(i)] = self.hash[h]
-    self.hash[h] = i
+    // h fits hash_log bits; slot masks to chain.length() - 1.
+    write(self.chain, self.slot(i), read(self.hash, h))
+    write(self.hash, h, i)
     i += 1
     if skipping {
       break
     }
   }
   self.next_update = p
-  let mut q = self.hash[self.hash_at(p)]
+  // The hash result fits the power-of-two head table.
+  let mut q = read(self.hash, self.hash_at(p))
   let low = (p - self.window).max(0)
   let min_chain = (p - self.chain.length()).max(0)
   let mut best = 3
@@ -120,11 +179,7 @@ fn Lazy::search(self : Lazy, p : Int32, end : Int32, skipping : Bool) -> Unit {
   while q >= low && q < p && attempts > 0 {
     // The reference tests four bytes at the current best's tail before
     // recounting from the start; this avoids quadratic work on long ties.
-    let tail = best - 3
-    let n = if self.data[q + tail] == self.data[p + tail] &&
-      self.data[q + tail + 1] == self.data[p + tail + 1] &&
-      self.data[q + tail + 2] == self.data[p + tail + 2] &&
-      self.data[q + tail + 3] == self.data[p + tail + 3] {
+    let n = if may_beat(self.data, p, q, best) {
       self.length(p, q, end)
     } else {
       0
@@ -139,7 +194,8 @@ fn Lazy::search(self : Lazy, p : Int32, end : Int32, skipping : Bool) -> Unit {
     if q <= min_chain {
       break
     }
-    q = self.chain[self.slot(q)]
+    // slot masks to chain.length() - 1; the link is not yet overwritten.
+    q = read(self.chain, self.slot(q))
     attempts -= 1
   }
   self.match_length = best
@@ -271,7 +327,9 @@ pub fn Lazy::find(
       if distance != 0 {
         while chosen > anchor &&
               chosen - distance > 0 &&
-              self.data[chosen - 1] == self.data[chosen - distance - 1] {
+              // 0 < chosen - distance <= chosen < end: predecessors fit.
+              read(self.data, chosen - 1) ==
+              read(self.data, chosen - distance - 1) {
           chosen -= 1
           best += 1
         }
@@ -280,7 +338,8 @@ pub fn Lazy::find(
       }
     }
     for i in anchor..<chosen {
-      block.literal(self.data[i])
+      // anchor <= i < chosen <= end.
+      block.literal(read(self.data, i))
     }
     block.add(
       chosen - anchor,
@@ -304,7 +363,8 @@ pub fn Lazy::find(
     }
   }
   for i in anchor..<end {
-    block.literal(self.data[i])
+    // anchor <= i < end.
+    block.literal(read(self.data, i))
   }
   let drop = (end - self.window).max(0)
   if drop > 0 {

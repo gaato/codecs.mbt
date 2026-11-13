@@ -48,9 +48,10 @@ and corruptions.
 - moon's bundled tcc cannot link on some hosts (openSUSE); the script sets
   `MOON_CC=cc` unless it is already set.
 
-Snapshot at the last full measurement (2026-11-13): **99.3 %**
-(1949/1963 lines); the remaining 14 lines are the same
-accepted defensive and JS-only lines below.
+Snapshot at the last full measurement (2026-11-13): **96.9 %**
+(2011/2075 lines); the remaining 64 lines include 50 checked-target lines
+that native does not compile, alongside the existing 14 lines. Every line
+is listed with its reason below.
 
 ## Policy
 
@@ -159,10 +160,34 @@ Accepted as uncovered (needs a row):
 
 Budgets are exact uncovered counts at the last measurement.
 
+Wide matcher reads add independent checked hash comparisons at every
+alignment for widths 4..8, exact-end match lengths and every mismatch
+position through 65 bytes, and overlapping matches at distances 1..16.
+The separate SIMD package compares its result with checked bytes on all
+four targets. The shared boundary inputs cover lengths 1..48 and tails
+1..16 at 1 KiB and 128 KiB, with matches of 7/8/9, 15/16/17 and 31/32/33
+bytes. At levels 1, 3, 5 and 12, gaato decodes both sized and unsized
+frames, checks input splitting, and verifies SHA-256 pins established
+before changing the checked implementation. No existing pin was changed.
+Small-window frames from fast, double-fast and both lazy depths complete
+tail hashes across blocks, slide a 1 KiB window and replay evicted or
+surviving ranges; gaato and both external decoders read these same frames.
+The independent sequence replay fixture also checks eviction for all three
+finders. XXH64 tests every length 1..96 at all sixteen alignments and
+incremental splits around 8/16/32-byte boundaries. Every compiled native
+line of the new paths is covered; the added budgets name only the checked
+JS/Wasm GC alternatives that the native coverage run cannot compile.
+
 ## Accepted uncovered
 
 | File | Budget | Reason |
 | --- | --- | --- |
+| src/internal/match/access.mbt | 5 | Checked `read`, `write`, `match_length` and `may_beat` for JS/Wasm GC, excluded by native's cfg. The gates run the same matcher tests and unchanged SHA-256 pins on both checked targets. |
+| src/internal/match/fast.mbt | 12 | Original JS/Wasm GC construction and byte-wise hash, excluded by native's cfg. The gates run the boundary round trips, width fingerprints and unchanged SHA-256 pins there. |
+| src/internal/match/dfast.mbt | 15 | Original JS/Wasm GC construction, byte-wise hashes and their wrappers, excluded by native's cfg. The gates run all widths, rebase fixtures, boundary round trips and unchanged SHA-256 pins there. |
+| src/internal/match/lazy.mbt | 11 | Original JS/Wasm GC construction and byte-wise hash, excluded by native's cfg. The gates run all depths, ring limits, boundary round trips and unchanged SHA-256 pins there. |
+| src/internal/match_length_fast/length.mbt | 2 | Checked JS/Wasm GC reference, excluded by native's cfg. The package's alignment, exact-end, mismatch and overlap tests run on all four targets. |
+| src/internal/xxhash/xxhash.mbt | 5 | Checked JS/Wasm GC read32/read64, excluded by native's cfg. The gates run the reference digests, incremental splits and exact-end/unaligned tests on both targets. |
 | src/fse.mbt | 1 | `Fse::read` raising when `Fse::build` returns false: the spread of symbols over the table (`@fse.spread`) fills it exactly whenever the probabilities sum to the table size, and `Fse::read` only builds once they do (a probability never exceeds what remains: the largest value a field can hold is `remaining + 1`). RFC 8878 section 4.1.1 states the same guarantee. Kept because a table with unset rows could index past itself. `src/internal/fse/fse_test.mbt` checks that `spread` reports a distribution that does not fill the table. |
 | src/huffman.mbt | 1 | In `Huffman::build`, the message for weights that overfill the table, which `@huffman.build_table` never reports: see the next row. |
 | src/internal/bits/bit_packer.mbt | 8 | `BitPacker::write` and `BitPacker::write_fitting` for JS (`#cfg(target="js")`), the 32-bit accumulator: the ledger measures native, which compiles the 64-bit `write` instead. The gates run the same tests on JS: `src/internal/bits/bit_packer_test.mbt` and the encoder's round trips. |

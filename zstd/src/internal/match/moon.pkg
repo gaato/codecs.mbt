@@ -1,5 +1,10 @@
 import {
   "gaato/zstd/internal/seqenc",
+  "gaato/zstd/internal/match_length_fast",
 }
+
+// The SIMD import is used only by the native/Wasm cfg branch.
+
+warnings = "-unused_package"
 
 supported_targets = "js + native + wasm + wasm-gc"

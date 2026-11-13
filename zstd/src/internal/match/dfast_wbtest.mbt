@@ -69,7 +69,7 @@ test "dfast permits the exact window distance and refuses older hash candidates"
   })
   finder.find(data, 1024, repeats, block)
   finder.long.fill(-1)
-  finder.long[finder.hash_at(0, 8, 10)] = 0
+  finder.long[finder.long_hash(0)] = 0
   let next = FixedArray::makei(64, i => data[i])
   finder.find(next, 64, repeats, block)
   assert_true(block.count > 0)
@@ -96,8 +96,8 @@ test "dfast long table wins over a colliding short match" {
   finder.find(data, 1024, repeats, block)
   finder.long.fill(-1)
   finder.short.fill(-1)
-  finder.long[finder.hash_at(0, 8, 10)] = 0
-  finder.short[finder.hash_at(0, 4, 10)] = 500
+  finder.long[finder.long_hash(0)] = 0
+  finder.short[finder.short_hash(0)] = 500
   finder.find(FixedArray::makei(64, i => data[i]), 64, repeats, block)
   assert_eq(block.count, 1)
   assert_eq(block.ll[0], 0)
@@ -178,7 +178,7 @@ test "dfast rebased lookups invalidate evicted entries and retain surviving rang
           discarded += 1
         }
         if table[h] >= 0 {
-          assert_eq(finder.hash_at(table[h], width, 12), h)
+          assert_eq(reference_hash(finder.data, table[h], width, 12), h)
           assert_true(table[h] < 1024)
         }
       }

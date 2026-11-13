@@ -2,7 +2,11 @@
 package "gaato/zstd/internal/seqcases"
 
 // Values
+pub fn boundary_inputs() -> Array[(String, Bytes)]
+
 pub fn cases() -> Array[Case]
+
+pub fn window_cases() -> Array[Case]
 
 // Errors
 

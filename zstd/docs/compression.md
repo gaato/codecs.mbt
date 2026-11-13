@@ -43,7 +43,7 @@ block. Hash positions rebase after each block, avoiding counter overflow
 on long frames. The finder sees only complete cutter blocks, never step
 boundaries, and retains history for raw and RLE blocks too. Hash widths
 and constants follow `ZSTD_hash{4,5,6,7}`; four-byte matches remain eligible
-regardless of hash width. The scalar, checked implementation preserves the
+regardless of hash width. The target-specific implementations preserve the
 reference pipeline's lookup and insertion order. It searches adjacent
 pairs, starting with a gap of `max(targetLength, 1) + 1`, increasing it by
 one per 128 searched bytes. Repeat one at the next pair receives priority
@@ -90,7 +90,7 @@ by one for every 256 bytes searched without a match. The next long
 candidate is loaded after the current insertion (the current candidate
 was loaded before insertion), preserving the
 reference's behavior when hashes collide. Prefetching and unsafe dummy
-loads are replaced with scalar, checked candidate eligibility.
+loads are replaced with explicit candidate eligibility checks.
 
 All finders use the cutter's complete blocks, retain history even for
 raw/RLE blocks, reject positions before the frame or beyond the window,
@@ -529,3 +529,101 @@ in this combined run, which includes constructing a fresh encoder for
 every iteration and growing its buffers; it is not a remaining
 per-sequence scratch allocation. These combined shares are not directly
 comparable with the separate per-level starting-point profiles.
+
+### After widening matcher reads
+
+Native and Wasm read each hash in one unchecked little-endian eight-byte
+load. Construction selects the hash multiplier and input shift for the clamped width;
+there is no width branch in the hot hash calculation. Shifting the low
+four bytes into the high half before multiplication reproduces hash4's
+32-bit overflow exactly; widths five through eight retain the reference
+shift and multiplier. Table reads/writes, chain links, backward extension
+and literal reads use unchecked accesses with local range arguments on
+these targets. Lazy's four-byte tail rejection uses one 32-bit load.
+XXH64 also uses unchecked 32/64-bit loads after its stripe/tail guards.
+No read consumes bytes beyond the valid data, even when capacity is larger.
+
+Two match-length loops were compared with the same hash and table changes:
+eight-byte XOR plus `ctz / 8`, and sixteen-byte `i8x16_eq` plus
+`i8x16_bitmask`, followed by an eight-byte comparison and individual
+remaining bytes. The SIMD code is confined to `internal/match_length_fast`.
+In MoonBit 0.10.20's `moonbit_simd.h`, equality and bitmask lower to
+`pcmpeqb` and `pmovmskb` on SSE2. NEON equality is `vceqq_u8`; its bitmask
+uses a shift, three shift/accumulates and two lane extractions. These
+timings are x86 measurements, not arm64 performance claims.
+
+Same pinned-CPU command as above, targets and variants run separately.
+The native comparison below is the second pair: the first SIMD run had
+1.90/6.11 ms standard deviations at text levels eight/twelve, so both
+native variants were repeated. All values are means in milliseconds.
+
+| Input, level | Native, 8-byte | Native, 16-byte | Wasm, 8-byte | Wasm, 16-byte |
+|---|---:|---:|---:|---:|
+| text, 1 | 7.61 | 7.46 | 22.91 | 22.19 |
+| text, 3 | 7.48 | 7.45 | 22.36 | 22.38 |
+| text, 5 | 13.70 | 13.39 | 32.50 | 31.59 |
+| text, 8 | 30.55 | 28.29 | 53.96 | 53.03 |
+| text, 12 | 78.31 | 77.01 | 101.84 | 100.43 |
+| binary, 1 | 1.32 | 1.32 | 3.42 | 3.41 |
+| binary, 3 | 3.05 | 3.05 | 7.64 | 7.41 |
+| binary, 12 | 17.78 | 18.08 | 13.69 | 13.77 |
+
+The sixteen-byte loop is retained on native and Wasm: it wins on most
+text cases, including the faster levels, with broadly similar binary
+times. It is not faster on every input: native binary level twelve is
+1.7% slower than eight-byte, and Wasm text level three and binary level
+twelve are essentially tied. The native text-level-eight repeat still
+has 2.50 ms deviation in the eight-byte run; its full mean difference
+should not be attributed to SIMD alone.
+
+The final four-target run also moves the input-shift calculation to
+construction. Compared with the preceding allocation table:
+
+| Input, level | Native | Wasm | Wasm GC | JS |
+|---|---:|---:|---:|---:|
+| text, 1 | 7.41 ms | 22.50 ms | 13.70 ms | 93.69 ms |
+| text, 3 | 7.49 ms | 22.09 ms | 12.18 ms | 115.23 ms |
+| text, 5 | 13.30 ms | 31.39 ms | 21.20 ms | 146.17 ms |
+| text, 8 | 27.98 ms | 52.78 ms | 51.95 ms | 209.04 ms |
+| text, 12 | 76.23 ms | 101.40 ms | 119.07 ms | 325.03 ms |
+| binary, 1 | 1.32 ms | 3.43 ms | 1.62 ms | 9.72 ms |
+| binary, 3 | 3.09 ms | 7.50 ms | 4.77 ms | 48.29 ms |
+| binary, 12 | 17.78 ms | 14.21 ms | 28.62 ms | 108.76 ms |
+
+Native improves by 13–34% and Wasm by 16–48% against the preceding table.
+JS and Wasm GC retain checked byte loads, the original width-dependent
+hash formulas and byte-at-a-time lengths. Trying the preselected hash
+multiplier on these targets did not establish a consistent improvement;
+it was reverted. Their original object fields and construction are also
+retained, without a wide-hash multiplier field. Neither eight-byte BigInt
+arithmetic nor SIMD runs in their matcher loops.
+
+The unchanged parent sources were also rerun for these two targets,
+restoring the edited files afterwards without changing Jujutsu history:
+
+| Input, level | Wasm GC refreshed before | JS refreshed before |
+|---|---:|---:|
+| text, 1 | 13.24 ms | 92.51 ms |
+| text, 3 | 14.33 ms | 117.52 ms |
+| text, 5 | 21.37 ms | 147.77 ms |
+| text, 8 | 50.91 ms | 211.50 ms |
+| text, 12 | 118.26 ms | 315.70 ms |
+| binary, 1 | 1.77 ms | 9.68 ms |
+| binary, 3 | 4.82 ms | 47.26 ms |
+| binary, 12 | 27.88 ms | 106.37 ms |
+
+Some retained-path means still exceed both earlier tables: relative to the
+allocation table, the largest increases are Wasm GC text level one (3.7%)
+and JS text level twelve (4.5%). JS level twelve's final deviation is
+25.25 ms, compared with the 13.92 ms difference; Wasm GC's final text
+level-one deviation is 0.27 ms. These numbers do not establish uniformly
+unchanged speed. The original checked paths are retained rather than
+extending wide reads to them; no JS/Wasm GC speedup is claimed.
+
+The 276 published compression counts were rechecked without changing a
+byte; all 300 corpus/bench frames round-trip through gaato and `zstd -d`.
+Existing SHA-256 pins are unchanged. Additional pins were established with
+the original byte-wise implementation for exact-end, block-boundary and
+short-input fixtures, then checked on all four targets. The external
+crosscheck additionally decodes these inputs and 1 KiB sliding-window
+frames from all three match finders with both `zstd -d` and Node.

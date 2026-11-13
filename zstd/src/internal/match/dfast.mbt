@@ -1,6 +1,22 @@
 ///|
 /// Double-fast matching: an eight-byte hash and a minMatch hash, with
 /// rebased positions in a bounded sliding window, as in the fast finder.
+#cfg(any(target="native", target="wasm"))
+pub struct Dfast {
+  priv long : FixedArray[Int32]
+  priv short : FixedArray[Int32]
+  priv hash_log : Int32
+  priv chain_log : Int32
+  priv hash_shift : Int32
+  priv hash_prime : UInt64
+  priv window : Int32
+  priv mut data : FixedArray[Byte]
+  priv mut history : Int32
+}
+
+///|
+/// Original checked-target layout, without the native/Wasm multiplier.
+#cfg(not(any(target="native", target="wasm")))
 pub struct Dfast {
   priv long : FixedArray[Int32]
   priv short : FixedArray[Int32]
@@ -15,6 +31,29 @@ pub struct Dfast {
 ///|
 /// Uses hashLog for the long table and chainLog for the short table, as
 /// ZSTD_compressBlock_doubleFast does. Its search step starts at one.
+#cfg(any(target="native", target="wasm"))
+pub fn Dfast::Dfast(
+  hash_log~ : Int32,
+  chain_log~ : Int32,
+  min_match~ : Int32,
+  window_log~ : Int32,
+) -> Dfast {
+  {
+    long: FixedArray::make(1 << hash_log, -1),
+    short: FixedArray::make(1 << chain_log, -1),
+    hash_log,
+    chain_log,
+    hash_shift: 64 - min_match.clamp(min=4, max=7) * 8,
+    hash_prime: hash_prime(min_match.clamp(min=4, max=7)),
+    window: 1 << window_log,
+    data: [],
+    history: 0,
+  }
+}
+
+///|
+/// The same finder with the original checked-target representation.
+#cfg(not(any(target="native", target="wasm")))
 pub fn Dfast::Dfast(
   hash_log~ : Int32,
   chain_log~ : Int32,
@@ -43,6 +82,7 @@ pub fn Dfast::reset(self : Dfast) -> Unit {
 }
 
 ///|
+#cfg(not(any(target="native", target="wasm")))
 fn Dfast::hash_at(self : Dfast, p : Int32, width : Int32, log : Int32) -> Int32 {
   let mut word = 0UL
   for i in 0..<width {
@@ -62,21 +102,49 @@ fn Dfast::hash_at(self : Dfast, p : Int32, width : Int32, log : Int32) -> Int32 
 }
 
 ///|
+#cfg(any(target="native", target="wasm"))
+#inline
+fn Dfast::long_hash(self : Dfast, p : Int32) -> Int32 {
+  // All callers leave eight bytes through end (including tail catch-up).
+  ((load64(self.data, p) * 0xcf1bbcdcb7a56463UL) >> (64 - self.hash_log)).to_int()
+}
+
+///|
+#cfg(any(target="native", target="wasm"))
+#inline
+fn Dfast::short_hash(self : Dfast, p : Int32) -> Int32 {
+  // p - 1 after a match precedes an end checked to leave eight bytes.
+  (((load64(self.data, p) << self.hash_shift) * self.hash_prime) >>
+  (64 - self.chain_log)).to_int()
+}
+
+///|
+#cfg(not(any(target="native", target="wasm")))
+#inline
+fn Dfast::long_hash(self : Dfast, p : Int32) -> Int32 {
+  self.hash_at(p, 8, self.hash_log)
+}
+
+///|
+#cfg(not(any(target="native", target="wasm")))
+#inline
+fn Dfast::short_hash(self : Dfast, p : Int32) -> Int32 {
+  self.hash_at(p, self.min_match, self.chain_log)
+}
+
+///|
 fn Dfast::length(self : Dfast, p : Int32, q : Int32, end : Int32) -> Int32 {
   if q < 0 || q >= p || p - q > self.window {
     return 0
   }
-  let mut n = 0
-  while p + n < end && self.data[p + n] == self.data[q + n] {
-    n += 1
-  }
-  n
+  match_length(self.data, p, q, end)
 }
 
 ///|
 fn Dfast::insert(self : Dfast, p : Int32) -> Unit {
-  self.long[self.hash_at(p, 8, self.hash_log)] = p
-  self.short[self.hash_at(p, self.min_match, self.chain_log)] = p
+  // Hashes are strictly below their power-of-two table lengths.
+  write(self.long, self.long_hash(p), p)
+  write(self.short, self.short_hash(p), p)
 }
 
 ///|
@@ -129,18 +197,20 @@ pub fn Dfast::find(
     let mut step = 1
     let mut next_step = p + 256
     let mut next = p + step
-    let mut hl = self.hash_at(p, 8, self.hash_log)
-    let mut long = self.long[hl]
+    let mut hl = self.long_hash(p)
+    // hl has hash_log bits, exactly the table's index range.
+    let mut long = read(self.long, hl)
     let mut best = 0
     let mut distance = 0
     let mut current = p
     let mut is_repeat = false
     while next + 8 <= end {
       current = p
-      let hs = self.hash_at(p, self.min_match, self.chain_log)
-      let short = self.short[hs]
-      self.long[hl] = p
-      self.short[hs] = p
+      let hs = self.short_hash(p)
+      // hs and hl have chain_log and hash_log bits respectively.
+      let short = read(self.short, hs)
+      write(self.long, hl, p)
+      write(self.short, hs, p)
       if rep1 > 0 {
         let len = self.length(p + 1, p + 1 - rep1, end)
         if len >= 4 {
@@ -151,12 +221,13 @@ pub fn Dfast::find(
           break
         }
       }
-      let next_hl = self.hash_at(next, 8, self.hash_log)
+      let next_hl = self.long_hash(next)
       best = self.length(p, long, end)
       if best >= 8 {
         distance = p - long
       } else {
-        let next_long = self.long[next_hl]
+        // next_hl is a hash_log-bit index into long.
+        let next_long = read(self.long, next_hl)
         best = self.length(p, short, end)
         if best >= 4 {
           distance = p - short
@@ -180,12 +251,14 @@ pub fn Dfast::find(
       }
       while p > anchor &&
             p - distance > 0 &&
-            self.data[p - 1] == self.data[p - distance - 1] {
+            // 0 < p - distance <= p < end, so both predecessors fit.
+            read(self.data, p - 1) == read(self.data, p - distance - 1) {
         p -= 1
         best += 1
       }
       if step < 4 {
-        self.long[next_hl] = next
+        // next_hl is a hash_log-bit index into long.
+        write(self.long, next_hl, next)
       }
       break
     }
@@ -193,7 +266,8 @@ pub fn Dfast::find(
       break
     }
     for i in anchor..<p {
-      block.literal(self.data[i])
+      // anchor <= i < p <= end.
+      block.literal(read(self.data, i))
     }
     block.add(
       p - anchor,
@@ -208,8 +282,9 @@ pub fn Dfast::find(
     anchor = p
     if p + 8 <= end {
       self.insert(current + 2)
-      self.long[self.hash_at(p - 2, 8, self.hash_log)] = p - 2
-      self.short[self.hash_at(p - 1, self.min_match, self.chain_log)] = p - 1
+      // Each hash fits its own table; both positions precede p <= end - 8.
+      write(self.long, self.long_hash(p - 2), p - 2)
+      write(self.short, self.short_hash(p - 1), p - 1)
       while p + 8 <= end && rep2 > 0 {
         let len = self.length(p, p - rep2, end)
         if len < 4 {
@@ -226,7 +301,8 @@ pub fn Dfast::find(
     }
   }
   for i in anchor..<end {
-    block.literal(self.data[i])
+    // anchor <= i < end.
+    block.literal(read(self.data, i))
   }
   let drop = (end - self.window).max(0)
   if drop > 0 {

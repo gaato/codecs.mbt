@@ -46,6 +46,32 @@ test "any split gives the same digest" {
 }
 
 ///|
+test "exact valid ends and unaligned stripes ignore bytes outside the slice" {
+  for n in 1..<=96 {
+    let input = pattern(n).to_fixedarray()
+    let whole = @xxhash.Xxh64()
+    whole.update(input, 0, n)
+    for offset in 0..<16 {
+      // No trailing allocation padding: the input ends at the array end.
+      let unaligned = FixedArray::makei(offset + n, i => {
+        if i < offset {
+          b'\xff'
+        } else {
+          input[i - offset]
+        }
+      })
+      for step in [1, 7, 8, 15, 16, 17, 31, 32, 33] {
+        let split = @xxhash.Xxh64()
+        for i = 0; i < n; i = i + step {
+          split.update(unaligned, offset + i, step.min(n - i))
+        }
+        assert_eq(split.digest(), whole.digest())
+      }
+    }
+  }
+}
+
+///|
 test "reset starts over and digest leaves the state open" {
   let h = @xxhash.Xxh64()
   h.update_bytes(pattern(63))

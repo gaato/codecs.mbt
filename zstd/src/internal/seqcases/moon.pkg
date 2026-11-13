@@ -3,6 +3,7 @@ import {
   "gaato/zstd/internal/bits",
   "gaato/zstd/internal/seqenc",
   "gaato/zstd/internal/huffenc",
+  "gaato/zstd/internal/match",
 }
 
 supported_targets = "js + native + wasm + wasm-gc"

@@ -65,6 +65,15 @@ fn merge(acc : UInt64, lane_acc : UInt64) -> UInt64 {
 }
 
 ///|
+#cfg(any(target="native", target="wasm"))
+#inline
+fn read32(data : FixedArray[Byte], i : Int32) -> UInt64 {
+  // digest calls only with at least four valid stripe bytes left.
+  data.unsafe_reinterpret_as_bytes().unsafe_read_uint32_le(i).to_uint64()
+}
+
+///|
+#cfg(not(any(target="native", target="wasm")))
 fn read32(data : FixedArray[Byte], i : Int32) -> UInt64 {
   (data[i].to_uint() |
   (data[i + 1].to_uint() << 8) |
@@ -73,6 +82,15 @@ fn read32(data : FixedArray[Byte], i : Int32) -> UInt64 {
 }
 
 ///|
+#cfg(any(target="native", target="wasm"))
+#inline
+fn read64(data : FixedArray[Byte], i : Int32) -> UInt64 {
+  // consume_stripe has 32 valid bytes, and digest checks n - i >= 8.
+  data.unsafe_reinterpret_as_bytes().unsafe_read_uint64_le(i)
+}
+
+///|
+#cfg(not(any(target="native", target="wasm")))
 fn read64(data : FixedArray[Byte], i : Int32) -> UInt64 {
   read32(data, i) | (read32(data, i + 4) << 32)
 }

@@ -104,6 +104,21 @@ fn streamed(
 
 ///|
 fn main {
+  for c in @seqcases.window_cases() {
+    emit(c.name, c.input, c.frame)
+  }
+  for (name, input) in @seqcases.boundary_inputs() {
+    for level in [1, 3, 5, 12] {
+      emit("\{name} l\{level}", input, @zstd.compress(input, level~))
+      streamed(
+        "\{name} l\{level} unsized",
+        @zstd.Encoder(level~),
+        input,
+        131071,
+        0,
+      )
+    }
+  }
   for c in @seqcases.cases() {
     emit("sequence-\{c.name}", c.input, c.frame)
   }

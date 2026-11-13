@@ -118,7 +118,8 @@ line that tests do not reach.
 
 A few loops run sixteen bytes at a time with core's `@v128`: the zlib
 decoder's Adler-32 (`deflate/src/zlib/internal/adler32_fast`) and PNG's Up
-filter (`png/src/internal/filter_fast`). They follow these rules:
+filter (`png/src/internal/filter_fast`), and the Zstandard encoder's match
+length (`zstd/src/internal/match_length_fast`). They follow these rules:
 
 - **Native and Wasm only**, through `#cfg(any(target="native", target="wasm"))`.
   On JS, `@v128` falls back to code some 300 times slower than a plain loop;
