@@ -1,0 +1,18 @@
+// Adler-32 for the zlib decoder: faster than ../adler32 on native and Wasm,
+// where SIMD pays, and equal to its `update` (the tests check it). The
+// proved `update_bytes` stays in ../adler32, where no SIMD operation may
+// appear.
+
+import {
+  "gaato/deflate/zlib/internal/adler32",
+  "moonbitlang/core/v128",
+}
+
+// core's @v128 is experimental: every use would warn. It is confined to
+// this package, so that a change to it touches nothing else. Each import is
+// used on some targets only (@v128 on native and Wasm, ../adler32 on JS
+// and Wasm GC), and would warn as unused on the others.
+
+warnings = "-alert_experimental-unused_package"
+
+supported_targets = "js + native + wasm + wasm-gc"

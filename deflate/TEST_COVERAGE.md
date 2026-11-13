@@ -30,7 +30,8 @@ streams built bit by bit, and seeded pseudo-random splits and corruptions.
   the copies of the shared parts `src/internal/crc32/`,
   `src/internal/huffman/` and `src/internal/lz77/` (generated from `parts/`, with their tests), the
   proof packages `src/internal/proof_bits/` and `src/internal/proof_codes/`,
-  `src/zlib/internal/adler32/`, `src/zlib/internal/header/` and
+  `src/zlib/internal/adler32/`, `src/zlib/internal/adler32_fast/`,
+  `src/zlib/internal/header/` and
   `src/gzip/internal/header/`. The test-only
   package `src/internal/fixtures/` and the cross-check tool
   `src/internal/crosscheck/` are not measured.
@@ -40,10 +41,10 @@ streams built bit by bit, and seeded pseudo-random splits and corruptions.
 The pitfalls the script pins (stale counters, `-f summary` skewing totals,
 tcc on openSUSE) are described in zstd's ledger, `zstd/TEST_COVERAGE.md`.
 
-Snapshot at the last full measurement (2026-10-21): **98.9 %** (1436/1452
-lines), the sixteen uncovered lines ledgered below: seven of them are the
-JS and Wasm GC variants of the match finders' reads, which native does not
-compile.
+Snapshot at the last full measurement (2026-11-13): **98.9 %** (1572/1589
+lines), the seventeen uncovered lines ledgered below: eight of them are the
+JS and Wasm GC variants of the match finders' reads and of the zlib
+decoder's Adler-32, which native does not compile.
 
 ## Policy
 
@@ -105,3 +106,4 @@ Budgets are exact uncovered counts at the last measurement.
 | src/internal/huffman/code_maker.mbt | 1 | The `abort` of `CodeMaker::CodeMaker` for an alphabet outside 2 to 1,024 symbols: the `panic` test of `src/internal/huffman/code_maker_test.mbt` runs it, but the abort ends the test before its coverage counts are written. |
 | src/internal/deflate/deflater.mbt | 2 | In `Deflater::step`, the `abort` for an input buffer that is full with no block complete: unreachable by construction, since the buffer holds the window, a whole block and the look-ahead, and a block ends at 65,535 bytes. |
 | src/internal/lz77/matchfinder.mbt | 7 | `load_u32`, `may_beat` and `extend_match` for JS and Wasm GC (`#cfg(not(any(target="native", target="wasm")))`), which read a byte at a time: the ledger measures native, which compiles the four-bytes-at-once ones instead. The gates run the same tests on JS and Wasm GC: the match finders' tests and the encoder's, including the SHA-256 of its output. |
+| src/zlib/internal/adler32_fast/adler32_fast.mbt | 1 | `update` for JS and Wasm GC (`#cfg(not(any(target="native", target="wasm")))`), which calls `@adler32.update`: the ledger measures native, which compiles the SIMD one instead. The gates run the package's tests, which compare it with `@adler32.update`, on JS and Wasm GC too. |

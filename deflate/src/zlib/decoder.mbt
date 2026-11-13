@@ -278,7 +278,10 @@ fn Decoder::run(self : Decoder, end~ : Bool) -> Status raise Stop {
           }
         }
         let produced = inner.last_produced()
-        self.adler = @adler32.update(self.adler, room.exact_view(end=produced))
+        self.adler = @adler32_fast.update(
+          self.adler,
+          room.exact_view(end=produced),
+        )
         self.in_pos += inner.last_consumed()
         self.out_pos += produced
         match status {

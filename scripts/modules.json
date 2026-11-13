@@ -33,6 +33,7 @@
       "src",
       "src/zlib",
       "src/zlib/internal/adler32",
+      "src/zlib/internal/adler32_fast",
       "src/zlib/internal/header",
       "src/gzip",
       "src/gzip/internal/header",

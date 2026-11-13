@@ -42,9 +42,14 @@ against the code.
 | `canonical_order` | `parts/proof_canonical` | The canonical codes increase in canonical order and form a prefix code: when `s` comes before `t` (a shorter code, or as long and a smaller symbol), the 15-bit sequences that start with `s`'s code all come before those that start with `t`'s | unbounded | none | Z3, CVC5 |
 | `canonical_fits` | `parts/proof_canonical` | With Kraft's sum at most 1, each canonical code fits its length: the sequences it starts end within the code space | unbounded | none | Z3, CVC5 |
 
-`update`, the decoder's Adler-32 over an `ArrayView`, is the same code as
+`update`, the Adler-32 over an `ArrayView`, is the same code as
 `update_bytes` but is not proved: the prover does not model `ArrayView`. The
-test "update_bytes equals update, in pieces" compares them.
+test "update_bytes equals update, in pieces" compares them. The decoder calls
+`src/zlib/internal/adler32_fast`'s `update`, sixteen bytes at a time with
+SIMD on native and Wasm, which no proof covers either: it reads through
+`ArrayView` too, and SIMD operations cannot appear in a proved function's
+body. Its tests compare it with `update`, at every alignment, around the
+reductions and on all 0xff bytes.
 
 The rows in `parts/` are proved once, where the parts live; this module's
 copies of them (`src/internal/huffman`, `src/internal/proof_codes`,

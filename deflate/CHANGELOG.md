@@ -11,6 +11,7 @@ never does. Every breaking change is listed with a migration note.
 
 - gzip's CRC-32 is computed eight bytes at a time (slice-by-8), from 9 KiB of tables computed at start-up and shared by every decoder and encoder, in place of 1 KiB. The output and the errors are unchanged.
 - **The README is about using the module.** Install, Usage, Packages, gzip, zlib, Streams that do not end, Limits, Errors and Links; links are absolute, so they work on mooncakes.io. The compression ratio table and how the levels follow libdeflate's moved to `docs/compression.md`, the exact memory figures are in RESOURCE_BOUNDS.md, and the checks against zlib and libdeflate in TEST_COVERAGE.md. The `gaato/codec_bytes` trait methods and `Header`'s derived methods have doc comments, and the repository-only `scripts/` and `docs/` are no longer packaged.
+- zlib's decoder computes the Adler-32 sixteen bytes at a time with SIMD on native and Wasm (core's `@v128`, experimental): the 590,208 bytes of a 512 × 384 RGB image take 51 µs in place of 296 µs on native and 50 µs in place of 658 µs on Wasm. JS and Wasm GC, where SIMD does not pay, keep the byte-at-a-time loop; the encoder keeps the proved `update_bytes`. The output and the errors are unchanged.
 
 ### Fixed
 
