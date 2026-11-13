@@ -114,9 +114,18 @@ async fn expected(
       guard copy_names.get(import_) is Some(copy) else {
         die(2, "\{source} imports parts/\{import_}, which \{dir} does not copy")
       }
+      // A dependency copied under another name keeps its part's name as
+      // its alias, so that the importing files' `@<part>.` references
+      // still resolve; an import that names its own alias keeps that one.
+      let old = "\"\{parts_name}/\{import_}\""
+      let path = "\"\{name}/internal/\{copy}\""
+      let aliased = match moon_pkg.find(old) {
+        Some(at) => moon_pkg[at + old.length():].has_prefix(" @")
+        None => false
+      }
       moon_pkg = moon_pkg.replace_all(
-        old="\"\{parts_name}/\{import_}\"",
-        new="\"\{name}/internal/\{copy}\"",
+        old~,
+        new=if copy == import_ || aliased { path } else { "\{path} @\{import_}" },
       )
     }
     out["\{target}/moon.pkg"] = copy_of(from, "moon.pkg", moon_pkg)

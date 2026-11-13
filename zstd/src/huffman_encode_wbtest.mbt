@@ -123,6 +123,21 @@ test "Huffman encoding: every byte value, compressed weights" {
     check_huffman([ for i in 0..<1280 => i % 128 ]),
     content="Some(false)",
   )
+  // 129 values, the last one implied: exactly 128 weights written, the
+  // direct form's limit, whose header byte is 127 + 128 = 255. Values 0 to
+  // 127 once and 128 as often as all of them: weights of one value and one
+  // other, which FSE cannot describe.
+  let edge = [ for i in 0..<128 => i ]
+  for _ in 0..<128 {
+    edge.push(128)
+  }
+  debug_inspect(check_huffman(edge), content="Some(false)")
+  let counts = histogram(edge, 256)
+  let encoder = @huffenc.HuffmanEncoder()
+  assert_true(encoder.build(counts))
+  let out = @bits.BitPacker()
+  encoder.write_description(out)
+  assert_eq(packed(out)[0], b'\xFF')
 }
 
 ///|
