@@ -187,7 +187,7 @@ async fn main {
       }
       for file, text in wanted {
         let slash = file.rev_find("/").unwrap()
-        @fs.mkdir(file.clamped_view(end=slash), recursive=true, allow_exist=true)
+        ensure_dir(file.clamped_view(end=slash))
         if !@fs.exists(file) || @fs.read_text(file) != text {
           @fs.write_text(file, text)
           println("wrote \{file}")
@@ -200,5 +200,16 @@ async fn main {
       @stdio.stderr.text.write("stale: \{file}\n")
     }
     die(1, "copies of parts/ are stale: run moon run scripts/gen_parts.mbtx")
+  }
+}
+
+///|
+/// Creates directory `path`, and its parents, unless it exists. Not through
+/// `@fs.mkdir`'s option for an existing directory, which core renamed from
+/// `allow_exist` (MoonBit 0.10.20) to `allow_existing` (nightly, 2026-11-09):
+/// either spelling fails to compile on the other toolchain.
+async fn ensure_dir(path : StringView) -> Unit {
+  if !@fs.exists(path) {
+    @fs.mkdir(path, recursive=true)
   }
 }

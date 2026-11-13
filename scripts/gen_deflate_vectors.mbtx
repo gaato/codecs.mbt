@@ -319,7 +319,7 @@ async fn gzip(args : Array[String], input : Bytes, name : String?) -> Bytes {
     }
     Some(name) => {
       let dir = "_build/gen_deflate_vectors"
-      @fs.mkdir(dir, recursive=true, allow_exist=true)
+      ensure_dir(dir)
       let path = "\{dir}/\{name}"
       @fs.write_binary(path, input)
       @shell.Cmd("touch", ["-d", "@1700000000", path]).output().check()
@@ -2032,5 +2032,16 @@ async fn main {
     fail(
       "stale: \{stale.join(", ")} (run moon run scripts/gen_deflate_vectors.mbtx)",
     )
+  }
+}
+
+///|
+/// Creates directory `path`, and its parents, unless it exists. Not through
+/// `@fs.mkdir`'s option for an existing directory, which core renamed from
+/// `allow_exist` (MoonBit 0.10.20) to `allow_existing` (nightly, 2026-11-09):
+/// either spelling fails to compile on the other toolchain.
+async fn ensure_dir(path : StringView) -> Unit {
+  if !@fs.exists(path) {
+    @fs.mkdir(path, recursive=true)
   }
 }

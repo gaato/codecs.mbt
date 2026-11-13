@@ -163,7 +163,7 @@ async fn write_config(
     .replace_all(old="@PROVER@", new=prover)
     .replace_all(old="@VERSION@", new=solver.version)
     .replace_all(old="@LIMIT@", new=limit)
-  @fs.mkdir("_build/proof", recursive=true, allow_exist=true)
+  ensure_dir("_build/proof")
   let path = "_build/proof/\{solver.name}-\{limit}.conf"
   @fs.write_text(path, text)
   path
@@ -359,4 +359,15 @@ async fn main {
     @env.exit(1)
   }
   println("prove (\{solver.name}): OK - \{jobs.length()} packages in \{total} s")
+}
+
+///|
+/// Creates directory `path`, and its parents, unless it exists. Not through
+/// `@fs.mkdir`'s option for an existing directory, which core renamed from
+/// `allow_exist` (MoonBit 0.10.20) to `allow_existing` (nightly, 2026-11-09):
+/// either spelling fails to compile on the other toolchain.
+async fn ensure_dir(path : StringView) -> Unit {
+  if !@fs.exists(path) {
+    @fs.mkdir(path, recursive=true)
+  }
 }

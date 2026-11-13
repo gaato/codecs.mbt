@@ -564,9 +564,20 @@ async fn main {
   if hex_digest(archive) != tarball_sha256 {
     fail("\{tarball} is not PngSuite's release of 2017-07-19")
   }
-  @fs.mkdir(unpacked, recursive=true, allow_exist=true)
+  ensure_dir(unpacked)
   @shell.Cmd("tar", ["-xzf", tarball, "-C", unpacked]).output().check()
   let command = python()
   vectors(command, check)
   bench_data(command, check)
+}
+
+///|
+/// Creates directory `path`, and its parents, unless it exists. Not through
+/// `@fs.mkdir`'s option for an existing directory, which core renamed from
+/// `allow_exist` (MoonBit 0.10.20) to `allow_existing` (nightly, 2026-11-09):
+/// either spelling fails to compile on the other toolchain.
+async fn ensure_dir(path : StringView) -> Unit {
+  if !@fs.exists(path) {
+    @fs.mkdir(path, recursive=true)
+  }
 }

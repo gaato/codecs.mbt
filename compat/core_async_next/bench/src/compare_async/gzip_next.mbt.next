@@ -1,0 +1,21 @@
+// The impls core/async's IO traits require after MoonBit 0.10.20, which
+// 0.10.20 refuses, so no source file builds on both. On a toolchain that
+// requires them, .github/workflows/canary.yml copies this file to
+// bench/src/compare_async/gzip_next.mbt. When moonbit-version moves past
+// 0.10.20, move it there for good and delete compat/ (as gaato/mttp does).
+
+///|
+impl @io.BinaryReaderImpl for Source with fn name(_) {
+  "codec_bench source"
+}
+
+///|
+impl @io.BinaryWriterImpl for Sink with fn name(_) {
+  "codec_bench sink"
+}
+
+///|
+/// Sink keeps every byte it is given in `out`: nothing waits to be flushed.
+impl @io.BinaryWriterImpl for Sink with fn flush_partial_data(_) {
+
+}
