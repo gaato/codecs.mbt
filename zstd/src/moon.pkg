@@ -6,11 +6,14 @@ import {
   "gaato/zstd/internal/header",
   "gaato/zstd/internal/huffenc",
   "gaato/zstd/internal/huffman",
+  "gaato/zstd/internal/match" @matcher,
+  "gaato/zstd/internal/seqenc",
   "gaato/zstd/internal/xxhash",
 }
 
 import {
   "gaato/zstd/internal/checksum",
+  "gaato/zstd/internal/seqcases",
   "moonbitlang/core/encoding/base64",
 } for "wbtest"
 

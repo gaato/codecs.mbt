@@ -1,0 +1,23 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/zstd/internal/match"
+
+import {
+  "gaato/zstd/internal/seqenc",
+}
+
+// Values
+
+// Errors
+
+// Types and methods
+pub struct Fast {
+  // private fields
+}
+pub fn Fast::Fast(hash_log~ : Int32, min_match~ : Int32, target_length~ : Int32, window_log~ : Int32) -> Self
+pub fn Fast::find(Self, FixedArray[Byte], Int32, @seqenc.Repeats, @seqenc.Block) -> Unit
+pub fn Fast::memory_usage(Self) -> Int32
+pub fn Fast::reset(Self) -> Unit
+
+// Type aliases
+
+// Traits

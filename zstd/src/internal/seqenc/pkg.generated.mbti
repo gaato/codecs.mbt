@@ -1,0 +1,87 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/zstd/internal/seqenc"
+
+import {
+  "gaato/zstd/internal/bits",
+}
+
+// Values
+pub const MAX_LL_CODE : Int32 = 35
+
+pub const MAX_ML_CODE : Int32 = 52
+
+pub const MAX_OF_CODE : Int32 = 30
+
+pub const MAX_OF_SYMBOL : Int32 = 31
+
+pub fn length_code(Int32, FixedArray[Int32]) -> Int32
+
+pub let ll_base : FixedArray[Int32]
+
+pub let ll_bits : FixedArray[Int32]
+
+pub let ll_default : FixedArray[Int32]
+
+pub let ml_base : FixedArray[Int32]
+
+pub let ml_bits : FixedArray[Int32]
+
+pub let ml_default : FixedArray[Int32]
+
+pub let of_default : FixedArray[Int32]
+
+pub fn offset_code(OffsetValue) -> (Int32, UInt32)
+
+pub fn write_count(@bits.BitPacker, Int32) -> Unit
+
+// Errors
+
+// Types and methods
+pub struct Block {
+  mut count : Int32
+  mut literal_count : Int32
+  mut literals : FixedArray[Byte]
+  mut ll : FixedArray[Int32]
+  mut ml : FixedArray[Int32]
+  mut offsets : FixedArray[OffsetValue]
+  repeats : Repeats
+}
+pub fn Block::Block() -> Self
+pub fn Block::add(Self, Int32, Int32, Distance) -> Unit
+pub fn Block::literal(Self, Byte) -> Unit
+pub fn Block::memory_usage(Self) -> Int32
+pub fn Block::reset(Self, Repeats, Int32) -> Unit
+
+#derive(Eq)
+pub(all) struct Distance(UInt32)
+pub fn Distance::equal(Self, Self) -> Bool
+pub fn Distance::not_equal(Self, Self) -> Bool
+
+pub(all) struct OffsetValue(UInt32)
+
+pub struct Repeats {
+  // private fields
+}
+pub fn Repeats::Repeats() -> Self
+pub fn Repeats::copy_from(Self, Self) -> Unit
+pub fn Repeats::encode(Self, Distance, Int32) -> OffsetValue
+pub fn Repeats::get(Self, Int32) -> Distance
+pub fn Repeats::reset(Self) -> Unit
+pub fn Repeats::resolve(Self, OffsetValue, Int32) -> Distance
+
+type Stream
+
+pub struct Writer {
+  repeats : Repeats
+  // private fields
+}
+pub fn Writer::Writer() -> Self
+pub fn Writer::commit(Self, Block) -> Unit
+pub fn Writer::memory_usage(Self) -> Int32
+pub fn Writer::modes(Self) -> (Int32, Int32, Int32)
+pub fn Writer::reset(Self) -> Unit
+pub fn Writer::write(Self, @bits.BitPacker, Block) -> Unit
+
+// Type aliases
+
+// Traits

@@ -41,7 +41,7 @@ import {
 //   moon run scripts/compare_codecs.mbtx -- stream [--timeout S] [--only NAME]
 //   moon run scripts/compare_codecs.mbtx -- memory [--timeout S] [--only NAME]
 //   moon run scripts/compare_codecs.mbtx -- claims [--fixtures FILE] [--limit MIB] [--timeout S] [--only NAME]
-//   moon run scripts/compare_codecs.mbtx -- ratio --format brotli|deflate [--time MS] [--corpus DIR]...
+//   moon run scripts/compare_codecs.mbtx -- ratio --format zstd|brotli|deflate [--time MS] [--corpus DIR]...
 //   moon run scripts/compare_codecs.mbtx -- speed [--runs N] [--out DIR]
 // check   (the default) as above; with --pieces, the decoders that take
 //         input in pieces run over the valid streams fed P bytes at a time,
@@ -1281,6 +1281,16 @@ async fn ratio(
   // The reference encoder at three settings, for scale (Brotli only: the
   // DEFLATE table has no reference row). The file is named, not piped, as
   // brotli then knows its size, which changes some streams.
+  if format == "zstd" && (only == "" || only == "gaato/zstd") {
+    for level in [1, 2] {
+      for path in paths {
+        let out = @shell.Cmd("zstd", ["-\{level}", "--check", "-c", "-q", path]).output(max_output_bytes=1 << 28)
+        out.check()
+        let size = @fs.read_binary(path).length()
+        println("zstd -\{level}\treference\t\{level}\t\{path}\t\{size}\t\{out.stdout_bytes().length()}\t0\tchecksum on")
+      }
+    }
+  }
   if format == "brotli" && only == "" {
     for args in [["-q", "4"], ["-q", "9", "-w", "22"], ["-q", "11"]] {
       for path in paths {
@@ -1306,7 +1316,9 @@ async fn ratio(
       continue
     }
     let original = @fs.read_binary(paths[at])
-    let cmd = if format == "brotli" {
+    let cmd = if format == "zstd" {
+      @shell.Cmd("zstd", ["-d", "-c", "-q", "\{work}/dump/\{n}"])
+    } else if format == "brotli" {
       @shell.Cmd("brotli", ["-d", "-c", "\{work}/dump/\{n}"])
     } else {
       @shell.Cmd("node", [

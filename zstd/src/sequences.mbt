@@ -189,27 +189,12 @@ fn Decoder::execute(
       of_state = of.next(of_state, bits)
     }
     // The offset, and the repeat offsets after it (RFC 8878 section
-    // 3.1.2.5).
-    let offset = if offset_value > 3 {
-      let offset = offset_value - 3
-      rep[2] = rep[1]
-      rep[1] = rep[0]
-      rep[0] = offset
-      offset
-    } else {
-      let index = offset_value - 1 + (if lit_len == 0 { 1 } else { 0 })
-      if index == 0 {
-        rep[0]
-      } else {
-        let offset = if index < 3 { rep[index] } else { rep[0] - 1 }
-        if index > 1 {
-          rep[2] = rep[1]
-        }
-        rep[1] = rep[0]
-        rep[0] = offset
-        offset
-      }
-    }
+    // 3.1.1.5).
+    let @seqenc.Distance(distance) = rep.resolve(
+      @seqenc.OffsetValue(offset_value.reinterpret_as_uint()),
+      lit_len,
+    )
+    let offset = distance.reinterpret_as_int()
     if lit_len > self.literals_len - lit {
       raise corrupt("a sequence with more literals than the block holds")
     }

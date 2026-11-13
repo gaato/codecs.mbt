@@ -104,6 +104,9 @@ fn streamed(
 
 ///|
 fn main {
+  for c in @seqcases.cases() {
+    emit("sequence-\{c.name}", c.input, c.frame)
+  }
   let rng = Rng::{ state: 8878, }
   let samples = [
     ("empty", b""),
@@ -126,7 +129,7 @@ fn main {
   }
   for sample in samples {
     let (name, input) = sample
-    for level in [1, 3, 12] {
+    for level in [1, 2, 3, 12] {
       emit("\{name} l\{level}", input, @zstd.compress(input, level~))
     }
     emit("\{name} l3 nocheck", input, @zstd.compress(input, checksum=false))

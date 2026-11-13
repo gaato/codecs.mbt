@@ -1,0 +1,8 @@
+// Test-only crafted encoder streams, shared by tests and the crosscheck tool.
+import {
+  "gaato/zstd/internal/bits",
+  "gaato/zstd/internal/seqenc",
+  "gaato/zstd/internal/huffenc",
+}
+
+supported_targets = "js + native + wasm + wasm-gc"

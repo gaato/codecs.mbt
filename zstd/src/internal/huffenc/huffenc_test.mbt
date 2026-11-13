@@ -16,7 +16,7 @@ test "HuffmanEncoder: memory, and what a build leaves" {
   // The weights of 0 to 'b' (98 of them, the last one's implied) are
   // mostly 0: FSE-compressed, in fewer bytes than 50 four-bit pairs.
   inspect(encoder.description_size() < 50, content="true")
-  // Writing four streams keeps a copy of them.
+  // Four streams go directly to out; only the weights' scratch was kept.
   let out = @bits.BitPacker()
   let data = FixedArray::make(64, b'a')
   encoder.write_literals(out, data, 0, 64, four_streams=true)

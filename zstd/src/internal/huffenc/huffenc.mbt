@@ -30,13 +30,12 @@ pub struct HuffmanEncoder {
   priv description : FixedArray[Byte]
   priv mut description_size : Int32
   // Scratch: the weights' counts and distribution, their FSE table, where
-  // each weight's entries start, a bit writer, and bytes to copy through.
+  // each weight's entries start, and a bit writer for weights only.
   priv weight_counts : FixedArray[Int32]
   priv weight_norm : FixedArray[Int32]
   priv weight_table : @fse.CTable
   priv entry_start : FixedArray[Int32]
   priv packer : @bits.BitPacker
-  priv mut copy : FixedArray[Byte]
 }
 
 ///|
@@ -58,7 +57,6 @@ pub fn HuffmanEncoder::HuffmanEncoder() -> HuffmanEncoder {
     weight_table: @fse.CTable(max_log=WEIGHT_LOG, max_symbols=MAX_BITS + 1),
     entry_start: FixedArray::make(MAX_BITS + 2, 0),
     packer: @bits.BitPacker(),
-    copy: FixedArray::make(0, b'\x00'),
   }
 }
 
@@ -77,8 +75,7 @@ pub fn HuffmanEncoder::memory_usage(self : HuffmanEncoder) -> Int32 {
   ) +
   self.description.length() +
   self.weight_table.memory_usage() +
-  self.packer.capacity() +
-  self.copy.length()
+  self.packer.capacity()
 }
 
 ///|
@@ -275,6 +272,20 @@ pub fn HuffmanEncoder::max_bits(self : HuffmanEncoder) -> Int32 {
 }
 
 ///|
+/// Whether every byte with a nonzero count has a code in this table.
+pub fn HuffmanEncoder::accepts(
+  self : HuffmanEncoder,
+  counts : FixedArray[Int32],
+) -> Bool {
+  for s in 0..<256 {
+    if counts[s] > 0 && (s >= self.symbols || self.lengths[s] == 0) {
+      return false
+    }
+  }
+  true
+}
+
+///|
 /// Writes `data[start:start + len]`, literals that all have a code, into
 /// `out` at a byte boundary: as one stream, or as four after their jump
 /// table (at least 6 literals, RFC 8878 section 3.1.1.3.1.6), the first three
@@ -293,26 +304,22 @@ pub fn HuffmanEncoder::write_literals(
   }
   let segment = (len + 3) / 4
   let sizes = FixedArray::make(3, 0)
-  let streams = self.packer
-  streams.reset()
-  for i in 0..<4 {
+  for i in 0..<3 {
     let from = start + i * segment
-    let until = if i < 3 { from + segment } else { start + len }
-    let before = streams.pending()
-    self.write_stream(streams, data, from, until)
-    if i < 3 {
-      sizes[i] = streams.pending() - before
+    let mut bits = 0
+    for j in from..<(from + segment) {
+      bits += self.lengths[data[j].to_int()]
     }
+    sizes[i] = bits / 8 + 1
   }
   for i in 0..<3 {
     out.write(16, sizes[i])
   }
-  let total = streams.pending()
-  if self.copy.length() < total {
-    self.copy = FixedArray::make(total, b'\x00')
+  for i in 0..<4 {
+    let from = start + i * segment
+    let until = if i < 3 { from + segment } else { start + len }
+    self.write_stream(out, data, from, until)
   }
-  streams.drain_into(self.copy, 0) |> ignore
-  out.write_bytes(self.copy, 0, total)
 }
 
 ///|

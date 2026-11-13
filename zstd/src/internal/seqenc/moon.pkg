@@ -1,0 +1,10 @@
+import {
+  "gaato/zstd/internal/bits",
+  "gaato/zstd/internal/fse",
+}
+
+supported_targets = "js + native + wasm + wasm-gc"
+
+import {
+  "gaato/zstd/internal/bits",
+} for "test"

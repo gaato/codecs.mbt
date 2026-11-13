@@ -168,6 +168,7 @@ fn kind_name(kind : LiteralsKind) -> String {
     LitRaw => "raw"
     LitRle => "rle"
     LitHuffman(four~) => if four { "huffman four" } else { "huffman one" }
+    LitTreeless(four~) => if four { "treeless four" } else { "treeless one" }
   }
 }
 
@@ -209,6 +210,7 @@ test "every kind of literals section decodes" {
     }),
   ]
   for literals in inputs {
+    writer.reset()
     let n = literals.length()
     let best = writer.plan(literals, 0, n)
     kinds.push("\{n} \{kind_name(best.kind)}")

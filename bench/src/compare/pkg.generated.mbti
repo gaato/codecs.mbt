@@ -40,6 +40,8 @@ pub fn zlib_pieces() -> Array[Pieces]
 
 pub fn zlib_whole() -> Array[Whole]
 
+pub fn zstd_compress() -> Array[Compress]
+
 pub fn zstd_pieces() -> Array[Pieces]
 
 pub fn zstd_steps(BytesView, FixedArray[Byte]) -> Int32

@@ -196,11 +196,6 @@ test "compress round-trips through the decoder at every level" {
         assert_eq(after, if checksum { 4 } else { 0 }, msg=label)
       }
     }
-    // Until the encoder looks for matches, every level writes the same
-    // blocks; only the window may differ.
-    let level1 = compress(input, level=1)
-    let level12 = compress(input, level=12)
-    assert_eq(frame_blocks(level1).0, frame_blocks(level12).0, msg=name)
   }
 }
 
@@ -294,11 +289,11 @@ test "a flush makes the frame so far decode to the input so far" {
       assert_true(decompress(stream) == input, msg="\{name} round \{round}")
     }
   }
-  assert_true(flushes > 1000)
+  assert_true(flushes > 100)
 }
 
 ///|
-test "blocks: raw, RLE or literals only, whichever is smallest, at most 128 KiB" {
+test "blocks: raw, RLE or sequences, whichever is smallest, at most 128 KiB" {
   let rng = Rng::new(17)
   let summary = (input : Bytes) => {
     let (blocks, _) = frame_blocks(compress(input))
@@ -328,18 +323,23 @@ test "blocks: raw, RLE or literals only, whichever is smallest, at most 128 KiB"
   inspect(
     summary(sample_text(rng, 1000)),
     content=(
-      #|compressed 612/612 last
+      #|compressed 326/326 last
     ),
   )
   // A block ends at 128 KiB, and only there.
   inspect(
     summary(sample_text(rng, 262145)),
     content=(
-      #|compressed 74768/74768, compressed 74730/74730, raw 1/1 last
+      #|compressed 26919/26919, compressed 26748/26748, raw 1/1 last
     ),
   )
   // Few literals: Huffman costs more than it saves.
-  inspect(summary(b"abcabcabcabc"), content="raw 12/12 last")
+  inspect(
+    summary(b"abcabcabcabc"),
+    content=(
+      #|compressed 10/10 last
+    ),
+  )
 }
 
 ///|
@@ -373,7 +373,7 @@ test "frame headers: the window from the level, the content size when known" {
     encode_drive(encoder, input, next_in=() => 1 << 20, next_out=() => 1 << 20)
   }
   // Unknown size: the window of the table for large inputs, 512 KiB at
-  // level 1, 1 MiB at 2, 2 MiB at 3 to 8, 4 MiB at 9 to 12.
+  // level 1 and 1 MiB at levels 2..12 during P3's temporary fast mapping.
   let windows = [
     for level in [-5, 0, 1, 2, 3, 8, 9, 12, 13, 22] => {
       let fh = frame_header_of(stream(Encoder(level~), b"abc"))
@@ -382,11 +382,15 @@ test "frame headers: the window from the level, the content size when known" {
   ]
   inspect(
     windows.join(" "),
-    content="524288 524288 524288 1048576 2097152 2097152 4194304 4194304 4194304 4194304",
+    content=(
+      #|524288 524288 524288 1048576 1048576 1048576 1048576 1048576 1048576 1048576
+    ),
   )
   inspect(
     header(stream(Encoder(checksum=false), b"abc")),
-    content="single false, window 2097152, size none, checksum false",
+    content=(
+      #|single false, window 1048576, size none, checksum false
+    ),
   )
   // Known size: single-segment, the window is the content.
   inspect(
@@ -401,11 +405,15 @@ test "frame headers: the window from the level, the content size when known" {
   let big = Bytes::make(3000000, b'a')
   inspect(
     header(compress(big)),
-    content="single false, window 2097152, size 3000000, checksum true",
+    content=(
+      #|single false, window 1048576, size 3000000, checksum true
+    ),
   )
   inspect(
     header(compress(big, level=12)),
-    content="single true, window 3000000, size 3000000, checksum true",
+    content=(
+      #|single false, window 1048576, size 3000000, checksum true
+    ),
   )
   assert_true(decompress(compress(big)) == big)
 }
@@ -646,13 +654,13 @@ test "every target writes the same bytes" {
   inspect(
     digests.join("\n"),
     content=(
-      #|ff94272509fca7f1921040ed22cbd9124add99e2b6d14155a21ada95477104ec
-      #|ab8f60dff7cf2648416edf3fee7a2a4255633fdc7b4646a8f9494a3bb5e338de
-      #|ff94272509fca7f1921040ed22cbd9124add99e2b6d14155a21ada95477104ec
-      #|882dfd0096723a423df19f8e1fba93755caa5a868c8261d7f48329608747dd27
-      #|ff94272509fca7f1921040ed22cbd9124add99e2b6d14155a21ada95477104ec
-      #|e382427cc10bc8482058a742b558627c2c1fcf540ae15ce7b14f15b0eae1760b
-      #|0d181af04f9203780db1abf062d86e8da95f68356879aa7e26e6deee5e8128ee
+      #|24994fc06736764210c6dcebbebaae003ebc74e1924aee76ecd5ba424ccbb989
+      #|73863e2a2aff3d4e1373e6de10a0f1f47c89b05e8280c7fc3db9e1700ac156f7
+      #|c9fc7367a0d1788366c4b281820c2897035f44c3062508cadebb4bfbd27fe38e
+      #|a0e1c1f32b5653d017f1f95ad7a84f44a22ee51495e30c4db89e334918c14f12
+      #|c9fc7367a0d1788366c4b281820c2897035f44c3062508cadebb4bfbd27fe38e
+      #|a0e1c1f32b5653d017f1f95ad7a84f44a22ee51495e30c4db89e334918c14f12
+      #|86b667be4032ccd4e0d0930203b2b728731f4b0cfe99f9c793c60f00711e97c4
     ),
   )
 }

@@ -1,0 +1,5 @@
+import {
+  "gaato/zstd/internal/seqenc",
+}
+
+supported_targets = "js + native + wasm + wasm-gc"

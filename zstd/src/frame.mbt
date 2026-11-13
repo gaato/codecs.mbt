@@ -70,9 +70,7 @@ fn Decoder::frame_header(self : Decoder) -> Unit raise Stop {
   self.ll_table = None
   self.of_table = None
   self.ml_table = None
-  self.rep[0] = 1
-  self.rep[1] = 4
-  self.rep[2] = 8
+  self.rep.reset()
   self.new_frame = true
   self.hdr_len = 0
   self.state = BlockHeader

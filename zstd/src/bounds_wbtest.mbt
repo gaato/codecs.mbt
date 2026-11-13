@@ -160,16 +160,25 @@ const ENCODER_PENDING_MAX : Int32 = 4 + 10 + 3 + MAX_BLOCK_SIZE + 4
 
 ///|
 /// What RESOURCE_BOUNDS.md gives for `Encoder::memory_usage`: the input
-/// buffer (a block), the output writer and the Huffman coder's stream
-/// writer, each of which may grow to twice what it holds (plus the 5 bytes
-/// a write reserves), the Huffman coder's copy of four streams (less than a
-/// block), and the fixed tables of the literals writer.
+/// buffer, waiting output, match window/hash, sequence arrays and scratch,
+/// and both entropy coders. Packer capacities include doubling and the
+/// extra 5 bytes reserved by a write.
 fn encoder_memory_bound() -> Int32 {
   MAX_BLOCK_SIZE +
   2 * (ENCODER_PENDING_MAX + 5) +
-  2 * (MAX_BLOCK_SIZE + 5) +
+  LiteralsWriter::new().memory_usage() +
+  2 * 2 * (512 + 5) +
+  (1 << 20) +
   MAX_BLOCK_SIZE +
-  LiteralsWriter::new().memory_usage()
+  4 * (1 << 16) +
+  12 +
+  MAX_BLOCK_SIZE +
+  12 * (MAX_BLOCK_SIZE / 3) +
+  12 +
+  @seqenc.Writer().memory_usage() +
+  3 * 2 * (512 + 5) +
+  2 * ((1 << 19) + 5) +
+  MAX_BLOCK_SIZE
 }
 
 ///|
@@ -181,8 +190,19 @@ fn check_encoder_bounds(e : Encoder, _room : Int32) -> Unit raise {
   assert_true(e.writer.pending() <= ENCODER_PENDING_MAX)
   assert_eq(
     e.memory_usage(),
-    e.data.length() + e.writer.capacity() + e.literals.memory_usage(),
+    e.data.length() +
+    e.writer.capacity() +
+    e.literals.memory_usage() +
+    e.matcher.memory_usage() +
+    e.sequences.memory_usage() +
+    e.sequence_writer.memory_usage() +
+    e.sequence_bits.capacity() +
+    e.sequence_copy.length(),
   )
+  assert_true(e.sequence_bits.pending() <= 1 << 19)
+  assert_true(e.sequences.count <= MAX_BLOCK_SIZE / 3)
+  assert_true(e.sequences.ll.length() <= MAX_BLOCK_SIZE / 3)
+  assert_true(e.sequences.literal_count <= MAX_BLOCK_SIZE)
   assert_true(e.memory_usage() <= encoder_memory_bound())
 }
 
@@ -191,19 +211,21 @@ test "the encoder's fixed tables and its memory bound" {
   inspect(
     LiteralsWriter::new().memory_usage(),
     content=(
-      #|8036
+      #|14024
     ),
   )
   inspect(
     encoder_memory_bound(),
     content=(
-      #|794530
+      #|3698604
     ),
   )
-  // A new encoder holds only the fixed tables.
+  // A new encoder holds fixed tables and its level's hash table.
   inspect(
-    Encoder().memory_usage() == LiteralsWriter::new().memory_usage(),
-    content="true",
+    Encoder().memory_usage(),
+    content=(
+      #|285508
+    ),
   )
 }
 
@@ -317,8 +339,7 @@ test "the encoder's memory_usage stays within its bound after every step" {
       }
     }
   }
-  // The streams push it most of the way: 653,119 bytes on native, 620,351
-  // on JS, whose bit writer reserves 4 bytes a write instead of 5, so its
-  // buffers double at other points.
+  // Each backend's packer may double at different points; the common
+  // upper bound includes its retained capacity, not only pending bytes.
   assert_true(most > 600000 && most <= encoder_memory_bound())
 }

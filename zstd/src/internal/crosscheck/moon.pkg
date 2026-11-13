@@ -2,6 +2,7 @@
 // with the reference decoders. Not part of the library.
 
 import {
+  "gaato/zstd/internal/seqcases",
   "gaato/zstd",
   "gaato/zstd/internal/checksum",
   "moonbitlang/core/encoding/base64",

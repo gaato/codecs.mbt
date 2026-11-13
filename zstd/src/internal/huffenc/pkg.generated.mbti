@@ -15,6 +15,7 @@ pub struct HuffmanEncoder {
   // private fields
 }
 pub fn HuffmanEncoder::HuffmanEncoder() -> Self
+pub fn HuffmanEncoder::accepts(Self, FixedArray[Int32]) -> Bool
 pub fn HuffmanEncoder::build(Self, FixedArray[Int32]) -> Bool
 pub fn HuffmanEncoder::cost(Self, FixedArray[Int32]) -> Int32
 pub fn HuffmanEncoder::description_size(Self) -> Int32

@@ -1,8 +1,8 @@
 ///|
-/// usage: compare_ratio --list <brotli|deflate>
-///        compare_ratio <brotli|deflate> <min ms per measurement> <file>...
+/// usage: compare_ratio --list <zstd|brotli|deflate>
+///        compare_ratio <zstd|brotli|deflate> <min ms per measurement> <file>...
 /// Prints, for each encoder, level and file: the encoder, `default` or
-/// `max`, the level, the file, its size, the stream's size and MB/s (the
+/// `max` (zstd: `level1` and `level2`), the level, the file, its size, the stream's size and MB/s (the
 /// mean over at least the given time and 2 runs; 0 skips timing), and
 /// whether gaato/brotli or gaato/deflate decodes the stream back to the
 /// file, tab-separated. With the environment variable
@@ -11,7 +11,9 @@
 fn main {
   let args = @env.args()
   if args.get(1) == Some("--list") {
-    let list = if args.get(2) == Some("brotli") {
+    let list = if args.get(2) == Some("zstd") {
+      @compare.zstd_compress()
+    } else if args.get(2) == Some("brotli") {
       @compare.brotli_compress()
     } else {
       @compare.deflate_compress()
@@ -24,6 +26,7 @@ fn main {
   let format = args[1]
   let min_ms = @string.parse_int(args[2]) catch { _ => fail_with("bad time") }
   let encoders = match format {
+    "zstd" => @compare.zstd_compress()
     "brotli" => @compare.brotli_compress()
     "deflate" => @compare.deflate_compress()
     _ => fail_with("unknown format \{format}")
@@ -36,7 +39,9 @@ fn main {
     if only != "" && e.name != only {
       continue
     }
-    let levels = if e.default_level == e.max_level {
+    let levels = if format == "zstd" {
+      [("level1", 1), ("level2", 2)]
+    } else if e.default_level == e.max_level {
       [("default", e.default_level)]
     } else {
       [("default", e.default_level), ("max", e.max_level)]
@@ -63,6 +68,7 @@ fn main {
         // gaato/brotli and gaato/deflate say whether the stream decodes back.
         let back = try {
           match format {
+            "zstd" => @zstd.decompress(stream)
             "brotli" => @brotli.decompress(stream)
             _ => @deflate.decompress(stream)
           }

@@ -6,6 +6,7 @@
 import {
   "gaato/brotli",
   "gaato/deflate",
+  "gaato/zstd",
   "gaato/codec_bench/compare",
   "moonbitlang/core/env",
   "moonbitlang/core/string",

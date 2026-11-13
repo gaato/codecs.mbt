@@ -107,7 +107,7 @@ pub struct Decoder {
   priv mut of_table : Fse?
   priv mut ml_table : Fse?
   priv scratch : FseScratch
-  priv rep : FixedArray[Int32]
+  priv rep : @seqenc.Repeats
 }
 
 ///|
@@ -172,7 +172,7 @@ pub fn Decoder::Decoder(
     of_table: None,
     ml_table: None,
     scratch: FseScratch::new(),
-    rep: [1, 4, 8],
+    rep: @seqenc.Repeats(),
   }
 }
 

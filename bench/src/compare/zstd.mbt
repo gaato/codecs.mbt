@@ -79,3 +79,16 @@ fn[D : @codec_bytes.Decode] run_decode(
     }
   })
 }
+
+///|
+/// The Zstandard encoder; the ratio driver measures fast levels 1 and 2.
+pub fn zstd_compress() -> Array[Compress] {
+  [
+    {
+      name: "gaato/zstd",
+      default_level: 3,
+      max_level: 12,
+      encode: (input, level) => @zstd.compress(input, level~),
+    },
+  ]
+}

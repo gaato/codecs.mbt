@@ -20,10 +20,8 @@ const INITIAL_BUFFER : Int32 = 1024
 /// frame: Raw, RLE or Compressed blocks of at most 128 KiB, whichever is
 /// smallest, and the XXH64 content checksum unless asked not to.
 ///
-/// This version does not look for matches yet: a compressed block holds
-/// only Huffman-coded literals, so every level compresses alike, about as
-/// well as an order-0 entropy coder. The level already picks the window the
-/// frame declares, as zstd's would.
+/// Levels 1 and 2 use fast matching. Levels 3..12 temporarily use the
+/// level-2 fast parameters until their dedicated strategies are available.
 pub struct Encoder {
   priv checksum : Bool
   priv content_size : Int64?
@@ -36,6 +34,11 @@ pub struct Encoder {
   priv mut data : FixedArray[Byte]
   priv mut data_len : Int32
   priv literals : LiteralsWriter
+  priv matcher : @matcher.Fast
+  priv sequences : @seqenc.Block
+  priv sequence_writer : @seqenc.Writer
+  priv sequence_bits : @bits.BitPacker
+  priv mut sequence_copy : FixedArray[Byte]
   priv hash : @xxhash.Xxh64
   // Input taken so far in the frame.
   priv mut total_in : Int64
@@ -78,7 +81,7 @@ pub fn Encoder::Encoder(
     Some(size) if size >= 0 => Some(size)
     _ => None
   }
-  let params = params_for(level, content_size)
+  let params = params_for(level.min(2), content_size)
   let window_log = params.window_log
   let single_segment = content_size is Some(size) && size <= 1L << window_log
   let block_max = match content_size {
@@ -94,6 +97,16 @@ pub fn Encoder::Encoder(
     data: FixedArray::make(0, b'\x00'),
     data_len: 0,
     literals: LiteralsWriter::new(),
+    matcher: @matcher.Fast(
+      hash_log=params.hash_log,
+      min_match=params.min_match,
+      target_length=params.target_length,
+      window_log=params.window_log,
+    ),
+    sequences: @seqenc.Block(),
+    sequence_writer: @seqenc.Writer(),
+    sequence_bits: @bits.BitPacker(),
+    sequence_copy: [],
     hash: @xxhash.Xxh64(),
     total_in: 0,
     writer: @bits.BitPacker(),
@@ -115,6 +128,9 @@ pub fn Encoder::reset(self : Encoder) -> Unit {
   self.data = FixedArray::make(0, b'\x00')
   self.data_len = 0
   self.hash.reset()
+  self.matcher.reset()
+  self.sequence_writer.reset()
+  self.literals.reset()
   self.total_in = 0
   self.writer.reset()
   self.header_written = false
@@ -148,11 +164,18 @@ pub fn Encoder::last_produced(self : Encoder) -> Int32 {
 ///|
 /// Bytes the encoder holds in buffers that grow with the stream: the input
 /// buffer (at most one 128 KiB block), the output waiting for the caller,
-/// and the Huffman coder's buffers for four literal streams. At most
-/// 794,530 bytes (see RESOURCE_BOUNDS.md). `reset` releases the input
-/// buffer.
+/// match window and hash, sequence storage, and entropy coding scratch.
+/// Bounds for each are in RESOURCE_BOUNDS.md. `reset` releases the input
+/// and match window buffers.
 pub fn Encoder::memory_usage(self : Encoder) -> Int32 {
-  self.data.length() + self.writer.capacity() + self.literals.memory_usage()
+  self.data.length() +
+  self.writer.capacity() +
+  self.literals.memory_usage() +
+  self.matcher.memory_usage() +
+  self.sequences.memory_usage() +
+  self.sequence_writer.memory_usage() +
+  self.sequence_bits.capacity() +
+  self.sequence_copy.length()
 }
 
 ///|
@@ -375,7 +398,8 @@ fn Encoder::write_header(self : Encoder) -> Unit {
 fn Encoder::encode_block(self : Encoder, last : Bool) -> Unit {
   let n = self.data_len
   self.hash.update(self.data, 0, n)
-  write_block(self.writer, self.literals, self.data, n, last)
+  self.matcher.find(self.data, n, self.sequence_writer.repeats, self.sequences)
+  self.write_matched_block(n, last)
   self.data_len = 0
 }
 

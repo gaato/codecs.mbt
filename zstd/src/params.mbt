@@ -1,13 +1,13 @@
 // The encoder's parameters for each level, transcribed from the reference
 // implementation: facebook/zstd v1.5.7, lib/compress/clevels.h,
 // `ZSTD_defaultCParameters` (BSD license; see NOTICE), levels 1 to 12 of
-// its four tables. Only the window is used so far; the rest is for the
-// match finders.
+// its four tables. P3 uses fast and the level-2 row for levels 3..12;
+// the other rows remain here for the later dedicated strategies.
 
 ///|
 /// The match-finding strategy of a level, as `ZSTD_strategy` names it.
 /// `Btlazy2` and `Btopt` appear in the tables for small inputs at levels 9
-/// to 12. Read by the match finders, which come in later versions.
+/// to 12. P3 maps every requested strategy to fast with level-2 parameters.
 #warnings("-unused_constructor")
 priv enum Strategy {
   Fast
@@ -22,8 +22,8 @@ priv enum Strategy {
 ///|
 /// One row of `ZSTD_defaultCParameters`: the logs of the window, the chain
 /// table and the hash table, the search depth (log), the shortest match,
-/// the target length and the strategy. All but the window are for the
-/// match finders, which come in later versions.
+/// the target length and the strategy. Fast reads window_log, hash_log,
+/// min_match (hash width) and target_length (acceleration).
 #warnings("-unused_field")
 priv struct Params {
   window_log : Int32

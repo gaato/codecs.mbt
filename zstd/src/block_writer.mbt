@@ -11,6 +11,7 @@ priv enum LiteralsKind {
   LitRle
   /// In one stream, or four after a jump table.
   LitHuffman(four~ : Bool)
+  LitTreeless(four~ : Bool)
 }
 
 ///|
@@ -26,7 +27,9 @@ priv struct LiteralsPlan {
 /// Chooses and writes literals sections: the byte counts and the Huffman
 /// coder they need.
 priv struct LiteralsWriter {
-  huffman : @huffenc.HuffmanEncoder
+  mut huffman : @huffenc.HuffmanEncoder
+  mut previous : @huffenc.HuffmanEncoder
+  mut previous_valid : Bool
   // The counts of each byte value in the literals, and in one of their four
   // streams.
   counts : FixedArray[Int32]
@@ -37,15 +40,23 @@ priv struct LiteralsWriter {
 fn LiteralsWriter::new() -> LiteralsWriter {
   {
     huffman: @huffenc.HuffmanEncoder(),
+    previous: @huffenc.HuffmanEncoder(),
+    previous_valid: false,
     counts: FixedArray::make(256, 0),
     segment: FixedArray::make(256, 0),
   }
 }
 
 ///|
+fn LiteralsWriter::reset(self : LiteralsWriter) -> Unit {
+  self.previous_valid = false
+}
+
+///|
 /// The bytes the writer holds: the Huffman coder and the counts.
 fn LiteralsWriter::memory_usage(self : LiteralsWriter) -> Int32 {
   self.huffman.memory_usage() +
+  self.previous.memory_usage() +
   4 * (self.counts.length() + self.segment.length())
 }
 
@@ -85,7 +96,7 @@ fn LiteralsWriter::plan(
   if self.huffman.build(counts) {
     let four = len >= FOUR_STREAMS_FROM
     let streams = if four {
-      self.four_streams_size(data, start, len)
+      self.four_streams_size(self.huffman, data, start, len)
     } else {
       stream_size(self.huffman.cost(counts))
     }
@@ -93,6 +104,18 @@ fn LiteralsWriter::plan(
     let size = compressed_literals_header_len(len, payload, four) + payload
     if size < best.size {
       best = { kind: LitHuffman(four~), size, payload, }
+    }
+  }
+  if self.previous_valid && self.previous.accepts(counts) && len > 0 {
+    let four = len >= FOUR_STREAMS_FROM
+    let payload = if four {
+      self.four_streams_size(self.previous, data, start, len)
+    } else {
+      stream_size(self.previous.cost(counts))
+    }
+    let size = compressed_literals_header_len(len, payload, four) + payload
+    if size < best.size {
+      best = { kind: LitTreeless(four~), size, payload, }
     }
   }
   best
@@ -111,6 +134,7 @@ fn stream_size(bits : Int32) -> Int32 {
 /// them.
 fn LiteralsWriter::four_streams_size(
   self : LiteralsWriter,
+  coder : @huffenc.HuffmanEncoder,
   data : FixedArray[Byte],
   start : Int32,
   len : Int32,
@@ -125,7 +149,7 @@ fn LiteralsWriter::four_streams_size(
     for j in from..<until {
       counts[data[j].to_int()] += 1
     }
-    size += stream_size(self.huffman.cost(counts))
+    size += stream_size(coder.cost(counts))
   }
   size
 }
@@ -155,6 +179,16 @@ fn LiteralsWriter::write(
       write_compressed_literals_header(out, len, plan.payload, four)
       self.huffman.write_description(out)
       self.huffman.write_literals(out, data, start, len, four_streams=four)
+      let old = self.previous
+      self.previous = self.huffman
+      self.huffman = old
+      self.previous_valid = true
+    }
+    LitTreeless(four~) => {
+      // The header differs only in Literals_Block_Type.
+      out.write(2, 3)
+      write_compressed_literals_sizes(out, len, plan.payload, four)
+      self.previous.write_literals(out, data, start, len, four_streams=four)
     }
   }
 }
@@ -228,6 +262,16 @@ fn write_compressed_literals_header(
   four : Bool,
 ) -> Unit {
   out.write(2, 2)
+  write_compressed_literals_sizes(out, regenerated, compressed, four)
+}
+
+///|
+fn write_compressed_literals_sizes(
+  out : @bits.BitPacker,
+  regenerated : Int32,
+  compressed : Int32,
+  four : Bool,
+) -> Unit {
   let (size_format, width) = match
     compressed_literals_header_len(regenerated, compressed, four) {
     3 => (if four { 1 } else { 0 }, 10)
@@ -265,33 +309,47 @@ fn write_block_header(
 ///|
 /// Writes `data[0:n]` as one block, the smallest of three: raw; RLE when
 /// every byte is the same (and there are at least two); compressed, with
-/// only a literals section and no sequences, when it is smaller than raw.
+/// gathered literals and sequences, when it is smaller than raw.
 /// A compressed block is thus never larger than the block limit. An empty
 /// block is raw.
-fn write_block(
-  out : @bits.BitPacker,
-  literals : LiteralsWriter,
-  data : FixedArray[Byte],
-  n : Int32,
-  last : Bool,
-) -> Unit {
+fn Encoder::write_matched_block(self : Encoder, n : Int32, last : Bool) -> Unit {
+  let out = self.writer
+  let literals = self.literals
+  let data = self.data
   guard n > 0 else {
     write_block_header(out, last, RAW_BLOCK, 0)
     return
   }
-  let plan = literals.plan(data, 0, n)
-  if plan.kind is LitRle {
-    // `plan` takes RLE only for more than one byte.
+  let mut same = n > 1
+  for i in 1..<n {
+    if data[i] != data[0] {
+      same = false
+      break
+    }
+  }
+  if same {
+    // RLE is strictly smaller than raw for more than one byte.
     write_block_header(out, last, RLE_BLOCK, n)
     out.write(8, data[0].to_int())
-  } else if plan.size + 1 < n {
-    write_block_header(out, last, COMPRESSED_BLOCK, plan.size + 1)
-    literals.write(out, plan, data, 0, n)
-    // Number_of_Sequences: none, and nothing more in the section.
-    out.write(8, 0)
   } else {
-    write_block_header(out, last, RAW_BLOCK, n)
-    out.write_bytes(data, 0, n)
+    let block = self.sequences
+    self.sequence_bits.reset()
+    self.sequence_writer.write(self.sequence_bits, block)
+    let size = self.sequence_bits.pending()
+    let plan = literals.plan(block.literals, 0, block.literal_count)
+    if plan.size + size < n {
+      write_block_header(out, last, COMPRESSED_BLOCK, plan.size + size)
+      literals.write(out, plan, block.literals, 0, block.literal_count)
+      if self.sequence_copy.length() < size {
+        self.sequence_copy = FixedArray::make(size, b'\x00')
+      }
+      self.sequence_bits.drain_into(self.sequence_copy, 0) |> ignore
+      out.write_bytes(self.sequence_copy, 0, size)
+      self.sequence_writer.commit(block)
+    } else {
+      write_block_header(out, last, RAW_BLOCK, n)
+      out.write_bytes(data, 0, n)
+    }
   }
 }
 
