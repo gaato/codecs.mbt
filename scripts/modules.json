@@ -20,6 +20,7 @@
       "src/internal/huffman_code",
       "src/internal/match",
       "src/internal/match_length_fast",
+      "src/internal/row_tags_fast",
       "src/internal/seqcases",
       "src/internal/seqenc",
       "src/internal/proof_bits",

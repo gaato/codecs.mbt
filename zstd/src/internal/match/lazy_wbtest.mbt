@@ -54,52 +54,55 @@ fn reconstruct_matches(
 
 ///|
 test "lazy depths reconstruct across history rebasing and frame reset" {
-  for depth in 0..<=2 {
-    for width in [3, 4, 5, 6] {
-      let finder = Lazy(
-        hash_log=8,
-        chain_log=8,
-        min_match=width,
-        search_log=4,
-        depth~,
-        window_log=10,
-      )
-      let repeats = @seqenc.Repeats()
-      let block = @seqenc.Block()
-      let frame : Array[Byte] = []
-      let reps : FixedArray[Int32] = [1, 4, 8]
-      let mut seed = 8878U
-      for b in 0..<40 {
-        let data = FixedArray::makei(997, i => {
-          seed = seed * 1664525 + 1013904223
-          if b % 3 == 0 {
-            (seed >> 24).to_byte()
-          } else {
-            ((i + b * 997) % 251).to_byte()
-          }
-        })
-        finder.find(data, data.length(), repeats, block)
-        reconstruct_matches(block, data, frame, reps, 1024)
-        repeats.copy_from(block.repeats)
-        assert_true(
-          finder.history.start >= ((b + 1) * 997).min(1024) &&
-          finder.history.start <= 3072,
+  for row_finder in [false, true] {
+    for depth in 0..<=2 {
+      for width in [3, 4, 5, 6] {
+        let finder = Lazy(
+          hash_log=8,
+          chain_log=8,
+          min_match=width,
+          search_log=4,
+          depth~,
+          window_log=10,
+          row_finder~,
         )
-        assert_true(finder.memory_usage() <= 3072 + 8 * 256)
-        for q in finder.hash {
-          assert_true(q >= -1 && q < finder.history.start)
+        let repeats = @seqenc.Repeats()
+        let block = @seqenc.Block()
+        let frame : Array[Byte] = []
+        let reps : FixedArray[Int32] = [1, 4, 8]
+        let mut seed = 8878U
+        for b in 0..<40 {
+          let data = FixedArray::makei(997, i => {
+            seed = seed * 1664525 + 1013904223
+            if b % 3 == 0 {
+              (seed >> 24).to_byte()
+            } else {
+              ((i + b * 997) % 251).to_byte()
+            }
+          })
+          finder.find(data, data.length(), repeats, block)
+          reconstruct_matches(block, data, frame, reps, 1024)
+          repeats.copy_from(block.repeats)
+          assert_true(
+            finder.history.start >= ((b + 1) * 997).min(1024) &&
+            finder.history.start <= 3072,
+          )
+          assert_true(finder.memory_usage() <= 3072 + 8 * 256)
+          for q in finder.hash {
+            assert_true(q >= -1 && q < finder.history.start)
+          }
+          for q in finder.chain {
+            assert_true(q >= -1 && q < finder.history.start)
+          }
         }
-        for q in finder.chain {
-          assert_true(q >= -1 && q < finder.history.start)
-        }
+        finder.reset()
+        repeats.reset()
+        finder.find([], 0, repeats, block)
+        assert_eq(block.count, 0)
+        finder.find([b'a', b'b', b'c'], 3, repeats, block)
+        assert_eq(block.literal_count, 3)
+        assert_eq(finder.bias, 0)
       }
-      finder.reset()
-      repeats.reset()
-      finder.find([], 0, repeats, block)
-      assert_eq(block.count, 0)
-      finder.find([b'a', b'b', b'c'], 3, repeats, block)
-      assert_eq(block.literal_count, 3)
-      assert_eq(finder.bias, 0)
     }
   }
 }

@@ -29,8 +29,8 @@ test "large mixed frames preserve bytes across several window slides" {
     content=(
       #|441f5a400043c1df4f5d1b97934fe9eda7729d67d811fa63cf477b6375afa65c
       #|dd7e68ce686ac6f077107ef369274f63925b55963dcba0545c22ee7bf25cd9d2
-      #|191f7f620f0e21c0ffa3c4f931187857e684b7db8d61436bf3908ef6d84fa83e
-      #|1d80f5e73bae739f4745d4e74cb476ff6cee0506b8ab5cd711fd75af4fdf9cc8
+      #|18cdef3cb00ace6371445422fec2b3dc150f909dfbf390b95a5edae9bee6ca2d
+      #|333fb2ad0840b13aed2cfff6ba550bf5cd277002c9c14b941a557f0dc81b912a
     ),
   )
 }

@@ -170,7 +170,13 @@ fn encoder_memory_bound(params~ : Params = encoder_params(12, None)) -> Int32 {
   2 * (1 << params.window_log) +
   (1 << params.window_log).min(MAX_BLOCK_SIZE) +
   4 * (1 << params.hash_log) +
-  (if params.strategy is Fast { 12 } else { 4 * (1 << params.chain_log) }) +
+  (if params.strategy is Fast {
+    12
+  } else if params.row_finder {
+    1 << params.hash_log
+  } else {
+    4 * (1 << params.chain_log)
+  }) +
   MAX_BLOCK_SIZE +
   12 * (MAX_BLOCK_SIZE / 3) +
   12 +
@@ -219,7 +225,7 @@ test "the encoder's fixed tables and its memory bound" {
   inspect(
     encoder_memory_bound(),
     content=(
-      #|60849056
+      #|52460448
     ),
   )
   // A new encoder holds fixed tables and its level's hash table.
@@ -397,7 +403,7 @@ test "double-fast memory reaches both tables and the full window slack and a blo
 }
 
 ///|
-test "lazy memory reaches the maximum chain hash and full window slack and a block" {
+test "lazy memory reaches the maximum row tables and full window slack and a block" {
   let input = Bytes::makei(10 * (1 << 20), i => (i % 251).to_byte())
   let e = Encoder(level=12)
   let out = encode_drive(
@@ -410,7 +416,9 @@ test "lazy memory reaches the maximum chain hash and full window slack and a blo
   assert_true(decompress(out) == input)
   assert_eq(
     e.matcher.memory_usage(),
-    2 * (1 << 22) + MAX_BLOCK_SIZE + 4 * ((1 << 22) + (1 << 23)),
+    // Level 12 searches rows: 2^23 positions and as many tag bytes, no
+    // chain table.
+    2 * (1 << 22) + MAX_BLOCK_SIZE + 4 * (1 << 23) + (1 << 23),
   )
-  assert_eq(encoder_memory_bound(), 60849056)
+  assert_eq(encoder_memory_bound(), 52460448)
 }

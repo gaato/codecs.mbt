@@ -33,6 +33,9 @@ priv struct Params {
   min_match : Int32
   target_length : Int32
   strategy : Strategy
+  // Whether greedy, lazy and lazy2 search rows of tags instead of hash
+  // chains; set by `encoder_params`.
+  row_finder : Bool
 }
 
 ///|
@@ -61,6 +64,7 @@ fn row(
     min_match,
     target_length,
     strategy,
+    row_finder: false,
   }
 }
 
@@ -170,7 +174,8 @@ fn params_for(level : Int32, size : Int64?) -> Params {
 }
 
 ///|
-/// Selects by the adjusted row's strategy. Tree rows retain every numeric
+/// Selects by the adjusted row's strategy, and for greedy, lazy and lazy2
+/// whether to search rows (windows over 2^14 bytes). Tree rows retain every numeric
 /// parameter and use Lazy2 because binary trees/optimal parsing are outside
 /// the supported strategies. Adjustment precedes mapping so the reference
 /// tree cycle bit still governs the table sizes.
@@ -178,6 +183,10 @@ fn encoder_params(level : Int32, size : Int64?) -> Params {
   let params = params_for(level, size)
   match params.strategy {
     Btlazy2 | Btopt => { ..params, strategy: Lazy2, }
+    // As ZSTD_resolveRowMatchFinderMode decides by default, from the
+    // adjusted window. Tree rows keep hash chains: the reference searches
+    // them harder than a row's at most 64 candidates.
+    Greedy | Lazy | Lazy2 => { ..params, row_finder: params.window_log > 14, }
     _ => params
   }
 }

@@ -1,12 +1,15 @@
 ///|
-/// Hash-chain search and the reference greedy/lazy/lazy2 parser (depth 0/1/2).
-/// Positions are relative to retained history; a ring bias preserves chain
-/// slots when byte positions rebase, without moving the chain table.
+/// Hash-chain or row search and the reference greedy/lazy/lazy2 parser
+/// (depth 0/1/2). Positions are relative to retained history; a ring bias
+/// preserves chain slots when byte positions rebase, without moving the
+/// chain table. A row finder has no chain table (see row.mbt).
 #cfg(any(target="native", target="wasm"))
 pub struct Lazy {
   priv hash : FixedArray[Int32]
   priv chain : FixedArray[Int32]
-  priv hash_log : Int32
+  priv tags : FixedArray[Byte]
+  priv row_log : Int32
+  priv hash_bits : Int32
   priv hash_shift : Int32
   priv hash_prime : UInt64
   priv attempts : Int32
@@ -27,7 +30,9 @@ pub struct Lazy {
 pub struct Lazy {
   priv hash : FixedArray[Int32]
   priv chain : FixedArray[Int32]
-  priv hash_log : Int32
+  priv tags : FixedArray[Byte]
+  priv row_log : Int32
+  priv hash_bits : Int32
   priv min_match : Int32
   priv attempts : Int32
   priv depth : Int32
@@ -41,7 +46,10 @@ pub struct Lazy {
 
 ///|
 /// Allocates 2^hashLog heads and 2^chainLog links. Search examines at most
-/// 2^searchLog candidates. As in ZSTD_HcFindBestMatch, minMatch selects a
+/// 2^searchLog candidates. With `row_finder`, it allocates 2^hashLog
+/// positions and as many tag bytes instead, in rows of 2^rowLog, rowLog
+/// being searchLog clamped to 4..6, and examines at most 2^min(searchLog,
+/// rowLog) candidates, as ZSTD_RowFindBestMatch does. As in ZSTD_HcFindBestMatch, minMatch selects a
 /// 4..6 byte hash, while four-byte matches remain eligible. targetLength
 /// is not an early-exit threshold in the reference hash-chain search.
 #cfg(any(target="native", target="wasm"))
@@ -52,16 +60,34 @@ pub fn Lazy::Lazy(
   search_log~ : Int32,
   depth~ : Int32,
   window_log~ : Int32,
+  row_finder~ : Bool = false,
 ) -> Lazy {
+  let row_log = if row_finder { search_log.clamp(min=4, max=6) } else { 0 }
   let hash = FixedArray::make(1 << hash_log, -1)
-  let chain = FixedArray::make(1 << chain_log, -1)
+  let chain = FixedArray::make(if row_finder { 0 } else { 1 << chain_log }, -1)
+  let tags = FixedArray::make(
+    if row_finder {
+      1 << hash_log
+    } else {
+      0
+    },
+    b'\x00',
+  )
   {
     hash,
     chain,
-    hash_log,
+    tags,
+    row_log,
+    // A row's index takes hash_log - row_log bits; its tag eight more.
+    hash_bits: if row_finder {
+      hash_log - row_log + 8
+    } else {
+      hash_log
+    },
     hash_shift: 64 - min_match.clamp(min=4, max=6) * 8,
     hash_prime: hash_prime(min_match.clamp(min=4, max=6)),
-    attempts: 1 << search_log,
+    attempts: 1 <<
+    (if row_finder { search_log.min(row_log) } else { search_log }),
     depth,
     window: 1 << window_log,
     history: History::new(1 << window_log, hash, chain),
@@ -82,15 +108,33 @@ pub fn Lazy::Lazy(
   search_log~ : Int32,
   depth~ : Int32,
   window_log~ : Int32,
+  row_finder~ : Bool = false,
 ) -> Lazy {
+  let row_log = if row_finder { search_log.clamp(min=4, max=6) } else { 0 }
   let hash = FixedArray::make(1 << hash_log, -1)
-  let chain = FixedArray::make(1 << chain_log, -1)
+  let chain = FixedArray::make(if row_finder { 0 } else { 1 << chain_log }, -1)
+  let tags = FixedArray::make(
+    if row_finder {
+      1 << hash_log
+    } else {
+      0
+    },
+    b'\x00',
+  )
   {
     hash,
     chain,
-    hash_log,
+    tags,
+    row_log,
+    // A row's index takes hash_log - row_log bits; its tag eight more.
+    hash_bits: if row_finder {
+      hash_log - row_log + 8
+    } else {
+      hash_log
+    },
     min_match: min_match.clamp(min=4, max=6),
-    attempts: 1 << search_log,
+    attempts: 1 <<
+    (if row_finder { search_log.min(row_log) } else { search_log }),
     depth,
     window: 1 << window_log,
     history: History::new(1 << window_log, hash, chain),
@@ -105,6 +149,9 @@ pub fn Lazy::Lazy(
 /// Invalidates all frame positions and releases retained bytes.
 pub fn Lazy::reset(self : Lazy) -> Unit {
   self.history.reset()
+  // Row heads decide where the next positions go: clear them, so a reset
+  // finder fills its rows as a new one does.
+  self.tags.fill(b'\x00')
   self.next_update = 0
   self.bias = 0
 }
@@ -115,7 +162,7 @@ pub fn Lazy::reset(self : Lazy) -> Unit {
 fn Lazy::hash_at(self : Lazy, p : Int32) -> Int32 {
   // search's p <= end - 8; catch-up insertion i < p has more lookahead.
   (((load64(self.history.data, p) << self.hash_shift) * self.hash_prime) >>
-  (64 - self.hash_log)).to_int()
+  (64 - self.hash_bits)).to_int()
 }
 
 ///|
@@ -126,14 +173,14 @@ fn Lazy::hash_at(self : Lazy, p : Int32) -> Int32 {
     word = word | (self.history.data[p + i].to_uint64() << (8 * i))
   }
   if self.min_match == 4 {
-    ((word.to_uint() * 2654435761U) >> (32 - self.hash_log)).reinterpret_as_int()
+    ((word.to_uint() * 2654435761U) >> (32 - self.hash_bits)).reinterpret_as_int()
   } else {
     let prime = if self.min_match == 5 {
       889523592379UL
     } else {
       227718039650203UL
     }
-    (((word << (64 - self.min_match * 8)) * prime) >> (64 - self.hash_log)).to_int()
+    (((word << (64 - self.min_match * 8)) * prime) >> (64 - self.hash_bits)).to_int()
   }
 }
 
@@ -151,13 +198,28 @@ fn Lazy::length(self : Lazy, p : Int32, q : Int32, end : Int32) -> Int32 {
 }
 
 ///|
+/// Finds the longest match at p into match_length and match_distance.
+fn Lazy::search(self : Lazy, p : Int32, end : Int32, skipping : Bool) -> Unit {
+  if self.row_log > 0 {
+    self.row_search(p, end, skipping)
+  } else {
+    self.chain_search(p, end, skipping)
+  }
+}
+
+///|
 /// Catch up to, but exclude, p. Lazy skipping inserts only the previous
 /// searched position after an incompressible gap exceeding 2 KiB.
-fn Lazy::search(self : Lazy, p : Int32, end : Int32, skipping : Bool) -> Unit {
+fn Lazy::chain_search(
+  self : Lazy,
+  p : Int32,
+  end : Int32,
+  skipping : Bool,
+) -> Unit {
   let mut i = self.next_update
   while i < p {
     let h = self.hash_at(i)
-    // h fits hash_log bits; slot masks to chain.length() - 1.
+    // h fits hash_bits = hash_log bits; slot masks to chain.length() - 1.
     write(self.chain, self.slot(i), read(self.hash, h))
     write(self.hash, h, i)
     i += 1
@@ -373,9 +435,12 @@ pub fn Lazy::find_buffered(
 }
 
 ///|
-/// Retained byte capacity plus four bytes per hash head and chain link.
+/// Retained byte capacity, four bytes per hash head and chain link, and
+/// one per row tag.
 pub fn Lazy::memory_usage(self : Lazy) -> Int32 {
-  self.history.data.length() + 4 * (self.hash.length() + self.chain.length())
+  self.history.data.length() +
+  4 * (self.hash.length() + self.chain.length()) +
+  self.tags.length()
 }
 
 ///|
@@ -388,6 +453,9 @@ pub fn Lazy::history(self : Lazy) -> History {
 /// Makes room for a whole cutter block, independently of input step sizes.
 pub fn Lazy::prepare(self : Lazy, block_max : Int32) -> Unit {
   let cut = self.history.prepare(block_max)
-  self.bias = (self.bias + cut) & (self.chain.length() - 1)
+  // A row finder has no chain ring to keep aligned.
+  if self.chain.length() > 0 {
+    self.bias = (self.bias + cut) & (self.chain.length() - 1)
+  }
   self.next_update = (self.next_update - cut).max(0)
 }

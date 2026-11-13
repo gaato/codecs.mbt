@@ -2,7 +2,8 @@
 
 This is the implementation and measurement record for fast, double-fast,
 greedy, lazy and lazy2, measured on
-2026-11-13 with MoonBit 0.10.20, Zstandard CLI 1.5.7 and Node 26.13.1.
+2026-11-13 (sizes again on 2026-11-14, after row search) with MoonBit
+0.10.20, Zstandard CLI 1.5.7 and Node 26.13.1.
 Binary-tree and optimal strategies are not implemented.
 
 `internal/seqenc` owns `Distance`, `OffsetValue`, `Repeats`, `Block` and
@@ -71,7 +72,7 @@ an accepted block. Raw/RLE blocks preserve it; reset invalidates it.
 Four Huffman streams now compute their jump-table sizes first and write
 directly to the block output, removing the private stream buffer and copy.
 Only the small Huffman weight scratch remains. The total conservative
-encoder bound, including match and sequence storage, is 56,913,824 bytes;
+encoder bound, including match and sequence storage, is 52,460,448 bytes;
 the accounting and limit tests are in RESOURCE_BOUNDS.md.
 
 ## Double-fast matching
@@ -160,6 +161,43 @@ before retained frame history. Like fast/dfast, the exact window distance
 is eligible. This boundary policy can differ from libzstd's stricter
 prefix threshold, especially once a frame slides its window.
 
+## Row search
+
+Greedy, lazy and lazy2 search rows instead of hash chains when the
+adjusted window exceeds 2^14 bytes, as the reference does by default
+([ZSTD_RowFindBestMatch, v1.5.7](https://github.com/facebook/zstd/blob/v1.5.7/lib/compress/zstd_lazy.c)).
+The parser above is the same; only the search behind it changes.
+
+- **Tables.** `2^hashLog` positions in rows of `2^rowLog` slots, rowLog
+  being searchLog clamped to 4..6, and as many tag bytes. No chain table.
+  A position's hash takes `hashLog - rowLog + 8` bits: the high bits pick
+  the row, the low eight are its tag.
+- **Insertion.** A row is a ring walked backwards over slots
+  `1..2^rowLog - 1`; slot 0's tag byte holds the head, the newest slot.
+  Every searched position is inserted right after its search. After a gap
+  of more than 384 unindexed positions (a long match), only its first 96
+  and last 32 are inserted. While skipping an incompressible stretch,
+  only searched positions are.
+- **Search.** The row's tags are compared with the position's, sixteen at
+  a time with `@v128` on native and Wasm (`internal/row_tags_fast`), and
+  the matching slots are examined newest first, at most
+  `2^min(searchLog, rowLog)` of them, each through the same four-byte tail
+  check and match length as a chain candidate. The first candidate out of
+  the window ends the search: positions only get older along the row. So
+  an empty row, or one whose newest position is out of the window, is
+  skipped without comparing tags; on JS and Wasm GC the slots are walked
+  one by one and the walk stops at the first old position, tag or not.
+- **Not carried over.** The reference keeps the hashes of the next eight
+  positions and prefetches their rows and each candidate's bytes. MoonBit
+  has no prefetch, and the cached hashes equal computed ones, so this
+  changes no match. Reading the rows eight positions ahead with ordinary
+  loads, or prefetching through a C stub (`__builtin_prefetch`), was
+  slower than doing neither (native level 5: 12.7 and 12.5 ms against
+  11.5): an ordinary load holds back retirement until its line arrives,
+  and the stub's call and the second hash cost what the prefetch saves.
+  The hash salt, which spares the reference clearing its tables between
+  frames, is not needed: `reset` clears them.
+
 ### Reference finder selection
 
 In v1.5.7 `ZSTD_resolveRowMatchFinderMode` enables rows automatically for
@@ -172,21 +210,22 @@ below that boundary. At levels 6..8 the at-most-16-KiB rows are lazy2,
 still HC. Level five's smallest row is lazy. Unknown sizes keep the
 large-input rows and use rows at every level 5..12.
 
-This implementation chooses HC, a complete reference algorithm with a
-scalar implementation and explicit chain bounds. The CLI exposes
-`--no-row-match-finder`; primary algorithm comparisons use named files
-with `zstd -N --no-row-match-finder --check -c -q FILE`. The ordinary
-`zstd -N --check -c -q FILE` is measured separately below, so row-finder
-effects remain visible. Disabling rows does not turn tree rows into HC;
-their documented lazy2 mapping is a separate approximation.
+This implementation makes the same choice from the same adjusted row.
+Tree rows, mapped to lazy2, keep hash chains: the reference searches them
+harder than a row's at most 64 candidates, and a chain's `2^searchLog`
+attempts come closer. The tables below give both reference
+configurations: the default CLI (`zstd -N --check -c -q FILE`) uses rows
+where this encoder does, and `--no-row-match-finder` (HC) shows the hash
+chains this encoder used before rows, and still uses for small windows.
 
-Large-input levels 5..12 keep the reference's full logs: window 21..22,
-chain 18..22 and hash 19..23. At level twelve the tables alone occupy
-`4*(2^22 + 2^23) = 50,331,648` bytes (48 MiB). Adding the 4 MiB window
-and one 128 KiB block gives matcher capacity 54,657,024 bytes; the full
-encoder bound is **56,913,824 bytes (about 54.28 MiB)**. No parameter was
-capped below the selected reference row. RESOURCE_BOUNDS.md derives the
-remaining 2,256,800 bytes and names tests reaching the matcher maximum.
+Large-input levels 5..12 keep the reference's full logs: window 21..22
+and hash 19..23; with rows, chainLog allocates nothing. At level twelve
+the tables occupy `4*2^23 + 2^23 = 41,943,040` bytes (40 MiB). Adding the
+4 MiB window, its 4 MiB of slack and one 128 KiB block gives matcher
+capacity 50,462,720 bytes; the full encoder bound is **52,460,448 bytes
+(about 50.03 MiB)**. No parameter was capped below the selected reference
+row. RESOURCE_BOUNDS.md derives the remaining 1,997,728 bytes and names
+tests reaching the matcher maximum.
 
 ## Compression sizes
 
@@ -230,80 +269,83 @@ Sizes below are bytes, with each delta compared to its named finder.
 | canterbury/xargs.1 | 1868 | 1864 | 1864 | +0.21% | +0.21% | 1852 | 1851 | 1851 | +0.05% | +0.05% | 1800 | 1803 | 1803 | -0.17% | -0.17% | 1768 | 1767 | 1767 | +0.06% | +0.06% |
 | canterbury/fields.c | 3558 | 3560 | 3560 | -0.06% | -0.06% | 3589 | 3593 | 3593 | -0.11% | -0.11% | 3370 | 3384 | 3384 | -0.41% | -0.41% | 3200 | 3212 | 3212 | -0.37% | -0.37% |
 | canterbury/lcet10.txt | 158451 | 158524 | 158524 | -0.05% | -0.05% | 148574 | 148564 | 148564 | +0.01% | +0.01% | 141027 | 141028 | 141028 | -0.00% | -0.00% | 140526 | 140402 | 140402 | +0.09% | +0.09% |
-| canterbury/alice29.txt | 59650 | 59661 | 59661 | -0.02% | -0.02% | 57363 | 57352 | 57352 | +0.02% | +0.02% | 56984 | 56974 | 56974 | +0.02% | +0.02% | 54195 | 54188 | 54286 | +0.01% | -0.17% |
+| canterbury/alice29.txt | 59650 | 59661 | 59661 | -0.02% | -0.02% | 57363 | 57352 | 57352 | +0.02% | +0.02% | 56984 | 56974 | 56974 | +0.02% | +0.02% | 54287 | 54188 | 54286 | +0.18% | +0.00% |
 | canterbury/grammar.lsp | 1344 | 1341 | 1341 | +0.22% | +0.22% | 1334 | 1333 | 1333 | +0.08% | +0.08% | 1303 | 1295 | 1295 | +0.62% | +0.62% | 1263 | 1258 | 1258 | +0.40% | +0.40% |
 | canterbury/kennedy.xls | 115586 | 115395 | 115395 | +0.17% | +0.17% | 111373 | 112242 | 112242 | -0.77% | -0.77% | 112060 | 111831 | 111831 | +0.20% | +0.20% | 111064 | 110925 | 110925 | +0.13% | +0.13% |
 | canterbury/asyoulik.txt | 54524 | 54516 | 54516 | +0.01% | +0.01% | 51866 | 51858 | 51858 | +0.02% | +0.02% | 50336 | 50328 | 50328 | +0.02% | +0.02% | 51156 | 51146 | 51146 | +0.02% | +0.02% |
 | canterbury/plrabn12.txt | 217869 | 217845 | 217845 | +0.01% | +0.01% | 198499 | 198467 | 198467 | +0.02% | +0.02% | 191716 | 191688 | 191688 | +0.01% | +0.01% | 189649 | 189624 | 189624 | +0.01% | +0.01% |
 | silesia total | 73350330 | 73276937 | 73276937 | +0.10% | +0.10% | 69409877 | 69392937 | 69392937 | +0.02% | +0.02% | 66370602 | 66216569 | 66216569 | +0.23% | +0.23% | 65159456 | 65060346 | 65060346 | +0.15% | +0.15% |
-| canterbury total | 686930 | 686824 | 686824 | +0.02% | +0.02% | 649279 | 650125 | 650125 | -0.13% | -0.13% | 634725 | 634602 | 634602 | +0.02% | +0.02% | 628801 | 628626 | 628724 | +0.03% | +0.01% |
+| canterbury total | 686930 | 686824 | 686824 | +0.02% | +0.02% | 649279 | 650125 | 650125 | -0.13% | -0.13% | 634725 | 634602 | 634602 | +0.02% | +0.02% | 628893 | 628626 | 628724 | +0.04% | +0.03% |
 
 ### Levels 5–8
 
 | Corpus / file | gaato 5 | HC 5 | default 5 | Δ HC | Δ default | gaato 6 | HC 6 | default 6 | Δ HC | Δ default | gaato 7 | HC 7 | default 7 | Δ HC | Δ default | gaato 8 | HC 8 | default 8 | Δ HC | Δ default |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| silesia/mr | 3387593 | 3382779 | 3371721 | +0.14% | +0.47% | 3408192 | 3403515 | 3388785 | +0.14% | +0.57% | 3360956 | 3357935 | 3347832 | +0.09% | +0.39% | 3352463 | 3346948 | 3335624 | +0.16% | +0.50% |
-| silesia/nci | 2647058 | 2657009 | 2583327 | -0.37% | +2.47% | 2477064 | 2491427 | 2431116 | -0.58% | +1.89% | 2386372 | 2399100 | 2357794 | -0.53% | +1.21% | 2307676 | 2319298 | 2282118 | -0.50% | +1.12% |
-| silesia/sao | 5293556 | 5292597 | 5305357 | +0.02% | -0.22% | 5262099 | 5261586 | 5272387 | +0.01% | -0.20% | 5226683 | 5226052 | 5232513 | +0.01% | -0.11% | 5231357 | 5230833 | 5237417 | +0.01% | -0.12% |
-| silesia/xml | 586127 | 584916 | 575134 | +0.21% | +1.91% | 556442 | 555116 | 546825 | +0.24% | +1.76% | 535397 | 534307 | 531025 | +0.20% | +0.82% | 521673 | 520585 | 517820 | +0.21% | +0.74% |
-| silesia/osdb | 3444664 | 3448415 | 3431228 | -0.11% | +0.39% | 3399628 | 3402432 | 3398186 | -0.08% | +0.04% | 3349829 | 3354483 | 3359176 | -0.14% | -0.28% | 3341292 | 3344147 | 3350912 | -0.09% | -0.29% |
-| silesia/samba | 4757599 | 4765974 | 4727107 | -0.18% | +0.65% | 4606784 | 4617166 | 4578988 | -0.22% | +0.61% | 4541024 | 4550784 | 4518027 | -0.21% | +0.51% | 4469346 | 4466444 | 4435246 | +0.06% | +0.77% |
-| silesia/x-ray | 5491825 | 5492660 | 5557222 | -0.02% | -1.18% | 5485670 | 5486528 | 5552347 | -0.02% | -1.20% | 5395158 | 5396659 | 5435848 | -0.03% | -0.75% | 5398012 | 5398134 | 5436974 | -0.00% | -0.72% |
-| silesia/dickens | 3542463 | 3543504 | 3531666 | -0.03% | +0.31% | 3433761 | 3435357 | 3421208 | -0.05% | +0.37% | 3348562 | 3350795 | 3350065 | -0.07% | -0.04% | 3313832 | 3314753 | 3311445 | -0.03% | +0.07% |
-| silesia/mozilla | 17867585 | 17721565 | 17697993 | +0.82% | +0.96% | 17358903 | 17233327 | 17230352 | +0.73% | +0.75% | 17216963 | 17101257 | 17073567 | +0.68% | +0.84% | 17084267 | 16945455 | 16918320 | +0.82% | +0.98% |
-| silesia/ooffice | 2976836 | 2964007 | 2973517 | +0.43% | +0.11% | 2930818 | 2918438 | 2931752 | +0.42% | -0.03% | 2900484 | 2888533 | 2892718 | +0.41% | +0.27% | 2888183 | 2875983 | 2880633 | +0.42% | +0.26% |
-| silesia/reymont | 1889495 | 1891948 | 1866705 | -0.13% | +1.22% | 1793598 | 1795704 | 1774232 | -0.12% | +1.09% | 1729367 | 1731302 | 1719983 | -0.11% | +0.55% | 1690898 | 1693221 | 1680211 | -0.14% | +0.64% |
-| silesia/webster | 11348814 | 11361204 | 11231585 | -0.11% | +1.04% | 10932364 | 10943799 | 10825886 | -0.10% | +0.98% | 10647167 | 10662025 | 10582301 | -0.14% | +0.61% | 10511958 | 10518489 | 10433315 | -0.06% | +0.75% |
-| canterbury/sum | 12887 | 12897 | 12907 | -0.08% | -0.15% | 12561 | 12573 | 12584 | -0.10% | -0.18% | 12543 | 12554 | 12569 | -0.09% | -0.21% | 12507 | 12524 | 12538 | -0.14% | -0.25% |
-| canterbury/ptt5 | 53260 | 53418 | 53484 | -0.30% | -0.42% | 51067 | 51347 | 51374 | -0.55% | -0.60% | 51051 | 51317 | 51342 | -0.52% | -0.57% | 49625 | 49930 | 49960 | -0.61% | -0.67% |
-| canterbury/cp.html | 8152 | 8156 | 8159 | -0.05% | -0.09% | 8018 | 8020 | 8025 | -0.02% | -0.09% | 7994 | 7996 | 8002 | -0.03% | -0.10% | 7964 | 7968 | 7974 | -0.05% | -0.13% |
+| silesia/mr | 3376605 | 3382779 | 3371721 | -0.18% | +0.14% | 3393230 | 3403515 | 3388785 | -0.30% | +0.13% | 3349183 | 3357935 | 3347832 | -0.26% | +0.04% | 3339748 | 3346948 | 3335624 | -0.22% | +0.12% |
+| silesia/nci | 2569186 | 2657009 | 2583327 | -3.31% | -0.55% | 2414984 | 2491427 | 2431116 | -3.07% | -0.66% | 2342153 | 2399100 | 2357794 | -2.37% | -0.66% | 2268755 | 2319298 | 2282118 | -2.18% | -0.59% |
+| silesia/sao | 5305873 | 5292597 | 5305357 | +0.25% | +0.01% | 5272832 | 5261586 | 5272387 | +0.21% | +0.01% | 5232852 | 5226052 | 5232513 | +0.13% | +0.01% | 5237611 | 5230833 | 5237417 | +0.13% | +0.00% |
+| silesia/xml | 576179 | 584916 | 575134 | -1.49% | +0.18% | 548144 | 555116 | 546825 | -1.26% | +0.24% | 532205 | 534307 | 531025 | -0.39% | +0.22% | 518854 | 520585 | 517820 | -0.33% | +0.20% |
+| silesia/osdb | 3424658 | 3448415 | 3431228 | -0.69% | -0.19% | 3394611 | 3402432 | 3398186 | -0.23% | -0.11% | 3355038 | 3354483 | 3359176 | +0.02% | -0.12% | 3348091 | 3344147 | 3350912 | +0.12% | -0.08% |
+| silesia/samba | 4718949 | 4765974 | 4727107 | -0.99% | -0.17% | 4572294 | 4617166 | 4578988 | -0.97% | -0.15% | 4508565 | 4550784 | 4518027 | -0.93% | -0.21% | 4437588 | 4466444 | 4435246 | -0.65% | +0.05% |
+| silesia/x-ray | 5557699 | 5492660 | 5557222 | +1.18% | +0.01% | 5553090 | 5486528 | 5552347 | +1.21% | +0.01% | 5434521 | 5396659 | 5435848 | +0.70% | -0.02% | 5436461 | 5398134 | 5436974 | +0.71% | -0.01% |
+| silesia/dickens | 3529919 | 3543504 | 3531666 | -0.38% | -0.05% | 3418714 | 3435357 | 3421208 | -0.48% | -0.07% | 3345471 | 3350795 | 3350065 | -0.16% | -0.14% | 3308779 | 3314753 | 3311445 | -0.18% | -0.08% |
+| silesia/mozilla | 17843760 | 17721565 | 17697993 | +0.69% | +0.82% | 17359578 | 17233327 | 17230352 | +0.73% | +0.75% | 17178682 | 17101257 | 17073567 | +0.45% | +0.62% | 17050162 | 16945455 | 16918320 | +0.62% | +0.78% |
+| silesia/ooffice | 2986443 | 2964007 | 2973517 | +0.76% | +0.43% | 2944068 | 2918438 | 2931752 | +0.88% | +0.42% | 2904810 | 2888533 | 2892718 | +0.56% | +0.42% | 2892495 | 2875983 | 2880633 | +0.57% | +0.41% |
+| silesia/reymont | 1863899 | 1891948 | 1866705 | -1.48% | -0.15% | 1772566 | 1795704 | 1774232 | -1.29% | -0.09% | 1717576 | 1731302 | 1719983 | -0.79% | -0.14% | 1677551 | 1693221 | 1680211 | -0.93% | -0.16% |
+| silesia/webster | 11211658 | 11361204 | 11231585 | -1.32% | -0.18% | 10806348 | 10943799 | 10825886 | -1.26% | -0.18% | 10555494 | 10662025 | 10582301 | -1.00% | -0.25% | 10415273 | 10518489 | 10433315 | -0.98% | -0.17% |
+| canterbury/sum | 12894 | 12897 | 12907 | -0.02% | -0.10% | 12573 | 12573 | 12584 | +0.00% | -0.09% | 12554 | 12554 | 12569 | +0.00% | -0.12% | 12522 | 12524 | 12538 | -0.02% | -0.13% |
+| canterbury/ptt5 | 53331 | 53418 | 53484 | -0.16% | -0.29% | 51098 | 51347 | 51374 | -0.48% | -0.54% | 51076 | 51317 | 51342 | -0.47% | -0.52% | 49660 | 49930 | 49960 | -0.54% | -0.60% |
+| canterbury/cp.html | 8150 | 8156 | 8159 | -0.07% | -0.11% | 8017 | 8020 | 8025 | -0.04% | -0.10% | 7994 | 7996 | 8002 | -0.03% | -0.10% | 7965 | 7968 | 7974 | -0.04% | -0.11% |
 | canterbury/xargs.1 | 1755 | 1754 | 1754 | +0.06% | +0.06% | 1754 | 1752 | 1752 | +0.11% | +0.11% | 1753 | 1752 | 1752 | +0.06% | +0.06% | 1753 | 1752 | 1752 | +0.06% | +0.06% |
 | canterbury/fields.c | 3164 | 3175 | 3175 | -0.35% | -0.35% | 3133 | 3141 | 3141 | -0.25% | -0.25% | 3125 | 3132 | 3132 | -0.22% | -0.22% | 3125 | 3131 | 3131 | -0.19% | -0.19% |
-| canterbury/lcet10.txt | 136232 | 136246 | 136241 | -0.01% | -0.01% | 132673 | 132548 | 132588 | +0.09% | +0.06% | 131048 | 131052 | 131307 | -0.00% | -0.20% | 129939 | 129849 | 130052 | +0.07% | -0.09% |
-| canterbury/alice29.txt | 53270 | 53255 | 53376 | +0.03% | -0.20% | 53085 | 53077 | 53115 | +0.02% | -0.06% | 53052 | 53042 | 53199 | +0.02% | -0.28% | 52578 | 52580 | 52714 | -0.00% | -0.26% |
+| canterbury/lcet10.txt | 136226 | 136246 | 136241 | -0.01% | -0.01% | 132704 | 132548 | 132588 | +0.12% | +0.09% | 131293 | 131052 | 131307 | +0.18% | -0.01% | 130146 | 129849 | 130052 | +0.23% | +0.07% |
+| canterbury/alice29.txt | 53384 | 53255 | 53376 | +0.24% | +0.01% | 53121 | 53077 | 53115 | +0.08% | +0.01% | 53206 | 53042 | 53199 | +0.31% | +0.01% | 52711 | 52580 | 52714 | +0.25% | -0.01% |
 | canterbury/grammar.lsp | 1253 | 1249 | 1249 | +0.32% | +0.32% | 1252 | 1247 | 1247 | +0.40% | +0.40% | 1251 | 1246 | 1246 | +0.40% | +0.40% | 1251 | 1246 | 1246 | +0.40% | +0.40% |
-| canterbury/kennedy.xls | 110637 | 111216 | 111251 | -0.52% | -0.55% | 106003 | 107980 | 107919 | -1.83% | -1.78% | 104340 | 106426 | 106592 | -1.96% | -2.11% | 109789 | 110926 | 111057 | -1.03% | -1.14% |
-| canterbury/asyoulik.txt | 49732 | 49729 | 49779 | +0.01% | -0.09% | 48506 | 48504 | 48579 | +0.00% | -0.15% | 48093 | 48093 | 48144 | +0.00% | -0.11% | 47670 | 47665 | 47792 | +0.01% | -0.26% |
-| canterbury/plrabn12.txt | 186054 | 186015 | 186221 | +0.02% | -0.09% | 182088 | 182071 | 182274 | +0.01% | -0.10% | 180223 | 180206 | 180675 | +0.01% | -0.25% | 179003 | 178988 | 179367 | +0.01% | -0.20% |
-| silesia total | 63233615 | 63106578 | 62852562 | +0.20% | +0.61% | 61645323 | 61544395 | 61352064 | +0.16% | +0.48% | 60637962 | 60553232 | 60400849 | +0.14% | +0.39% | 60110957 | 59974290 | 59820035 | +0.23% | +0.49% |
-| canterbury total | 616396 | 617110 | 617596 | -0.12% | -0.19% | 600140 | 602260 | 602598 | -0.35% | -0.41% | 594473 | 596816 | 597960 | -0.39% | -0.58% | 595204 | 596559 | 597583 | -0.23% | -0.40% |
+| canterbury/kennedy.xls | 110898 | 111216 | 111251 | -0.29% | -0.32% | 105834 | 107980 | 107919 | -1.99% | -1.93% | 104422 | 106426 | 106592 | -1.88% | -2.04% | 109750 | 110926 | 111057 | -1.06% | -1.18% |
+| canterbury/asyoulik.txt | 49776 | 49729 | 49779 | +0.09% | -0.01% | 48576 | 48504 | 48579 | +0.15% | -0.01% | 48140 | 48093 | 48144 | +0.10% | -0.01% | 47788 | 47665 | 47792 | +0.26% | -0.01% |
+| canterbury/plrabn12.txt | 186241 | 186015 | 186221 | +0.12% | +0.01% | 182289 | 182071 | 182274 | +0.12% | +0.01% | 180689 | 180206 | 180675 | +0.27% | +0.01% | 179381 | 178988 | 179367 | +0.22% | +0.01% |
+| silesia total | 62964828 | 63106578 | 62852562 | -0.22% | +0.18% | 61450459 | 61544395 | 61352064 | -0.15% | +0.16% | 60456550 | 60553232 | 60400849 | -0.16% | +0.09% | 59931368 | 59974290 | 59820035 | -0.07% | +0.19% |
+| canterbury total | 617072 | 617110 | 617596 | -0.01% | -0.08% | 600351 | 602260 | 602598 | -0.32% | -0.37% | 595503 | 596816 | 597960 | -0.22% | -0.41% | 596052 | 596559 | 597583 | -0.08% | -0.26% |
 
 ### Levels 9–12
 
 | Corpus / file | gaato 9 | HC 9 | default 9 | Δ HC | Δ default | gaato 10 | HC 10 | default 10 | Δ HC | Δ default | gaato 11 | HC 11 | default 11 | Δ HC | Δ default | gaato 12 | HC 12 | default 12 | Δ HC | Δ default |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| silesia/mr | 3332990 | 3325572 | 3317712 | +0.22% | +0.46% | 3298543 | 3291457 | 3287133 | +0.22% | +0.35% | 3284172 | 3277572 | 3271230 | +0.20% | +0.40% | 3272592 | 3266079 | 3268705 | +0.20% | +0.12% |
-| silesia/nci | 2271712 | 2280704 | 2247493 | -0.39% | +1.08% | 2182937 | 2191056 | 2167618 | -0.37% | +0.71% | 2133876 | 2141417 | 2106557 | -0.35% | +1.30% | 2095009 | 2103623 | 2105187 | -0.41% | -0.48% |
-| silesia/sao | 5212019 | 5211585 | 5215726 | +0.01% | -0.07% | 5201084 | 5200747 | 5202036 | +0.01% | -0.02% | 5199513 | 5199126 | 5200433 | +0.01% | -0.02% | 5197920 | 5197735 | 5198861 | +0.00% | -0.02% |
-| silesia/xml | 516959 | 516015 | 517101 | +0.18% | -0.03% | 506200 | 505491 | 505784 | +0.14% | +0.08% | 498663 | 498078 | 498252 | +0.12% | +0.08% | 498662 | 498062 | 498099 | +0.12% | +0.11% |
-| silesia/osdb | 3335675 | 3337216 | 3342533 | -0.05% | -0.21% | 3279719 | 3281888 | 3286549 | -0.07% | -0.21% | 3216667 | 3217839 | 3225629 | -0.04% | -0.28% | 3215682 | 3216619 | 3221782 | -0.03% | -0.19% |
-| silesia/samba | 4393056 | 4394559 | 4362741 | -0.03% | +0.69% | 4337584 | 4340518 | 4322821 | -0.07% | +0.34% | 4323333 | 4326496 | 4302428 | -0.07% | +0.49% | 4281828 | 4291274 | 4299325 | -0.22% | -0.41% |
-| silesia/x-ray | 5346170 | 5345776 | 5361360 | +0.01% | -0.28% | 5319393 | 5318872 | 5321153 | +0.01% | -0.03% | 5318873 | 5317475 | 5316375 | +0.03% | +0.05% | 5310980 | 5310638 | 5311999 | +0.01% | -0.02% |
-| silesia/dickens | 3281524 | 3281245 | 3282528 | +0.01% | -0.03% | 3215179 | 3214923 | 3217628 | +0.01% | -0.08% | 3176929 | 3176695 | 3175501 | +0.01% | +0.04% | 3161312 | 3160941 | 3168795 | +0.01% | -0.24% |
-| silesia/mozilla | 16891538 | 16760484 | 16735963 | +0.78% | +0.93% | 16791632 | 16667318 | 16652199 | +0.75% | +0.84% | 16765412 | 16642207 | 16621465 | +0.74% | +0.87% | 16718952 | 16603224 | 16613591 | +0.70% | +0.63% |
-| silesia/ooffice | 2866312 | 2854493 | 2856869 | +0.41% | +0.33% | 2851045 | 2839119 | 2839771 | +0.42% | +0.40% | 2847254 | 2835381 | 2834194 | +0.42% | +0.46% | 2842163 | 2830327 | 2832083 | +0.42% | +0.36% |
-| silesia/reymont | 1673027 | 1675553 | 1670543 | -0.15% | +0.15% | 1618170 | 1620617 | 1619324 | -0.15% | -0.07% | 1580745 | 1582449 | 1579346 | -0.11% | +0.09% | 1572642 | 1574748 | 1577095 | -0.13% | -0.28% |
-| silesia/webster | 10337636 | 10343566 | 10271610 | -0.06% | +0.64% | 10101099 | 10111731 | 10074530 | -0.11% | +0.26% | 10002432 | 10012523 | 9955035 | -0.10% | +0.48% | 9897958 | 9919874 | 9938414 | -0.22% | -0.41% |
-| canterbury/sum | 12495 | 12511 | 12518 | -0.13% | -0.18% | 12493 | 12505 | 12515 | -0.10% | -0.18% | 12495 | 12491 | 12491 | +0.03% | +0.03% | 12492 | 12485 | 12485 | +0.06% | +0.06% |
-| canterbury/ptt5 | 49625 | 49930 | 49960 | -0.61% | -0.67% | 49617 | 49918 | 49953 | -0.60% | -0.67% | 49650 | 49944 | 49973 | -0.59% | -0.65% | 49650 | 49944 | 49973 | -0.59% | -0.65% |
-| canterbury/cp.html | 7923 | 7925 | 7933 | -0.03% | -0.13% | 7904 | 7907 | 7920 | -0.04% | -0.20% | 7923 | 7904 | 7904 | +0.24% | +0.24% | 7900 | 7899 | 7899 | +0.01% | +0.01% |
+| silesia/mr | 3325054 | 3325572 | 3317712 | -0.02% | +0.22% | 3294069 | 3291457 | 3287133 | +0.08% | +0.21% | 3277679 | 3277572 | 3271230 | +0.00% | +0.20% | 3275136 | 3266079 | 3268705 | +0.28% | +0.20% |
+| silesia/nci | 2237865 | 2280704 | 2247493 | -1.88% | -0.43% | 2158905 | 2191056 | 2167618 | -1.47% | -0.40% | 2097925 | 2141417 | 2106557 | -2.03% | -0.41% | 2096348 | 2103623 | 2105187 | -0.35% | -0.42% |
+| silesia/sao | 5215842 | 5211585 | 5215726 | +0.08% | +0.00% | 5202481 | 5200747 | 5202036 | +0.03% | +0.01% | 5200566 | 5199126 | 5200433 | +0.03% | +0.00% | 5199048 | 5197735 | 5198861 | +0.03% | +0.00% |
+| silesia/xml | 517981 | 516015 | 517101 | +0.38% | +0.17% | 506449 | 505491 | 505784 | +0.19% | +0.13% | 498778 | 498078 | 498252 | +0.14% | +0.11% | 498636 | 498062 | 498099 | +0.12% | +0.11% |
+| silesia/osdb | 3342000 | 3337216 | 3342533 | +0.14% | -0.02% | 3285845 | 3281888 | 3286549 | +0.12% | -0.02% | 3224651 | 3217839 | 3225629 | +0.21% | -0.03% | 3220322 | 3216619 | 3221782 | +0.12% | -0.05% |
+| silesia/samba | 4357170 | 4394559 | 4362741 | -0.85% | -0.13% | 4314757 | 4340518 | 4322821 | -0.59% | -0.19% | 4293174 | 4326496 | 4302428 | -0.77% | -0.22% | 4289662 | 4291274 | 4299325 | -0.04% | -0.22% |
+| silesia/x-ray | 5362491 | 5345776 | 5361360 | +0.31% | +0.02% | 5321385 | 5318872 | 5321153 | +0.05% | +0.00% | 5316970 | 5317475 | 5316375 | -0.01% | +0.01% | 5312283 | 5310638 | 5311999 | +0.03% | +0.01% |
+| silesia/dickens | 3282705 | 3281245 | 3282528 | +0.04% | +0.01% | 3217866 | 3214923 | 3217628 | +0.09% | +0.01% | 3175589 | 3176695 | 3175501 | -0.03% | +0.00% | 3169266 | 3160941 | 3168795 | +0.26% | +0.01% |
+| silesia/mozilla | 16860113 | 16760484 | 16735963 | +0.59% | +0.74% | 16769346 | 16667318 | 16652199 | +0.61% | +0.70% | 16736215 | 16642207 | 16621465 | +0.56% | +0.69% | 16727368 | 16603224 | 16613591 | +0.75% | +0.68% |
+| silesia/ooffice | 2868327 | 2854493 | 2856869 | +0.48% | +0.40% | 2851230 | 2839119 | 2839771 | +0.43% | +0.40% | 2845912 | 2835381 | 2834194 | +0.37% | +0.41% | 2843616 | 2830327 | 2832083 | +0.47% | +0.41% |
+| silesia/reymont | 1668660 | 1675553 | 1670543 | -0.41% | -0.11% | 1617104 | 1620617 | 1619324 | -0.22% | -0.14% | 1577319 | 1582449 | 1579346 | -0.32% | -0.13% | 1575175 | 1574748 | 1577095 | +0.03% | -0.12% |
+| silesia/webster | 10256719 | 10343566 | 10271610 | -0.84% | -0.14% | 10055318 | 10111731 | 10074530 | -0.56% | -0.19% | 9933957 | 10012523 | 9955035 | -0.78% | -0.21% | 9915764 | 9919874 | 9938414 | -0.04% | -0.23% |
+| canterbury/sum | 12503 | 12511 | 12518 | -0.06% | -0.12% | 12502 | 12505 | 12515 | -0.02% | -0.10% | 12495 | 12491 | 12491 | +0.03% | +0.03% | 12492 | 12485 | 12485 | +0.06% | +0.06% |
+| canterbury/ptt5 | 49660 | 49930 | 49960 | -0.54% | -0.60% | 49658 | 49918 | 49953 | -0.52% | -0.59% | 49687 | 49944 | 49973 | -0.51% | -0.57% | 49687 | 49944 | 49973 | -0.51% | -0.57% |
+| canterbury/cp.html | 7925 | 7925 | 7933 | +0.00% | -0.10% | 7912 | 7907 | 7920 | +0.06% | -0.10% | 7923 | 7904 | 7904 | +0.24% | +0.24% | 7900 | 7899 | 7899 | +0.01% | +0.01% |
 | canterbury/xargs.1 | 1753 | 1751 | 1751 | +0.11% | +0.11% | 1753 | 1751 | 1751 | +0.11% | +0.11% | 1754 | 1745 | 1745 | +0.52% | +0.52% | 1754 | 1739 | 1739 | +0.86% | +0.86% |
 | canterbury/fields.c | 3130 | 3126 | 3126 | +0.13% | +0.13% | 3125 | 3126 | 3126 | -0.03% | -0.03% | 3147 | 3095 | 3095 | +1.68% | +1.68% | 3133 | 3041 | 3041 | +3.03% | +3.03% |
-| canterbury/lcet10.txt | 129939 | 129849 | 130052 | +0.07% | -0.09% | 129153 | 129069 | 129223 | +0.07% | -0.05% | 128714 | 128625 | 128720 | +0.07% | -0.00% | 128714 | 128625 | 128720 | +0.07% | -0.00% |
-| canterbury/alice29.txt | 52137 | 52130 | 52192 | +0.01% | -0.11% | 51876 | 51869 | 51898 | +0.01% | -0.04% | 52137 | 51495 | 51495 | +1.25% | +1.25% | 51733 | 51496 | 51496 | +0.46% | +0.46% |
+| canterbury/lcet10.txt | 130146 | 129849 | 130052 | +0.23% | +0.07% | 129320 | 129069 | 129223 | +0.19% | +0.08% | 128791 | 128625 | 128720 | +0.13% | +0.06% | 128791 | 128625 | 128720 | +0.13% | +0.06% |
+| canterbury/alice29.txt | 52196 | 52130 | 52192 | +0.13% | +0.01% | 51902 | 51869 | 51898 | +0.06% | +0.01% | 52137 | 51495 | 51495 | +1.25% | +1.25% | 51733 | 51496 | 51496 | +0.46% | +0.46% |
 | canterbury/grammar.lsp | 1251 | 1245 | 1245 | +0.48% | +0.48% | 1251 | 1245 | 1245 | +0.48% | +0.48% | 1254 | 1237 | 1237 | +1.37% | +1.37% | 1252 | 1228 | 1228 | +1.95% | +1.95% |
-| canterbury/kennedy.xls | 109789 | 110926 | 111062 | -1.03% | -1.15% | 109856 | 110963 | 111002 | -1.00% | -1.03% | 110049 | 111177 | 111253 | -1.01% | -1.08% | 110049 | 111177 | 111253 | -1.01% | -1.08% |
-| canterbury/asyoulik.txt | 47446 | 47439 | 47546 | +0.01% | -0.21% | 47311 | 47309 | 47365 | +0.00% | -0.11% | 47415 | 47083 | 47083 | +0.71% | +0.71% | 47241 | 47047 | 47047 | +0.41% | +0.41% |
-| canterbury/plrabn12.txt | 179003 | 178988 | 179367 | +0.01% | -0.20% | 178023 | 177997 | 178268 | +0.01% | -0.14% | 177351 | 177327 | 177491 | +0.01% | -0.08% | 177351 | 177327 | 177491 | +0.01% | -0.08% |
-| silesia total | 59458618 | 59326768 | 59182179 | +0.22% | +0.47% | 58702585 | 58583737 | 58496546 | +0.20% | +0.35% | 58347869 | 58227258 | 58086445 | +0.21% | +0.45% | 58065700 | 57973144 | 58033936 | +0.16% | +0.05% |
-| canterbury total | 594491 | 595820 | 596752 | -0.22% | -0.38% | 592362 | 593659 | 594266 | -0.22% | -0.32% | 591889 | 592123 | 592487 | -0.04% | -0.10% | 591269 | 592008 | 592372 | -0.12% | -0.19% |
+| canterbury/kennedy.xls | 109782 | 110926 | 111062 | -1.03% | -1.15% | 109749 | 110963 | 111002 | -1.09% | -1.13% | 110054 | 111177 | 111253 | -1.01% | -1.08% | 110054 | 111177 | 111253 | -1.01% | -1.08% |
+| canterbury/asyoulik.txt | 47539 | 47439 | 47546 | +0.21% | -0.01% | 47363 | 47309 | 47365 | +0.11% | -0.00% | 47415 | 47083 | 47083 | +0.71% | +0.71% | 47241 | 47047 | 47047 | +0.41% | +0.41% |
+| canterbury/plrabn12.txt | 179381 | 178988 | 179367 | +0.22% | +0.01% | 178285 | 177997 | 178268 | +0.16% | +0.01% | 177505 | 177327 | 177491 | +0.10% | +0.01% | 177505 | 177327 | 177491 | +0.10% | +0.01% |
+| silesia total | 59294927 | 59326768 | 59182179 | -0.05% | +0.19% | 58594755 | 58583737 | 58496546 | +0.02% | +0.17% | 58178735 | 58227258 | 58086445 | -0.08% | +0.16% | 58122624 | 57973144 | 58033936 | +0.26% | +0.15% |
+| canterbury total | 595266 | 595820 | 596752 | -0.09% | -0.25% | 592820 | 593659 | 594266 | -0.14% | -0.24% | 592162 | 592123 | 592487 | +0.01% | -0.05% | 591542 | 592008 | 592372 | -0.08% | -0.14% |
 
 ### Outlier investigation
 
 Every corpus total is within 1% under both reference configurations.
-Against HC, Silesia deltas range from +0.02% to +0.23%; Canterbury
-ranges from -0.39% to +0.03%. Against default, the largest corpus delta
-is Silesia level five at +0.61%, consistent with the different row search.
+Against default, which searches rows where this encoder does, Silesia
+deltas range from +0.02% to +0.23% and Canterbury from -0.41% to +0.03%.
+Against HC, Silesia ranges from -0.22% to +0.26% and Canterbury from
+-0.32% to +0.04%. With hash chains at levels 5..12, the Silesia deltas
+against default reached +0.61% (level five); searching rows as the
+reference does brought them to at most +0.19%.
 
 The only file outside an absolute 3% difference is `fields.c` at level
 twelve: 3,133 bytes versus 3,041 (+3.03%) under either reference mode.
@@ -320,9 +362,9 @@ strategy can differ, including the chain adjustment cycle bit.
 No corpus-specific parameters or search cap were added.
 
 The old level-four `fields.c`, `grammar.lsp` and `alice29.txt` outliers
-close after selecting their actual greedy rows. The tables preserve the
-ordinary CLI comparison as well as HC, so choosing HC does not conceal
-a regression relative to the default executable.
+close after selecting their actual greedy rows. The tables keep the HC
+comparison as well as the default one, so the switch to rows shows in
+both directions.
 
 ## Known-size parameter adjustment
 
@@ -937,32 +979,81 @@ with gaato and `zstd -d`), the SHA-256 pins of both encoders on all four
 targets, and both crosschecks (2,360 zstd streams through `zstd -d` and
 Node, 3,071 brotli streams through the reference decoder).
 
+### After row search
+
+Greedy, lazy and lazy2 search rows (above). The output changes, so the
+SHA-256 pins were updated; the sizes are in the tables above. Before and
+after were measured alternately in one session (2026-11-14); "before" is
+the change that writes bits eight bytes at a time.
+
+| Input, level | Native | Wasm | Wasm GC | JS |
+|---|---:|---:|---:|---:|
+| text, 1 | 5.07 → 4.98 ms | 16.51 → 16.45 ms | 11.30 → 11.32 ms | 131.63 → 88.43 ms |
+| text, 3 | 5.37 → 5.36 ms | 17.41 → 17.58 ms | 10.68 → 10.89 ms | 112.67 → 113.96 ms |
+| text, 5 | 10.58 → 10.71 ms | 27.52 → 28.44 ms | 19.09 → 21.52 ms | 148.98 → 132.50 ms |
+| text, 8 | 26.88 → 21.03 ms | 48.96 → 45.79 ms | 50.12 → 48.14 ms | 213.74 → 173.26 ms |
+| text, 12 | 75.59 → 50.97 ms | 97.76 → 84.61 ms | 122.26 → 102.88 ms | 315.42 → 263.80 ms |
+| binary, 1 | 0.75 → 0.75 ms | 1.64 → 1.67 ms | 1.39 → 1.40 ms | 8.88 → 8.90 ms |
+| binary, 3 | 2.47 → 2.46 ms | 5.19 → 5.40 ms | 4.42 → 4.46 ms | 47.66 → 47.38 ms |
+| binary, 12 | 17.12 → 19.41 ms | 12.21 → 15.23 ms | 27.71 → 28.86 ms | 108.83 → 79.83 ms |
+
+Levels 1 to 4 do not search rows; their changes are noise (JS's text
+level one before is a slow run). Text levels 8 and 12 run 1.28 and 1.48
+times as fast on native; level 5 is unchanged. The bench's binary input
+at level 12 is slower on native and Wasm (12% and 20%): its size is
+unknown, so the tables have 2^23 entries, rows are almost empty, and each
+insertion touches two cold lines, the row's tags and its positions,
+where a chain touched one and appended to the other sequentially. The
+reference hides this with prefetches (see "Row search").
+
+With `compress` (so known sizes) on six Silesia files and the bench
+inputs, native, MB/s before → after:
+
+| File | Level 5 | Level 8 | Level 12 |
+|---|---:|---:|---:|
+| dickens | 43.0 → 40.8 | 16.8 → 21.8 | 3.3 → 8.0 |
+| mozilla | 59.9 → 61.8 | 34.6 → 39.4 | 12.8 → 15.0 |
+| ooffice | 40.3 → 44.8 | 23.0 → 29.5 | 8.2 → 11.8 |
+| samba | 77.3 → 76.8 | 40.3 → 44.7 | 13.5 → 20.1 |
+| x-ray | 35.2 → 36.5 | 16.7 → 25.1 | 6.8 → 8.8 |
+| xml | 105.2 → 98.7 | 58.3 → 63.1 | 28.4 → 32.7 |
+| bench text | 53.5 → 49.4 | 22.0 → 25.6 | 9.7 → 15.3 |
+| bench binary | 47.5 → 43.8 | 38.9 → 36.9 | 25.3 → 22.6 |
+
+Levels 7 to 12 run 1.01 to 2.45 times as fast on every file but the
+bench binary (0.89 to 0.95) and xml at level 9 (0.97); levels 5 and 6 range
+from 0.92 to 1.11. Rows are kept at levels 5 and 6 as the reference
+keeps them: there they cost nothing on average, and the sizes stay
+closest to the reference's.
+
 ### Where encoding speed stands
 
-All four targets as measured above (the "after" columns), against the
-starting point, and zstd 1.5.7's `zstd -b<level>` on the same two files,
-measured again in the same session on the same CPU (text 299.0, 229.2,
-112.0, 47.6 and 24.8 MB/s; binary 726.8, 186.4 and 36.6 MB/s). Unlike our
-benchmark, `zstd -b` gives the encoder the input's size. The last column
-is how many times as long as the reference native takes.
+All four targets as measured above (the "after" columns of row search),
+against the starting point, and zstd 1.5.7's `zstd -b<level>` on the same
+two files, measured again in the same session on the same CPU (text
+299.3, 229.2, 109.2, 46.1 and 24.2 MB/s; binary 716.7, 186.2 and 36.4
+MB/s). Unlike our benchmark, `zstd -b` gives the encoder the input's
+size. The last column is how many times as long as the reference native
+takes.
 
 | Input, level | Native start → now | Wasm start → now | Wasm GC start → now | JS start → now | Native vs zstd, start → now |
 |---|---:|---:|---:|---:|---:|
-| text, 1 | 11.85 → 4.98 ms (105 MB/s) | 40.00 → 16.42 ms | 13.67 → 11.32 ms | 94.08 → 88.20 ms | 6.9 → 2.8 |
-| text, 3 | 12.98 → 5.49 ms (96 MB/s) | 42.53 → 17.63 ms | 14.94 → 10.87 ms | 117.13 → 114.48 ms | 5.7 → 2.4 |
-| text, 5 | 22.38 → 11.56 ms (45 MB/s) | 70.91 → 27.36 ms | 21.89 → 19.06 ms | 149.87 → 141.51 ms | 4.6 → 2.5 |
-| text, 8 | 47.62 → 26.46 ms (20 MB/s) | 125.83 → 47.17 ms | 49.46 → 49.58 ms | 206.25 → 203.02 ms | 4.2 → 2.4 |
-| text, 12 | 105.01 → 66.88 ms (7.8 MB/s) | 192.79 → 89.80 ms | 105.26 → 112.65 ms | 306.97 → 316.52 ms | 5.0 → 3.2 |
-| binary, 1 | 1.55 → 0.76 ms (173 MB/s) | 4.12 → 1.65 ms | 1.82 → 1.40 ms | 9.80 → 9.18 ms | 8.6 → 4.2 |
-| binary, 3 | 4.28 → 2.50 ms (52 MB/s) | 12.09 → 5.10 ms | 4.95 → 4.52 ms | 47.68 → 50.23 ms | 6.0 → 3.6 |
-| binary, 12 | 21.90 → 10.78 ms (12 MB/s) | 23.51 → 11.02 ms | 20.41 → 24.17 ms | 104.12 → 106.21 ms | 6.1 → 3.0 |
+| text, 1 | 11.85 → 4.98 ms (105 MB/s) | 40.00 → 16.45 ms | 13.67 → 11.32 ms | 94.08 → 88.43 ms | 6.9 → 2.8 |
+| text, 3 | 12.98 → 5.36 ms (98 MB/s) | 42.53 → 17.58 ms | 14.94 → 10.89 ms | 117.13 → 113.96 ms | 5.7 → 2.3 |
+| text, 5 | 22.38 → 10.71 ms (49 MB/s) | 70.91 → 28.44 ms | 21.89 → 21.52 ms | 149.87 → 132.50 ms | 4.6 → 2.2 |
+| text, 8 | 47.62 → 21.03 ms (25 MB/s) | 125.83 → 45.79 ms | 49.46 → 48.14 ms | 206.25 → 173.26 ms | 4.2 → 1.8 |
+| text, 12 | 105.01 → 50.97 ms (10.3 MB/s) | 192.79 → 84.61 ms | 105.26 → 102.88 ms | 306.97 → 263.80 ms | 5.0 → 2.4 |
+| binary, 1 | 1.55 → 0.75 ms (175 MB/s) | 4.12 → 1.67 ms | 1.82 → 1.40 ms | 9.80 → 8.90 ms | 8.6 → 4.1 |
+| binary, 3 | 4.28 → 2.46 ms (53 MB/s) | 12.09 → 5.40 ms | 4.95 → 4.46 ms | 47.68 → 47.38 ms | 6.0 → 3.5 |
+| binary, 12 | 21.90 → 19.41 ms (6.8 MB/s) | 23.51 → 15.23 ms | 20.41 → 28.86 ms | 104.12 → 79.83 ms | 6.1 → 5.4 |
 
-Native runs 1.6 to 2.4 times as fast as at the start and Wasm 2.1 to
-2.7 times; Wasm now takes 1.0 to 3.3 times as long as native. Native takes 2.4 to
-4.2 times as long as zstd 1.5.7, most at the fastest binary level. Wasm
-GC is 1.0 to 1.4 times as fast up to text level eight and at binary
-levels one and three; at level twelve
-it is slower than the starting table (text 7%, binary 18%), the rows the
-earlier refreshed baselines found unstable and the shared history
-slowed on binary input (above). JS, which keeps the checked byte paths
-throughout, is within 7% of its starting times either way.
+Native runs 1.7 to 2.4 times as fast as at the start on every row but
+binary level twelve, and Wasm 2.2 to 2.7 times. Native takes 1.8 to 4.1
+times as long as zstd 1.5.7 on those rows, least at text level eight.
+Binary level twelve is the exception on every target but JS. Most of
+its time goes to allocating and filling 40 MiB of tables for a 128 KiB
+input (a fifth of the cycles in `moonbit_make_int32_array`, another 8% in
+the kernel), which varies between sessions: the change before row search
+measured 10.78 ms in an earlier session and 17.12 ms in this one. Wasm
+GC is 1.0 to 1.4 times as fast as at the start on the other rows; JS,
+which keeps the checked byte paths, 1.0 to 1.3 times.

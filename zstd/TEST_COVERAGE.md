@@ -133,6 +133,21 @@ test reaches a 4 MiB retained window, one block, 2^22 chain links and
 2^23 hash heads. Hash-chain code has full line coverage; no additional
 uncovered-line allowance is needed.
 
+Row search (greedy, lazy and lazy2 with a window over 2^14 bytes) is
+checked against a plain model of its rows: each row a list of its last
+`2^rowLog - 1` positions and tags, newest first, filled on the same
+schedule. Every search's match, over five searchLogs (rows of 16, 32 and
+64, attempts capped by the row), three hash widths, an 8 KiB window that
+drops old candidates, repeated-byte and random stretches, random skipping
+and gaps past the 384-position threshold, must equal the model's. Row
+finders also run the forty-wrap reconstruction with history rebasing and
+reset, and a reset finder must produce a fresh one's sequences.
+`internal/row_tags_fast` compares the SIMD tag mask with a plain walk at
+every head, row size and tag value, and at both ends of the table. The
+maximum-memory test now reaches 2^23 positions and as many tag bytes. The
+JS/Wasm GC slot walk and checked tag mask are ledgered above; the model
+test runs them on those targets.
+
 Known-size parameter tests pin the adjusted window/chain/hash rows at ten
 sizes for all twelve levels and check that table sizes and the derived
 memory bound only shrink through every size-class boundary. Fast matching
@@ -195,8 +210,10 @@ No uncovered-line budget is added for shared history.
 | src/internal/match/access.mbt | 5 | Checked `read`, `write`, `match_length` and `may_beat` for JS/Wasm GC, excluded by native's cfg. The gates run the same matcher tests and unchanged SHA-256 pins on both checked targets. |
 | src/internal/match/fast.mbt | 12 | Original JS/Wasm GC construction and byte-wise hash, excluded by native's cfg. The gates run the boundary round trips, width fingerprints and unchanged SHA-256 pins there. |
 | src/internal/match/dfast.mbt | 15 | Original JS/Wasm GC construction, byte-wise hashes and their wrappers, excluded by native's cfg. The gates run all widths, rebase fixtures, boundary round trips and unchanged SHA-256 pins there. |
-| src/internal/match/lazy.mbt | 11 | Original JS/Wasm GC construction and byte-wise hash, excluded by native's cfg. The gates run all depths, ring limits, boundary round trips and unchanged SHA-256 pins there. |
+| src/internal/match/lazy.mbt | 18 | Original JS/Wasm GC construction (with its row tables) and byte-wise hash, excluded by native's cfg. The gates run all depths, ring limits, boundary round trips, the row model test and the SHA-256 pins there. |
+| src/internal/match/row.mbt | 8 | JS/Wasm GC slot walk, excluded by native's cfg. The gates run the row model test, which checks every search against a plain model of the rows, and the 4-target SHA-256 pins there. |
 | src/internal/match_length_fast/length.mbt | 2 | Checked JS/Wasm GC reference, excluded by native's cfg. The package's alignment, exact-end, mismatch and overlap tests run on all four targets. |
+| src/internal/row_tags_fast/matches.mbt | 4 | Checked JS/Wasm GC reference, excluded by native's cfg. The package's every-head, every-row-size and table-end tests run on all four targets. |
 | src/block_writer.mbt | 3 | Checked byte-by-byte `all_same` (the RLE block test) for JS/Wasm GC, excluded by native's cfg. The gates run the RLE, raw and compressed block tests and the unchanged SHA-256 pins there. |
 | src/histogram.mbt | 2 | JS/Wasm GC `count_four`, which leaves all counting to the checked byte loops, and checked `bump_index`, excluded by native's cfg. The gates run the four-stream literals tests and unchanged SHA-256 pins there. |
 | src/internal/seqenc/block.mbt | 2 | Checked byte-by-byte `Block::literals_from` for JS/Wasm GC, excluded by native's cfg. The gates run the finders' tests, boundary round trips and unchanged SHA-256 pins there. |

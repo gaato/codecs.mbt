@@ -1,6 +1,7 @@
 import {
   "gaato/zstd/internal/seqenc",
   "gaato/zstd/internal/match_length_fast",
+  "gaato/zstd/internal/row_tags_fast",
 }
 
 // The SIMD import is used only by the native/Wasm cfg branch.

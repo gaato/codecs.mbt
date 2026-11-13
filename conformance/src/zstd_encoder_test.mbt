@@ -1,7 +1,7 @@
 ///|
 /// What gaato/zstd/RESOURCE_BOUNDS.md gives for an encoder's
 /// `memory_usage`.
-let zstd_encoder_memory : Int32 = 60849056
+let zstd_encoder_memory : Int32 = 52460448
 
 ///|
 /// Inputs for the encoder: empty, one byte, runs, text, random bytes, and

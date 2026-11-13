@@ -39,6 +39,7 @@ fn Matcher::new(params : Params) -> Matcher {
           _ => 2
         },
         window_log=params.window_log,
+        row_finder=params.row_finder,
       ),
     )
   }
