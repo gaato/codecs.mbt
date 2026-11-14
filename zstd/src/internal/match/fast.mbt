@@ -95,23 +95,10 @@ fn Fast::hash_at(self : Fast, pos : Int32) -> Int32 {
 ///|
 #cfg(not(any(target="native", target="wasm")))
 fn Fast::hash_at(self : Fast, pos : Int32) -> Int32 {
-  let mut word = 0UL
-  for i in 0..<self.min_match {
-    word = word | (self.history.data[pos + i].to_uint64() << (i * 8))
-  }
   // Reference ZSTD_hash{4,5,6,7}; minMatch selects the hash width. The
   // subsequent byte comparison may accept a four-byte match even when
   // hashing more bytes, just as ZSTD_compressBlock_fast does.
-  if self.min_match == 4 {
-    ((word.to_uint() * 2654435761U) >> (32 - self.hash_log)).reinterpret_as_int()
-  } else {
-    let prime = match self.min_match {
-      5 => 889523592379UL
-      6 => 227718039650203UL
-      _ => 58295818150454627UL
-    }
-    (((word << (64 - self.min_match * 8)) * prime) >> (64 - self.hash_log)).to_int()
-  }
+  hash_bytes(self.history.data, pos, self.min_match, self.hash_log)
 }
 
 ///|

@@ -115,3 +115,95 @@ fn may_beat(
   data[q + tail + 2] == data[p + tail + 2] &&
   data[q + tail + 3] == data[p + tail + 3]
 }
+
+///|
+/// ZSTD_hash4 to ZSTD_hash8 of the `width` bytes at `p`, in `log` bits (at
+/// most 32), for the targets that read a byte at a time: the word shifted
+/// to the top of 64 bits, times the width's prime, its top `log` bits; for
+/// width 4 the same in 32 bits. Wasm GC multiplies 64-bit integers natively.
+#cfg(target="wasm-gc")
+fn hash_bytes(
+  data : FixedArray[Byte],
+  p : Int32,
+  width : Int32,
+  log : Int32,
+) -> Int32 {
+  let mut word = 0UL
+  for i in 0..<width {
+    word = word | (data[p + i].to_uint64() << (8 * i))
+  }
+  if width == 4 {
+    ((word.to_uint() * 2654435761U) >> (32 - log)).reinterpret_as_int()
+  } else {
+    let prime = match width {
+      5 => 889523592379UL
+      6 => 227718039650203UL
+      7 => 58295818150454627UL
+      _ => 0xcf1bbcdcb7a56463UL
+    }
+    (((word << (64 - width * 8)) * prime) >> (64 - log)).to_int()
+  }
+}
+
+///|
+/// The same on JS, where a 64-bit integer is a BigInt and every operation
+/// on one allocates: the shifted word and the prime in 32-bit halves, and
+/// only the high half of their product, which holds the top `log` bits.
+#cfg(target="js")
+fn hash_bytes(
+  data : FixedArray[Byte],
+  p : Int32,
+  width : Int32,
+  log : Int32,
+) -> Int32 {
+  if width == 4 {
+    let v = data[p].to_uint() |
+      (data[p + 1].to_uint() << 8) |
+      (data[p + 2].to_uint() << 16) |
+      (data[p + 3].to_uint() << 24)
+    return ((v * 2654435761U) >> (32 - log)).reinterpret_as_int()
+  }
+  // Byte i of the word lands at bit 64 - 8 * (width - i).
+  let mut lo = 0U
+  let mut hi = 0U
+  for i in 0..<width {
+    let k = 8 - width + i
+    let b = data[p + i].to_uint()
+    if k < 4 {
+      lo = lo | (b << (8 * k))
+    } else {
+      hi = hi | (b << (8 * (k - 4)))
+    }
+  }
+  let prime_hi = match width {
+    5 => 0xCFU
+    6 => 0xCF1BU
+    7 => 0xCF1BBCU
+    _ => 0xCF1BBCDCU
+  }
+  let prime_lo = match width {
+    5 => 0x1BBCDCBBU
+    6 => 0xBCDCBF9BU
+    7 => 0xDCBFA563U
+    _ => 0xB7A56463U
+  }
+  // The high half of the product modulo 2^64.
+  let top = mul_high(lo, prime_lo) + hi * prime_lo + lo * prime_hi
+  (top >> (32 - log)).reinterpret_as_int()
+}
+
+///|
+/// The high 32 bits of the 64-bit product of `a` and `b`, from 16-bit
+/// halves whose products fit in 32 bits.
+#cfg(target="js")
+fn mul_high(a : UInt32, b : UInt32) -> UInt32 {
+  let a0 = a & 0xFFFF
+  let a1 = a >> 16
+  let b0 = b & 0xFFFF
+  let b1 = b >> 16
+  let p00 = a0 * b0
+  let p01 = a0 * b1
+  let p10 = a1 * b0
+  let mid = (p00 >> 16) + (p01 & 0xFFFF) + (p10 & 0xFFFF)
+  a1 * b1 + (p01 >> 16) + (p10 >> 16) + (mid >> 16)
+}

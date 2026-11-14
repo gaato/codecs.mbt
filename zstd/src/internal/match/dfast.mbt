@@ -82,21 +82,7 @@ pub fn Dfast::reset(self : Dfast) -> Unit {
 ///|
 #cfg(not(any(target="native", target="wasm")))
 fn Dfast::hash_at(self : Dfast, p : Int32, width : Int32, log : Int32) -> Int32 {
-  let mut word = 0UL
-  for i in 0..<width {
-    word = word | (self.history.data[p + i].to_uint64() << (8 * i))
-  }
-  if width == 4 {
-    ((word.to_uint() * 2654435761U) >> (32 - log)).reinterpret_as_int()
-  } else {
-    let prime = match width {
-      5 => 889523592379UL
-      6 => 227718039650203UL
-      7 => 58295818150454627UL
-      _ => 0xcf1bbcdcb7a56463UL
-    }
-    (((word << (64 - width * 8)) * prime) >> (64 - log)).to_int()
-  }
+  hash_bytes(self.history.data, p, width, log)
 }
 
 ///|

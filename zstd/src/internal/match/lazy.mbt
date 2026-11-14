@@ -168,20 +168,7 @@ fn Lazy::hash_at(self : Lazy, p : Int32) -> Int32 {
 ///|
 #cfg(not(any(target="native", target="wasm")))
 fn Lazy::hash_at(self : Lazy, p : Int32) -> Int32 {
-  let mut word = 0UL
-  for i in 0..<self.min_match {
-    word = word | (self.history.data[p + i].to_uint64() << (8 * i))
-  }
-  if self.min_match == 4 {
-    ((word.to_uint() * 2654435761U) >> (32 - self.hash_bits)).reinterpret_as_int()
-  } else {
-    let prime = if self.min_match == 5 {
-      889523592379UL
-    } else {
-      227718039650203UL
-    }
-    (((word << (64 - self.min_match * 8)) * prime) >> (64 - self.hash_bits)).to_int()
-  }
+  hash_bytes(self.history.data, p, self.min_match, self.hash_bits)
 }
 
 ///|
