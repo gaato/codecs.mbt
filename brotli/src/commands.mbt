@@ -33,6 +33,11 @@ fn Decoder::switch_block(self : Decoder, cat : Int32) -> Unit raise Stop {
 /// when output runs out.
 fn Decoder::commands(self : Decoder) -> Status? raise Stop {
   for ;; {
+    self.fast_commands()
+    // `run` goes on from where the fast loop stopped, in its own state; a
+    // command here starts after what the fast loop decoded.
+    guard self.state is CommandStart else { return None }
+    self.checkpoint()
     self.command()
     guard self.state is Literals else { return None }
     if self.literals() is Some(status) {
@@ -49,6 +54,182 @@ fn Decoder::commands(self : Decoder) -> Status? raise Stop {
     guard self.state is CommandStart else { return None }
     self.checkpoint()
   }
+}
+
+///|
+/// Bytes of input that hold a whole command's bits however the bit reader
+/// stands: a symbol and two extra fields, each read after a refill of at
+/// most three bytes.
+const FAST_COMMAND_INPUT : Int32 = 9
+
+///|
+/// Bytes of input that hold a distance's symbol and extra bits.
+const FAST_DISTANCE_INPUT : Int32 = 6
+
+///|
+/// Commands one after another, through their literals, distances and
+/// copies, while the input surely holds the bits of the next part: with the
+/// stash empty, a refill then always finds its bytes in `view`, so no read
+/// runs short and none of the checkpoints and raises of `command`,
+/// `distance` and `read_symbol` is needed. Each part reads the bits that
+/// part reads, refilling where it refills, so that the bytes taken from the
+/// input are the same. Anything else, an error, a dictionary word, a block
+/// switch, the end of the meta-block or the room running out, leaves the
+/// part unread, its bit reader as it was, for the slow path, which then
+/// meets it as it would have; so does a literal that `fast_literals` does
+/// not decode. Returns in the state the slow path would reach there.
+fn Decoder::fast_commands(self : Decoder) -> Unit {
+  guard fast_commands_pay() && self.stash_pos >= self.stash.length() else {
+    return
+  }
+  let len = self.view.length()
+  while self.state is CommandStart {
+    guard len - self.in_pos >= FAST_COMMAND_INPUT && self.block_len[1] > 0 else {
+      return
+    }
+    let acc = self.acc
+    let nbits = self.nbits
+    let in_pos = self.in_pos
+    let sym = self.fast_symbol(self.cmd_trees, self.block_type[1])
+    let cell = sym >> 6
+    let insert_code = cell_insert_base[cell] + ((sym >> 3) & 7)
+    let copy_code = cell_copy_base[cell] + (sym & 7)
+    let insert_len = insert_length_base[insert_code] +
+      self.fast_bits(insert_length_extra[insert_code])
+    let copy_len = copy_length_base[copy_code] +
+      self.fast_bits(copy_length_extra[copy_code])
+    if insert_len > self.meta_remaining {
+      self.acc = acc
+      self.nbits = nbits
+      self.in_pos = in_pos
+      return
+    }
+    self.block_len[1] -= 1
+    self.meta_remaining -= insert_len
+    self.insert_remaining = insert_len
+    self.copy_len = copy_len
+    self.implicit_distance = sym < 128
+    self.state = Literals
+    while self.insert_remaining > 0 && self.fast_literals() > 0 {
+
+    }
+    guard self.insert_remaining == 0 else { return }
+    // As `literals` ends: a command that fills the meta-block has no
+    // distance.
+    if self.meta_remaining == 0 {
+      self.state = MetaDone
+      return
+    }
+    self.state = Distance
+    // As `distance` begins, where `ensure_space` would find the room
+    // without draining or growing the window.
+    let cap = self.ring.length()
+    let room = if cap == self.ring_max {
+      cap - self.pending
+    } else {
+      cap - self.wpos
+    }
+    guard room >= MAX_TRANSFORMED_WORD else { return }
+    let acc = self.acc
+    let nbits = self.nbits
+    let in_pos = self.in_pos
+    let mut code = 0
+    let mut extra = 0
+    if !self.implicit_distance {
+      guard len - self.in_pos >= FAST_DISTANCE_INPUT && self.block_len[2] > 0 else {
+        return
+      }
+      let context = (self.copy_len - 2).min(3)
+      let tree = self.dist_context_map[self.dist_map_offset + context].to_int()
+      code = self.fast_symbol(self.dist_trees, tree)
+      extra = self.fast_bits(
+        @rules.distance_extra_bits(code, self.npostfix, self.ndirect),
+      )
+    }
+    let dist = @rules.distance(
+      code,
+      extra,
+      npostfix=self.npostfix,
+      ndirect=self.ndirect,
+      last1=self.last_distance(1),
+      last2=self.last_distance(2),
+      last3=self.last_distance(3),
+      last4=self.last_distance(4),
+    )
+    guard dist is Some(dist) &&
+      dist <= self.filled &&
+      self.copy_len <= self.meta_remaining else {
+      self.acc = acc
+      self.nbits = nbits
+      self.in_pos = in_pos
+      return
+    }
+    if !self.implicit_distance {
+      self.block_len[2] -= 1
+    }
+    if code != 0 {
+      self.dist_ring[self.dist_ring_index & 3] = dist
+      self.dist_ring_index += 1
+    }
+    self.meta_remaining -= self.copy_len
+    self.copy_remaining = self.copy_len
+    self.copy_dist = dist
+    self.state = Copy
+    self.copy_fast()
+    guard self.copy_remaining == 0 else { return }
+    self.state = if self.meta_remaining == 0 { MetaDone } else { CommandStart }
+  }
+}
+
+///|
+/// Whether `fast_commands` runs. On Wasm it made the benchmark text decode
+/// a fifth slower, where JS, Wasm GC and native gained (bench/, 2026-11-14).
+#cfg(target="wasm")
+fn fast_commands_pay() -> Bool {
+  false
+}
+
+///|
+#cfg(not(target="wasm"))
+fn fast_commands_pay() -> Bool {
+  true
+}
+
+///|
+/// `read_symbol` where the caller has made sure that a refill finds three
+/// bytes in `view`: it then holds at least 24 bits, more than any code.
+#inline
+fn Decoder::fast_symbol(self : Decoder, group : Group, tree : Int32) -> Int32 {
+  if self.nbits < MAX_CODE_LENGTH {
+    self.refill()
+  }
+  let pool = group.pool
+  let base = group.offsets[tree]
+  // The entries are within the tree's table, as `Group::build` lays it out.
+  let mut entry = pool.unsafe_get(base + (self.acc & (ROOT_SIZE - 1))).to_int()
+  let mut bits = entry & 15
+  if bits > ROOT_BITS {
+    let sub = (self.acc >> ROOT_BITS) & ((1 << (bits - ROOT_BITS)) - 1)
+    entry = pool.unsafe_get(base + (entry >> 4) + sub).to_int()
+    bits = entry & 15
+  }
+  self.acc = self.acc >> bits
+  self.nbits -= bits
+  entry >> 4
+}
+
+///|
+/// `read_bits` where the caller has made sure that a refill finds three
+/// bytes in `view`: it then holds at least 24 bits, as many as `n` can be.
+#inline
+fn Decoder::fast_bits(self : Decoder, n : Int32) -> Int32 {
+  if self.nbits < n {
+    self.refill()
+  }
+  let v = self.acc & ((1 << n) - 1)
+  self.acc = self.acc >> n
+  self.nbits -= n
+  v
 }
 
 ///|
@@ -141,12 +322,14 @@ fn Decoder::fast_literals(self : Decoder) -> Int32 {
       2 => lut0.unsafe_get(p1).to_int() | lut1.unsafe_get(p2).to_int()
       _ => (lut2.unsafe_get(p1).to_int() << 3) | lut2.unsafe_get(p2).to_int()
     }
-    let base = offsets[map.unsafe_get(map_offset + context).to_int()]
-    let mut entry = pool[base + (acc & (ROOT_SIZE - 1))].to_int()
+    // `offsets` holds 256 trees and a map entry is a byte; the entries are
+    // within the tree's table, as `Group::build` lays it out.
+    let base = offsets.unsafe_get(map.unsafe_get(map_offset + context).to_int())
+    let mut entry = pool.unsafe_get(base + (acc & (ROOT_SIZE - 1))).to_int()
     let mut bits = entry & 15
     if bits > ROOT_BITS {
       let sub = (acc >> ROOT_BITS) & ((1 << (bits - ROOT_BITS)) - 1)
-      entry = pool[base + (entry >> 4) + sub].to_int()
+      entry = pool.unsafe_get(base + (entry >> 4) + sub).to_int()
       bits = entry & 15
     }
     acc = acc >> bits

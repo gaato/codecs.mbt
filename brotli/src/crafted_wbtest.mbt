@@ -397,3 +397,55 @@ test "malformed streams raise the error the RFC calls for" {
     ),
   )
 }
+
+///|
+/// The command errors again, with input to spare after them: then the
+/// commands go through `fast_commands`, which leaves each of these cases
+/// unread for the slow path to raise as it does above.
+test "malformed commands raise the same error with input to spare" {
+  let cases = [
+    BitWriter::new()
+    .fixed_commands(mlen=1, literal=0, command=144, distance=16)
+    .finish(),
+    BitWriter::new()
+    .fixed_commands(mlen=3, literal=0, command=138, distance=16)
+    .bits(1, 0)
+    .finish(),
+    BitWriter::new()
+    .last_meta(10)
+    .plain_header()
+    .one_symbol(8, 0)
+    .one_symbol(10, 136)
+    .bits(2, 1)
+    .bits(2, 1)
+    .bits(6, 4)
+    .bits(6, 16)
+    .bits(1, 1)
+    .bits(1, 0)
+    .bits(1, 0)
+    .finish(),
+    BitWriter::new()
+    .fixed_commands(mlen=5, literal=0, command=128, distance=16)
+    .bits(1, 0)
+    .finish(),
+    BitWriter::new()
+    .fixed_commands(mlen=5, literal=0, command=130, distance=46)
+    .bits(16, 0)
+    .finish(),
+    BitWriter::new()
+    .fixed_commands(mlen=3, literal=0, command=130, distance=16)
+    .bits(1, 0)
+    .finish(),
+  ]
+  let outcome = (input : Bytes) => {
+    try decompress(input) catch {
+      @codec.CodecError(kind, message) => "\{Repr(kind)}: \{message}"
+    } noraise {
+      _ => "decoded"
+    }
+  }
+  for input in cases {
+    let spare = Bytes::from_array([..input, ..FixedArray::make(16, b'\x00')])
+    assert_eq(outcome(spare), outcome(input))
+  }
+}

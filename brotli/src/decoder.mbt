@@ -555,11 +555,12 @@ fn Decoder::read_symbol(
   }
   let pool = group.pool
   let base = group.offsets[tree]
-  let mut entry = pool[base + (self.acc & (ROOT_SIZE - 1))].to_int()
+  // The entries are within the tree's table, as `Group::build` lays it out.
+  let mut entry = pool.unsafe_get(base + (self.acc & (ROOT_SIZE - 1))).to_int()
   let mut bits = entry & 15
   if bits > ROOT_BITS {
     let sub = (self.acc >> ROOT_BITS) & ((1 << (bits - ROOT_BITS)) - 1)
-    entry = pool[base + (entry >> 4) + sub].to_int()
+    entry = pool.unsafe_get(base + (entry >> 4) + sub).to_int()
     bits = entry & 15
   }
   // Bits past the input read as zero; the symbol is right if its code fits
