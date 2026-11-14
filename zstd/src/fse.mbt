@@ -4,43 +4,61 @@
 ///|
 /// An FSE decoding table of `1 << log` states, at most `1 << 9`. Each state
 /// gives a symbol and how to reach the next state: `base` plus `nbits` bits.
+/// The three are packed in one entry, `base | nbits << 16 | symbol << 24`,
+/// so that a state costs one load.
 priv struct Fse {
-  symbol : FixedArray[Byte]
-  nbits : FixedArray[Byte]
-  base : FixedArray[UInt16]
+  entry : FixedArray[Int32]
   mut log : Int32
 }
 
 ///|
 fn Fse::new(max_log : Int32) -> Fse {
-  let size = 1 << max_log
-  {
-    symbol: FixedArray::make(size, b'\x00'),
-    nbits: FixedArray::make(size, b'\x00'),
-    base: FixedArray::make(size, 0),
-    log: 0,
-  }
+  { entry: FixedArray::make(1 << max_log, 0), log: 0, }
 }
 
 ///|
 /// The table that always gives `symbol` and reads no bits (`RLE_Mode`).
 fn Fse::set_rle(self : Fse, symbol : Byte) -> Unit {
   self.log = 0
-  self.symbol[0] = symbol
-  self.nbits[0] = b'\x00'
-  self.base[0] = 0
+  self.entry[0] = symbol.to_int() << 24
+}
+
+///|
+/// The entry of `state`.
+#inline
+fn Fse::entry_of(self : Fse, state : Int32) -> Int32 {
+  self.entry[state]
 }
 
 ///|
 /// The symbol of `state`.
 fn Fse::symbol_of(self : Fse, state : Int32) -> Int32 {
-  self.symbol[state].to_int()
+  entry_symbol(self.entry[state])
 }
 
 ///|
 /// The state after `state`, reading its bits from `bits`.
 fn Fse::next(self : Fse, state : Int32, bits : BackwardBits) -> Int32 {
-  self.base[state].to_int() + bits.read(self.nbits[state].to_int())
+  let e = self.entry[state]
+  entry_base(e) + bits.read(entry_nbits(e))
+}
+
+///|
+#inline
+fn entry_symbol(e : Int32) -> Int32 {
+  (e >> 24) & 0xFF
+}
+
+///|
+#inline
+fn entry_nbits(e : Int32) -> Int32 {
+  (e >> 16) & 0xFF
+}
+
+///|
+#inline
+fn entry_base(e : Int32) -> Int32 {
+  e & 0xFFFF
 }
 
 ///|
@@ -49,11 +67,16 @@ fn Fse::next(self : Fse, state : Int32, bits : BackwardBits) -> Int32 {
 priv struct FseScratch {
   probs : FixedArray[Int32]
   next : FixedArray[Int32]
+  symbols : FixedArray[Byte]
 }
 
 ///|
 fn FseScratch::new() -> FseScratch {
-  { probs: FixedArray::make(256, 0), next: FixedArray::make(256, 0), }
+  {
+    probs: FixedArray::make(256, 0),
+    next: FixedArray::make(256, 0),
+    symbols: FixedArray::make(1 << 9, b'\x00'),
+  }
 }
 
 ///|
@@ -67,23 +90,24 @@ fn Fse::build(
   probs : FixedArray[Int32],
   count : Int32,
   log : Int32,
-  next : FixedArray[Int32],
+  scratch : FseScratch,
 ) -> Bool {
   let size = 1 << log
   self.log = log
-  guard @fse.spread(probs, count, log, self.symbol) else { return false }
+  let symbols = scratch.symbols
+  let next = scratch.next
+  guard @fse.spread(probs, count, log, symbols) else { return false }
   // Each symbol's states, in order, decode the values from its probability
   // up to twice it, less one.
   for s in 0..<count {
     next[s] = if probs[s] == -1 { 1 } else { probs[s] }
   }
   for i in 0..<size {
-    let s = self.symbol[i].to_int()
+    let s = symbols[i].to_int()
     let state = next[s]
     next[s] = state + 1
     let nbits = log - (31 - state.clz())
-    self.nbits[i] = nbits.to_byte()
-    self.base[i] = ((state << nbits) - size).to_uint16()
+    self.entry[i] = ((state << nbits) - size) | (nbits << 16) | (s << 24)
   }
   true
 }
@@ -157,7 +181,7 @@ fn Fse::read(
   // RFC 8878 asks for two symbols or more; the reference decoder also
   // takes a single symbol with every state (its transitions read no bits),
   // and so does this one.
-  if !self.build(probs, count, log, scratch.next) {
+  if !self.build(probs, count, log, scratch) {
     raise corrupt("an FSE distribution that does not fill its table")
   }
   bits.bytes_used()
@@ -167,7 +191,7 @@ fn Fse::read(
 /// Builds a table from a fixed distribution, which fills it exactly.
 fn Fse::predefined(probs : FixedArray[Int32], log : Int32) -> Fse {
   let table = Fse::new(log)
-  table.build(probs, probs.length(), log, FixedArray::make(64, 0)) |> ignore
+  table.build(probs, probs.length(), log, FseScratch::new()) |> ignore
   table
 }
 

@@ -1,11 +1,21 @@
 ///|
+/// The bits `state` reads for the next state.
+fn Fse::nbits_of(self : Fse, state : Int32) -> Int32 {
+  entry_nbits(self.entry[state])
+}
+
+///|
+/// What the next state adds its bits to.
+fn Fse::base_of(self : Fse, state : Int32) -> Int32 {
+  entry_base(self.entry[state])
+}
+
+///|
 /// Every state of `table` as `symbol/nbits/base`.
 fn dump(table : Fse) -> String {
   let parts = []
   for i in 0..<(1 << table.log) {
-    parts.push(
-      "\{table.symbol[i].to_int()}/\{table.nbits[i].to_int()}/\{table.base[i]}",
-    )
+    parts.push("\{table.symbol_of(i)}/\{table.nbits_of(i)}/\{table.base_of(i)}")
   }
   parts.join(" ")
 }

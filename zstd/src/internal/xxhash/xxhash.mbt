@@ -130,10 +130,7 @@ pub fn Xxh64::update(
     self.consume_stripe(self.stripe, 0)
     self.stripe_len = 0
   }
-  while end - i >= 32 {
-    self.consume_stripe(data, i)
-    i += 32
-  }
+  i = consume_stripes(self.acc, data, i, end)
   FixedArray::unsafe_blit(self.stripe, 0, data, i, end - i)
   self.stripe_len = end - i
 }
@@ -182,4 +179,118 @@ pub fn Xxh64::digest(self : Xxh64) -> UInt64 {
   h = h ^ (h >> 29)
   h = h * PRIME64_3
   h ^ (h >> 32)
+}
+
+///|
+/// Adds the whole stripes of `data[i:end]` to the lanes `acc`, and returns
+/// where they end. The lanes stay in locals across the stripes.
+#cfg(not(target="js"))
+fn consume_stripes(
+  acc : FixedArray[UInt64],
+  data : FixedArray[Byte],
+  start : Int32,
+  end : Int32,
+) -> Int32 {
+  let mut i = start
+  guard end - i >= 32 else { return i }
+  let mut v0 = acc[0]
+  let mut v1 = acc[1]
+  let mut v2 = acc[2]
+  let mut v3 = acc[3]
+  while end - i >= 32 {
+    v0 = round(v0, read64(data, i))
+    v1 = round(v1, read64(data, i + 8))
+    v2 = round(v2, read64(data, i + 16))
+    v3 = round(v3, read64(data, i + 24))
+    i += 32
+  }
+  acc[0] = v0
+  acc[1] = v1
+  acc[2] = v2
+  acc[3] = v3
+  i
+}
+
+///|
+/// The same on JS, where a 64-bit integer is a BigInt and every operation
+/// on one allocates: the lanes are split into 32-bit halves for the loop,
+/// `limbs[2k]` the high half of lane k and `limbs[2k + 1]` the low.
+#cfg(target="js")
+fn consume_stripes(
+  acc : FixedArray[UInt64],
+  data : FixedArray[Byte],
+  start : Int32,
+  end : Int32,
+) -> Int32 {
+  let mut i = start
+  guard end - i >= 32 else { return i }
+  let limbs = FixedArray::make(8, 0U)
+  for k in 0..<4 {
+    limbs[2 * k] = (acc[k] >> 32).to_uint()
+    limbs[2 * k + 1] = acc[k].to_uint()
+  }
+  while end - i >= 32 {
+    round_limbs(limbs, 0, data, i)
+    round_limbs(limbs, 2, data, i + 8)
+    round_limbs(limbs, 4, data, i + 16)
+    round_limbs(limbs, 6, data, i + 24)
+    i += 32
+  }
+  for k in 0..<4 {
+    acc[k] = (limbs[2 * k].to_uint64() << 32) | limbs[2 * k + 1].to_uint64()
+  }
+  i
+}
+
+///|
+/// `round` on the lane whose halves are `v[at]` (high) and `v[at + 1]`
+/// (low), with the eight bytes of `data` from `i`: everything modulo 2^64.
+#cfg(target="js")
+fn round_limbs(
+  v : FixedArray[UInt32],
+  at : Int32,
+  data : FixedArray[Byte],
+  i : Int32,
+) -> Unit {
+  let lane_lo = read32_u(data, i)
+  let lane_hi = read32_u(data, i + 4)
+  // lane * PRIME64_2
+  let t_lo = lane_lo * 0x27D4EB4FU
+  let t_hi = mul_high(lane_lo, 0x27D4EB4FU) +
+    lane_hi * 0x27D4EB4FU +
+    lane_lo * 0xC2B2AE3DU
+  // acc + that
+  let s_lo = v[at + 1] + t_lo
+  let s_hi = v[at] + t_hi + (if s_lo < t_lo { 1U } else { 0U })
+  // rotated left by 31
+  let r_hi = (s_hi << 31) | (s_lo >> 1)
+  let r_lo = (s_lo << 31) | (s_hi >> 1)
+  // times PRIME64_1
+  v[at + 1] = r_lo * 0x85EBCA87U
+  v[at] = mul_high(r_lo, 0x85EBCA87U) + r_hi * 0x85EBCA87U + r_lo * 0x9E3779B1U
+}
+
+///|
+/// The high 32 bits of the 64-bit product of `a` and `b`, from 16-bit
+/// halves whose products fit in 32 bits.
+#cfg(target="js")
+fn mul_high(a : UInt32, b : UInt32) -> UInt32 {
+  let a0 = a & 0xFFFF
+  let a1 = a >> 16
+  let b0 = b & 0xFFFF
+  let b1 = b >> 16
+  let p00 = a0 * b0
+  let p01 = a0 * b1
+  let p10 = a1 * b0
+  let mid = (p00 >> 16) + (p01 & 0xFFFF) + (p10 & 0xFFFF)
+  a1 * b1 + (p01 >> 16) + (p10 >> 16) + (mid >> 16)
+}
+
+///|
+#cfg(target="js")
+fn read32_u(data : FixedArray[Byte], i : Int32) -> UInt32 {
+  data[i].to_uint() |
+  (data[i + 1].to_uint() << 8) |
+  (data[i + 2].to_uint() << 16) |
+  (data[i + 3].to_uint() << 24)
 }

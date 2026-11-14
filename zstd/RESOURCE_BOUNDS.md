@@ -44,9 +44,9 @@ checked against the limits before anything is allocated from them.
 
 | Structure | Size |
 |---|---|
-| FSE tables for literals lengths, match lengths and offsets | 512 + 512 + 256 states of 4 bytes: 5 KiB |
+| FSE tables for literals lengths, match lengths and offsets | 512 + 512 + 256 states of 4 bytes (symbol, bits and base in one entry): 5 KiB |
 | Huffman table | 2,048 entries of 2 bytes: 4 KiB, and a 64-state weight table |
-| Table scratch, XXH64 state, repeat offsets | About 2 KiB |
+| Table scratch (a distribution, next states and a 512-byte spread), XXH64 state, repeat offsets | About 2.5 KiB |
 | The predefined tables | 160 states, shared by all decoders |
 
 ## Fixed per encoder

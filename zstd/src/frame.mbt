@@ -200,6 +200,7 @@ fn Decoder::compressed_block(self : Decoder) -> Status? raise Stop {
 
 ///|
 fn Decoder::end_block(self : Decoder) -> Unit raise Stop {
+  self.count_block()
   if self.content_size is Some(size) && self.frame_out > size {
     raise corrupt("the frame holds more than its declared content size")
   }

@@ -23,9 +23,7 @@ fn check_description(probs : Array[Int32], log : Int32) -> Unit raise {
     assert_eq(scratch.probs[s], p)
   }
   let expected = Fse::new(9)
-  assert_true(
-    expected.build(norm, probs.length(), log, FixedArray::make(256, 0)),
-  )
+  assert_true(expected.build(norm, probs.length(), log, FseScratch::new()))
   assert_eq(fse_cells(table), fse_cells(expected))
 }
 
@@ -52,9 +50,7 @@ fn check_stream(
   out.write_end_mark()
   let data = packed(out)
   let decoder = Fse::new(9)
-  assert_true(
-    decoder.build(norm, probs.length(), log, FixedArray::make(256, 0)),
-  )
+  assert_true(decoder.build(norm, probs.length(), log, FseScratch::new()))
   let bits = BackwardBits::new(data, 0, data.length())
   let mut state = bits.read(log)
   for i in 0..<n {

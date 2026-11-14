@@ -721,3 +721,68 @@ test "sequences: offset codes, offsets and the block limit" {
     content="Corrupt: a sequences bitstream that is not used up exactly",
   )
 }
+
+///|
+/// Four streams decode together when all four start well-formed; a bad one
+/// sends them through one at a time, which reports the first stream's
+/// fault, as before.
+test "four Huffman streams: errors in stream order" {
+  let tree = [b'\x81', b'\x10']
+  // 32 literals: eight in each stream, two bytes each, so that the
+  // section passes the size checks with one stream empty.
+  let codes = (n : Int32) => backward(Array::makei(n, i => (i % 2, 1)))
+  let two = codes(8)
+  let three = codes(9)
+  let four = (streams : Array[Array[Byte]]) => {
+    let body : Array[Byte] = []
+    for i in 0..<3 {
+      body.push_iter(le(streams[i].length().to_uint64(), 2).iter())
+    }
+    for s in streams {
+      body.push_iter(s.iter())
+    }
+    compressed(
+      [..huffman_header(2, 1, 32, 2 + body.length()), ..tree, ..body, b'\x00'],
+    )
+  }
+  inspect(outcome(four([two, two, two, two])), content="decoded 32")
+  inspect(
+    outcome(four([two, [], two, two])),
+    content="Corrupt: an empty bitstream",
+  )
+  inspect(
+    outcome(four([two, two, [b'\x00'], two])),
+    content="Corrupt: a bitstream without its end mark",
+  )
+  inspect(
+    outcome(four([two, two, two, [b'\x01', b'\x00']])),
+    content="Corrupt: a bitstream without its end mark",
+  )
+  // Stream 1 holds a literal too many, and stream 2 is empty: stream 1's
+  // fault is reported.
+  inspect(
+    outcome(four([three, [], two, two])),
+    content="Corrupt: a Huffman stream that does not end with its literals",
+  )
+  inspect(
+    outcome(four([two, two, three, two])),
+    content="Corrupt: a Huffman stream that does not end with its literals",
+  )
+}
+
+///|
+/// A sequence whose extra bits (an offset code of 28, and 16 bits for each
+/// length) pass the 57 bits of one 64-bit read: the literals length is read
+/// from a second one, and still too long for the block.
+test "sequences: extra bits past one wide read" {
+  let none = raw_literals([])
+  let stream = [..Array::make(15, b'\xFF'), b'\x80']
+  inspect(
+    outcome(
+      compressed(
+        [..none, b'\x01', b'\x54', b'\x23', b'\x1C', b'\x34', ..stream],
+      ),
+    ),
+    content="Corrupt: a sequence with more literals than the block holds",
+  )
+}

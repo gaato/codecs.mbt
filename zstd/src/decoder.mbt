@@ -417,19 +417,38 @@ fn Decoder::room(self : Decoder, k : Int32) -> Int32 {
 }
 
 ///|
-/// Accounts for `n` bytes just written at `wpos`.
+/// Accounts for `n` bytes just written at `wpos`. The frame's count and
+/// checksum take them when the block ends (`end_block`).
 fn Decoder::advance(self : Decoder, n : Int32) -> Unit {
-  if self.has_checksum {
-    self.xxh.update(self.ring, self.wpos, n)
-  }
   self.wpos += n
   if self.wpos == self.ring_max {
     self.wpos = 0
   }
   self.pending += n
   self.filled = (self.filled + n).min(self.window)
-  self.frame_out += n.to_uint64()
   self.block_out += n
+}
+
+///|
+/// Adds the block just decoded, the `block_out` bytes before `wpos`, to the
+/// frame's count and checksum: once per block rather than per write. A
+/// block is at most the window, so none of its bytes has been written over;
+/// the window wraps only at its full size, so they are in at most two
+/// pieces.
+fn Decoder::count_block(self : Decoder) -> Unit {
+  let n = self.block_out
+  self.frame_out += n.to_uint64()
+  guard self.has_checksum && n > 0 else { return }
+  let cap = self.ring.length()
+  let mut start = self.wpos - n
+  if start < 0 {
+    start += cap
+  }
+  let first = n.min(cap - start)
+  self.xxh.update(self.ring, start, first)
+  if first < n {
+    self.xxh.update(self.ring, 0, n - first)
+  }
 }
 
 ///|

@@ -78,11 +78,7 @@ fn fse_reference(
 fn fse_cells(table : Fse) -> Array[(Int32, Int32, Int32)] {
   [
     for i in 0..<(1 << table.log) => {
-      (
-        table.symbol[i].to_int(),
-        table.nbits[i].to_int(),
-        table.base[i].to_int(),
-      )
+      (table.symbol_of(i), table.nbits_of(i), table.base_of(i))
     }
   ]
 }
@@ -119,7 +115,7 @@ fn check_fse_build(probs : Array[Int32], log : Int32) -> Unit raise {
     FixedArray::from_array(probs),
     probs.length(),
     log,
-    FixedArray::make(256, 0),
+    FseScratch::new(),
   )
   assert_true(built)
   guard fse_reference(probs, log) is Some(expected) else {

@@ -138,7 +138,8 @@ fn Huffman::build(self : Huffman, count : Int32) -> Unit raise Stop {
 
 ///|
 /// Decodes one stream, `data[start:end]`, into exactly `count` literals at
-/// `out[at:]`; the stream must be used up exactly.
+/// `out[at:]`, which the caller has made room for; the stream must be used
+/// up exactly.
 fn Huffman::decode_stream(
   self : Huffman,
   data : FixedArray[Byte],
@@ -149,17 +150,72 @@ fn Huffman::decode_stream(
   count : Int32,
 ) -> Unit raise Stop {
   let bits = BackwardBits::new(data, start, end)
+  let pos = self.decode_run(data, start, bits.pos, out, at, at + count)
+  if pos != 0 {
+    raise corrupt("a Huffman stream that does not end with its literals")
+  }
+}
+
+///|
+/// Decodes the literals `out[from:to]` from the stream in `data` from
+/// `start` with `pos` bits left, and returns the bits left after them.
+/// `decode` writes the streams' literals within [0, count), and
+/// `decode_literals` reserves `literals` for the count, so every index of
+/// `out` is within it; every table index is below 1 << max_bits <= 2048,
+/// the tables' size.
+fn Huffman::decode_run(
+  self : Huffman,
+  data : FixedArray[Byte],
+  start : Int32,
+  pos : Int32,
+  out : FixedArray[Byte],
+  from : Int32,
+  to : Int32,
+) -> Int32 {
+  let mut pos = pos
+  let mut i = from
+  // Five codes of at most 11 bits from one 64-bit read of 57 bits: the
+  // last starts at most 44 bits below `pos`, so all five are within the
+  // stream.
+  while i + 5 <= to && wide_reads(pos) {
+    pos = self.decode5(data, start, pos, out, i)
+    i += 5
+  }
+  let max_bits = self.max_bits
+  while i < to {
+    let index = back_bits(data, start, pos, max_bits)
+    out.unsafe_set(i, self.symbol.unsafe_get(index))
+    pos -= self.nbits.unsafe_get(index).to_int()
+    i += 1
+  }
+  pos
+}
+
+///|
+/// Decodes five literals into `out[at:at + 5]` from one `top_bits` read at
+/// `pos` (`wide_reads(pos)`), and returns the bits left after them.
+#inline
+fn Huffman::decode5(
+  self : Huffman,
+  data : FixedArray[Byte],
+  start : Int32,
+  pos : Int32,
+  out : FixedArray[Byte],
+  at : Int32,
+) -> Int32 {
   let max_bits = self.max_bits
   let symbol = self.symbol
   let nbits = self.nbits
-  for i in at..<(at + count) {
-    let index = bits.peek(max_bits)
-    out[i] = symbol[index]
-    bits.skip(nbits[index].to_int())
+  let mut w = top_bits(data, start, pos)
+  let mut pos = pos
+  for k in 0..<5 {
+    let index = take_bits(w, max_bits)
+    out.unsafe_set(at + k, symbol.unsafe_get(index))
+    let n = nbits.unsafe_get(index).to_int()
+    w = w << n
+    pos -= n
   }
-  if bits.pos != 0 {
-    raise corrupt("a Huffman stream that does not end with its literals")
-  }
+  pos
 }
 
 ///|
@@ -189,8 +245,54 @@ fn Huffman::decode(
   // more the last segment is never negative.
   let segment = (count + 3) / 4
   let last = count - 3 * segment
-  self.decode_stream(data, s1, s2, out, 0, segment)
-  self.decode_stream(data, s2, s3, out, segment, segment)
-  self.decode_stream(data, s3, s4, out, 2 * segment, segment)
-  self.decode_stream(data, s4, end, out, 3 * segment, last)
+  // The four streams are decoded together, so that their reads overlap,
+  // when all four start well-formed; otherwise one after another, which
+  // raises what is wrong with the first bad stream.
+  match
+    (
+      stream_pos(data, s1, s2),
+      stream_pos(data, s2, s3),
+      stream_pos(data, s3, s4),
+      stream_pos(data, s4, end),
+    ) {
+    (Some(p1), Some(p2), Some(p3), Some(p4)) => {
+      let mut p1 = p1
+      let mut p2 = p2
+      let mut p3 = p3
+      let mut p4 = p4
+      let mut j = 0
+      while j + 5 <= last &&
+            wide_reads(p1) &&
+            wide_reads(p2) &&
+            wide_reads(p3) &&
+            wide_reads(p4) {
+        p1 = self.decode5(data, s1, p1, out, j)
+        p2 = self.decode5(data, s2, p2, out, segment + j)
+        p3 = self.decode5(data, s3, p3, out, 2 * segment + j)
+        p4 = self.decode5(data, s4, p4, out, 3 * segment + j)
+        j += 5
+      }
+      p1 = self.decode_run(data, s1, p1, out, j, segment)
+      p2 = self.decode_run(data, s2, p2, out, segment + j, 2 * segment)
+      p3 = self.decode_run(data, s3, p3, out, 2 * segment + j, 3 * segment)
+      p4 = self.decode_run(data, s4, p4, out, 3 * segment + j, count)
+      if p1 != 0 || p2 != 0 || p3 != 0 || p4 != 0 {
+        raise corrupt("a Huffman stream that does not end with its literals")
+      }
+    }
+    _ => {
+      self.decode_stream(data, s1, s2, out, 0, segment)
+      self.decode_stream(data, s2, s3, out, segment, segment)
+      self.decode_stream(data, s3, s4, out, 2 * segment, segment)
+      self.decode_stream(data, s4, end, out, 3 * segment, last)
+    }
+  }
+}
+
+///|
+/// The bits before the end mark of the stream `data[start:end]`, or `None`
+/// where `BackwardBits::new` raises.
+fn stream_pos(data : FixedArray[Byte], start : Int32, end : Int32) -> Int32? {
+  guard end > start && data[end - 1] != b'\x00' else { return None }
+  Some((end - start - 1) * 8 + (31 - data[end - 1].to_int().clz()))
 }

@@ -27,9 +27,9 @@ fn check_bounds(d : Decoder, room : Int32) -> Unit raise {
   )
   assert_true(d.memory_usage() <= memory_bound(d.max_window_bits))
   // Fixed tables.
-  assert_true(d.ll_store.symbol.length() == 512)
-  assert_true(d.ml_store.symbol.length() == 512)
-  assert_true(d.of_store.symbol.length() == 256)
+  assert_true(d.ll_store.entry.length() == 512)
+  assert_true(d.ml_store.entry.length() == 512)
+  assert_true(d.of_store.entry.length() == 256)
   assert_true(d.huffman.symbol.length() == 2048)
 }
 

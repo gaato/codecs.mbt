@@ -155,7 +155,10 @@ fn Decoder::reserve_window(self : Decoder, n : Int32) -> Unit raise Stop {
 
 ///|
 /// Decodes `count` sequences from the bitstream `block[at:block_size]` and
-/// executes each as it comes, then copies the remaining literals.
+/// executes each as it comes, then copies the remaining literals. The read
+/// position is a local here, and the states' tables are read directly, so
+/// that the loop keeps them in registers; `BackwardBits` holds it only for
+/// the stream's start and its end check.
 fn Decoder::execute(
   self : Decoder,
   ll : Fse,
@@ -168,26 +171,91 @@ fn Decoder::execute(
   let mut ll_state = bits.read(ll.log)
   let mut of_state = bits.read(of.log)
   let mut ml_state = bits.read(ml.log)
+  let data = self.block
+  let mut pos = bits.pos
   let rep = self.rep
   let mut lit = 0
   for i in 0..<count {
-    if bits.pos < 0 {
+    if pos < 0 {
       raise corrupt("a sequences bitstream that ends early")
     }
-    let of_code = of.symbol_of(of_state)
-    let ml_code = ml.symbol_of(ml_state)
-    let ll_code = ll.symbol_of(ll_state)
+    // Each state's entry, loaded once: its symbol now, and its next state's
+    // base and bits after the extra bits.
+    let of_entry = of.entry_of(of_state)
+    let ml_entry = ml.entry_of(ml_state)
+    let ll_entry = ll.entry_of(ll_state)
+    let of_code = entry_symbol(of_entry)
+    let ml_code = entry_symbol(ml_entry)
+    let ll_code = entry_symbol(ll_entry)
     if of_code > MAX_OF_CODE {
       raise corrupt("an offset code above \{MAX_OF_CODE}")
     }
-    let offset_value = (1 << of_code) + bits.read_long(of_code)
-    let match_len = ml_base[ml_code] + bits.read(ml_bits[ml_code])
-    let lit_len = ll_base[ll_code] + bits.read(ll_bits[ll_code])
-    if i < count - 1 {
-      ll_state = ll.next(ll_state, bits)
-      ml_state = ml.next(ml_state, bits)
-      of_state = of.next(of_state, bits)
+    // ml_code and ll_code index tables of their alphabets' sizes: the
+    // symbols of tables built from distributions over them.
+    let ml_extra = ml_bits[ml_code]
+    let ll_extra = ll_bits[ll_code]
+    let mut offset_bits = 0
+    let mut ml_add = 0
+    let mut ll_add = 0
+    let last = i == count - 1
+    if wide_reads(pos - 62) {
+      // `top_bits` reads at `pos`, after at most 30 + 16 bits, and after at
+      // most 30 + 16 + 16 bits; then at most 9 + 9 + 8 bits are taken from
+      // a word of 57.
+      let mut w = top_bits(data, at, pos)
+      offset_bits = take_bits(w, of_code)
+      w = w << of_code
+      ml_add = take_bits(w, ml_extra)
+      w = w << ml_extra
+      if of_code + ml_extra + ll_extra > 57 {
+        pos -= of_code + ml_extra
+        ll_add = take_bits(top_bits(data, at, pos), ll_extra)
+        pos -= ll_extra
+      } else {
+        ll_add = take_bits(w, ll_extra)
+        pos -= of_code + ml_extra + ll_extra
+      }
+      if !last {
+        let mut w = top_bits(data, at, pos)
+        let n = entry_nbits(ll_entry)
+        ll_state = entry_base(ll_entry) + take_bits(w, n)
+        w = w << n
+        pos -= n
+        let n = entry_nbits(ml_entry)
+        ml_state = entry_base(ml_entry) + take_bits(w, n)
+        w = w << n
+        pos -= n
+        let n = entry_nbits(of_entry)
+        of_state = entry_base(of_entry) + take_bits(w, n)
+        pos -= n
+      }
+    } else {
+      offset_bits = if of_code <= 24 {
+        back_bits(data, at, pos, of_code)
+      } else {
+        (back_bits(data, at, pos, of_code - 16) << 16) |
+        back_bits(data, at, pos - (of_code - 16), 16)
+      }
+      pos -= of_code
+      ml_add = back_bits(data, at, pos, ml_extra)
+      pos -= ml_extra
+      ll_add = back_bits(data, at, pos, ll_extra)
+      pos -= ll_extra
+      if !last {
+        let n = entry_nbits(ll_entry)
+        ll_state = entry_base(ll_entry) + back_bits(data, at, pos, n)
+        pos -= n
+        let n = entry_nbits(ml_entry)
+        ml_state = entry_base(ml_entry) + back_bits(data, at, pos, n)
+        pos -= n
+        let n = entry_nbits(of_entry)
+        of_state = entry_base(of_entry) + back_bits(data, at, pos, n)
+        pos -= n
+      }
     }
+    let offset_value = (1 << of_code) + offset_bits
+    let match_len = ml_base[ml_code] + ml_add
+    let lit_len = ll_base[ll_code] + ll_add
     // The offset, and the repeat offsets after it (RFC 8878 section
     // 3.1.1.5).
     let @seqenc.Distance(distance) = rep.resolve(
@@ -198,7 +266,9 @@ fn Decoder::execute(
     if lit_len > self.literals_len - lit {
       raise corrupt("a sequence with more literals than the block holds")
     }
-    self.put_literals(lit, lit_len)
+    if !self.put_literals_fast(lit, lit_len) {
+      self.put_literals(lit, lit_len)
+    }
     lit += lit_len
     if offset == 0 || offset > self.filled {
       raise corrupt("an offset beyond the decoded data")
@@ -206,11 +276,76 @@ fn Decoder::execute(
     if self.block_out + match_len > self.block_max {
       raise corrupt("a block that decodes past the block limit")
     }
-    self.reserve_window(match_len)
-    self.copy_back(offset, match_len)
+    if !self.copy_back_fast(offset, match_len) {
+      self.reserve_window(match_len)
+      self.copy_back(offset, match_len)
+    }
   }
-  if bits.pos != 0 {
+  if pos != 0 {
     raise corrupt("a sequences bitstream that is not used up exactly")
   }
   self.put_literals(lit, self.literals_len - lit)
+}
+
+///|
+/// Whether `n` bytes fit at `wpos` without wrapping the window, growing it
+/// or handing out pending output: the case `ensure_space(n)` returns at
+/// once, with nothing to split.
+#inline
+fn Decoder::fits(self : Decoder, n : Int32) -> Bool {
+  let cap = self.ring.length()
+  self.wpos + n <= cap && (cap < self.ring_max || self.pending + n <= cap)
+}
+
+///|
+/// Whether the 8 bytes after `n` bytes at `wpos` hold no window history, so
+/// that a copy may write past its end (`wild_copy`): before the window has
+/// wrapped, and with room for them. Only on native and Wasm, which have
+/// the eight-byte copies.
+#inline
+fn Decoder::spare(self : Decoder, n : Int32) -> Bool {
+  // History is the `filled` bytes before `wpos`, around the end once the
+  // window has wrapped.
+  wide_copies &&
+  self.wpos + n + 8 <= self.ring.length() - (self.filled - self.wpos).max(0)
+}
+
+///|
+/// `put_literals` when the literals fit (`fits`): false, having done
+/// nothing, otherwise or when the block limit would be passed, which
+/// `put_literals` then reports.
+fn Decoder::put_literals_fast(self : Decoder, at : Int32, n : Int32) -> Bool {
+  guard self.block_out + n <= self.block_max && self.fits(n) else {
+    return false
+  }
+  // at + n <= literals_len, checked by the caller, and fits(n).
+  if self.spare(n) && at + n + 8 <= self.literals.length() {
+    wild_copy(self.ring, self.wpos, self.literals, at, n)
+  } else {
+    copy_forward(self.ring, self.wpos, self.literals, at, n)
+  }
+  self.advance(n)
+  true
+}
+
+///|
+/// `copy_back` when the match and its source fit without wrapping: false,
+/// having done nothing, otherwise. The caller has checked the offset and
+/// the block limit.
+fn Decoder::copy_back_fast(self : Decoder, dist : Int32, n : Int32) -> Bool {
+  let src = self.wpos - dist
+  guard src >= 0 && self.fits(n) else { return false }
+  let ring = self.ring
+  let dst = self.wpos
+  if self.spare(n) {
+    wild_match(ring, dst, dist, n)
+  } else if dist >= n {
+    copy_forward(ring, dst, ring, src, n)
+  } else {
+    // Overlapping: each byte may repeat one written in this copy, so the
+    // copy goes forward in steps no longer than `dist`.
+    copy_overlapping(ring, dst, src, n)
+  }
+  self.advance(n)
+  true
 }

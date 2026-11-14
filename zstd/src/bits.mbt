@@ -6,7 +6,26 @@
 /// `len` bits of `data` starting at bit `lo` from `start`, least significant
 /// first. `len` is at most 24 and may be zero; the caller keeps every bit it
 /// reads inside the stream.
+#inline
 fn bits_at(
+  data : FixedArray[Byte],
+  start : Int32,
+  lo : Int32,
+  len : Int32,
+) -> Int32 {
+  let i = start + (lo >> 3)
+  // Four bytes hold the at most 7 + 24 bits: one load, no branch on how
+  // many bytes the bits span. A zero `len` masks everything off.
+  if i >= 0 && i + 4 <= data.length() {
+    ((load32(data, i) >> (lo & 7)) & ((1U << len) - 1)).reinterpret_as_int()
+  } else {
+    bits_near_end(data, start, lo, len)
+  }
+}
+
+///|
+/// `bits_at` within the last three bytes of `data`, a byte at a time.
+fn bits_near_end(
   data : FixedArray[Byte],
   start : Int32,
   lo : Int32,
@@ -20,10 +39,9 @@ fn bits_at(
   if last > i {
     v = v | (data[i + 1].to_uint() << 8)
     if last > i + 1 {
+      // Fewer than four bytes are left from i (else `bits_at` reads them
+      // at once), and the bits are within them.
       v = v | (data[i + 2].to_uint() << 16)
-      if last > i + 2 {
-        v = v | (data[i + 3].to_uint() << 24)
-      }
     }
   }
   ((v >> shift) & ((1U << len) - 1)).reinterpret_as_int()
@@ -60,6 +78,7 @@ fn BackwardBits::new(
 
 ///|
 /// The next `n` (at most 24) bits without consuming them.
+#inline
 fn BackwardBits::peek(self : BackwardBits, n : Int32) -> Int32 {
   let lo = self.pos - n
   if lo >= 0 {
@@ -72,12 +91,8 @@ fn BackwardBits::peek(self : BackwardBits, n : Int32) -> Int32 {
 }
 
 ///|
-fn BackwardBits::skip(self : BackwardBits, n : Int32) -> Unit {
-  self.pos -= n
-}
-
-///|
 /// The next `n` (at most 24) bits.
+#inline
 fn BackwardBits::read(self : BackwardBits, n : Int32) -> Int32 {
   let v = self.peek(n)
   self.pos -= n
@@ -85,13 +100,41 @@ fn BackwardBits::read(self : BackwardBits, n : Int32) -> Int32 {
 }
 
 ///|
-/// The next `n` (at most 30) bits.
-fn BackwardBits::read_long(self : BackwardBits, n : Int32) -> Int32 {
-  if n <= 24 {
-    self.read(n)
+/// `BackwardBits::peek(n)` of a stream in `data` from `start` with `pos`
+/// bits left, for loops that keep `pos` in a local. The common case, bits
+/// at or after the stream's start and four bytes before the end of `data`,
+/// is written out here so that it is inlined into those loops.
+#inline
+fn back_bits(
+  data : FixedArray[Byte],
+  start : Int32,
+  pos : Int32,
+  n : Int32,
+) -> Int32 {
+  let lo = pos - n
+  let i = start + (lo >> 3)
+  if lo >= 0 && i + 4 <= data.length() {
+    ((load32(data, i) >> (lo & 7)) & ((1U << n) - 1)).reinterpret_as_int()
   } else {
-    let high = self.read(n - 16)
-    (high << 16) | self.read(16)
+    back_bits_edge(data, start, pos, n)
+  }
+}
+
+///|
+/// `back_bits` near either end of the stream.
+fn back_bits_edge(
+  data : FixedArray[Byte],
+  start : Int32,
+  pos : Int32,
+  n : Int32,
+) -> Int32 {
+  let lo = pos - n
+  if lo >= 0 {
+    bits_at(data, start, lo, n)
+  } else if pos <= 0 {
+    0
+  } else {
+    bits_at(data, start, 0, pos) << -lo
   }
 }
 
@@ -144,4 +187,74 @@ fn ForwardBits::in_bounds(self : ForwardBits) -> Bool {
 /// Whole bytes used so far.
 fn ForwardBits::bytes_used(self : ForwardBits) -> Int32 {
   (self.pos + 7) >> 3
+}
+
+///|
+/// The four bytes at `i`, little-endian; the caller has checked
+/// `0 <= i` and `i + 4 <= data.length()`.
+#cfg(any(target="native", target="wasm"))
+#inline
+fn load32(data : FixedArray[Byte], i : Int32) -> UInt32 {
+  data.unsafe_reinterpret_as_bytes().unsafe_read_uint32_le(i)
+}
+
+///|
+/// The four bytes at `i`, little-endian; the caller has checked
+/// `0 <= i` and `i + 4 <= data.length()`.
+#cfg(not(any(target="native", target="wasm")))
+fn load32(data : FixedArray[Byte], i : Int32) -> UInt32 {
+  data.unsafe_get(i).to_uint() |
+  (data.unsafe_get(i + 1).to_uint() << 8) |
+  (data.unsafe_get(i + 2).to_uint() << 16) |
+  (data.unsafe_get(i + 3).to_uint() << 24)
+}
+
+///|
+/// Whether `top_bits` may read at `pos`: at least 57 bits after the
+/// stream's start. Never on JS, where 64-bit integers are slow.
+#cfg(not(target="js"))
+#inline
+fn wide_reads(pos : Int32) -> Bool {
+  pos >= 57
+}
+
+///|
+#cfg(target="js")
+#inline
+fn wide_reads(_pos : Int32) -> Bool {
+  false
+}
+
+///|
+/// The bits before `pos` of the stream in `data` from `start`, the last of
+/// them (bit `pos - 1`) as the top bit: at least 57 valid bits, for
+/// `pos >= 57`. The eight bytes loaded end with the byte of bit `pos - 1`,
+/// which is within the stream.
+#inline
+fn top_bits(data : FixedArray[Byte], start : Int32, pos : Int32) -> UInt64 {
+  let q = pos - 57
+  let k = start + (q >> 3)
+  load64(data, k) << (7 - (q & 7))
+}
+
+///|
+/// The top `n` (at most 31) bits of `w`: none when `n` is 0.
+#inline
+fn take_bits(w : UInt64, n : Int32) -> Int32 {
+  (w >> 1 >> (63 - n)).to_int()
+}
+
+///|
+/// The eight bytes at `i`, little-endian; the caller has checked
+/// `0 <= i` and `i + 8 <= data.length()`.
+#cfg(any(target="native", target="wasm"))
+#inline
+fn load64(data : FixedArray[Byte], i : Int32) -> UInt64 {
+  data.unsafe_reinterpret_as_bytes().unsafe_read_uint64_le(i)
+}
+
+///|
+#cfg(not(any(target="native", target="wasm")))
+fn load64(data : FixedArray[Byte], i : Int32) -> UInt64 {
+  load32(data, i).to_uint64() | (load32(data, i + 4).to_uint64() << 32)
 }
