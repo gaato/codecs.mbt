@@ -32,6 +32,7 @@
     "brotli": [
       "src",
       "src/internal/blit",
+      "src/internal/match_length_fast",
       "src/internal/bits",
       "src/internal/huffman",
       "src/internal/lz77",
@@ -43,6 +44,7 @@
     "deflate": [
       "src",
       "src/internal/blit",
+      "src/internal/match_length_fast",
       "src/zlib",
       "src/zlib/internal/adler32",
       "src/zlib/internal/adler32_fast",
@@ -72,6 +74,7 @@
   "copies": {
     "brotli": {
       "blit": ["blit.mbt", "blit_test.mbt"],
+      "match_length_fast": ["length.mbt", "length_test.mbt"],
       "bits": ["bit_packer.mbt", "bit_packer_test.mbt"],
       "huffman": [
         "huffman.mbt",
@@ -87,6 +90,7 @@
     },
     "deflate": {
       "blit": ["blit.mbt", "blit_test.mbt"],
+      "match_length_fast": ["length.mbt", "length_test.mbt"],
       "crc32": [
         "crc32.mbt",
         "crc32_test.mbt"
@@ -117,6 +121,7 @@
     },
     "zstd": {
       "blit": ["blit.mbt", "blit_test.mbt"],
+      "match_length_fast": ["length.mbt", "length_test.mbt"],
       "bits": ["bit_packer.mbt", "bit_packer_test.mbt"],
       "huffman_code": {
         "from": "huffman",

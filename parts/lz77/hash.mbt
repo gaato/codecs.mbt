@@ -8,27 +8,37 @@ const HASH_MULTIPLIER : UInt32 = 0x1e35a7bd
 
 ///|
 /// The hash of `data[pos..pos + 4)`, read little-endian, in `bits` bits (1
-/// to 32).
+/// to 32). The caller has checked that the four bytes are within `data`.
 pub fn hash4(data : FixedArray[Byte], pos : Int32, bits : Int32) -> Int32 {
-  let v = data[pos].to_uint() |
-    (data[pos + 1].to_uint() << 8) |
-    (data[pos + 2].to_uint() << 16) |
-    (data[pos + 3].to_uint() << 24)
-  ((v * HASH_MULTIPLIER) >> (32 - bits)).reinterpret_as_int()
+  ((load4(data, pos) * HASH_MULTIPLIER) >> (32 - bits)).reinterpret_as_int()
 }
 
 ///|
-/// How many bytes from `a` equal those from `b` (`a < b`), at most `limit`.
+/// The four bytes at `pos`, little-endian, in one load: `pos + 4` is within
+/// `data` (`hash4`'s callers check it).
+#cfg(any(target="native", target="wasm"))
+fn load4(data : FixedArray[Byte], pos : Int32) -> UInt32 {
+  data.unsafe_reinterpret_as_bytes().unsafe_read_uint32_le(pos)
+}
+
+///|
+#cfg(not(any(target="native", target="wasm")))
+fn load4(data : FixedArray[Byte], pos : Int32) -> UInt32 {
+  data[pos].to_uint() |
+  (data[pos + 1].to_uint() << 8) |
+  (data[pos + 2].to_uint() << 16) |
+  (data[pos + 3].to_uint() << 24)
+}
+
+///|
+/// How many bytes from `a` equal those from `b` (`0 <= a < b`), at most
+/// `limit`; `b + limit` is within `data`. Sixteen bytes at a time on native
+/// and Wasm (`@match_length_fast`).
 pub fn match_length(
   data : FixedArray[Byte],
   a : Int32,
   b : Int32,
   limit : Int32,
 ) -> Int32 {
-  for n = 0; n < limit; n = n + 1 {
-    if data[a + n] != data[b + n] {
-      return n
-    }
-  }
-  limit
+  @match_length_fast.length(data, b, a, b + limit)
 }

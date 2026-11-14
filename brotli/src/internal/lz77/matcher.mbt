@@ -67,12 +67,19 @@ fn Matcher::insert(
   data : FixedArray[Byte],
   pos : Int32,
 ) -> Unit {
-  let base = self.hash(data, pos) * BUCKET_SIZE
+  self.insert_at(self.hash(data, pos) * BUCKET_SIZE, pos)
+}
+
+///|
+/// Puts `pos` first in the bucket at `base`, a hash times `BUCKET_SIZE`:
+/// the bucket's slots are within the table, which holds `BUCKET_SIZE <<
+/// hash_bits` of them.
+fn Matcher::insert_at(self : Matcher, base : Int32, pos : Int32) -> Unit {
   let table = self.table
-  for i = BUCKET_SIZE - 1; i > 0; i = i - 1 {
-    table[base + i] = table[base + i - 1]
-  }
-  table[base] = pos + 1
+  write(table, base + 3, read(table, base + 2))
+  write(table, base + 2, read(table, base + 1))
+  write(table, base + 1, read(table, base))
+  write(table, base, pos + 1)
 }
 
 ///|
@@ -90,7 +97,7 @@ pub fn Matcher::find(
   max_distance : Int32,
   max_length : Int32,
 ) -> Int32 {
-  while self.next < pos && self.next + MIN_MATCH <= end {
+  while self.next < pos && end - self.next >= MIN_MATCH {
     self.insert(data, self.next)
     self.next += 1
   }
@@ -99,13 +106,15 @@ pub fn Matcher::find(
   let base = self.hash(data, pos) * BUCKET_SIZE
   let mut best = 0
   for i in 0..<BUCKET_SIZE {
-    let candidate = self.table[base + i] - 1
+    // base + i is in the bucket, within the table.
+    let candidate = read(self.table, base + i) - 1
     let dist = pos - candidate
     if candidate < 0 || dist > max_distance {
       break
     }
-    // Check the byte that would make it longer than the best first.
-    if data[candidate + best] != data[pos + best] {
+    // Check the byte that would make it longer than the best first:
+    // candidate < pos and best < limit, so both are within `end`.
+    if read(data, candidate + best) != read(data, pos + best) {
       continue
     }
     let len = match_length(data, candidate, pos, limit)
@@ -117,7 +126,7 @@ pub fn Matcher::find(
       }
     }
   }
-  self.insert(data, pos)
+  self.insert_at(base, pos)
   self.next = pos + 1
   if best >= MIN_MATCH {
     best
@@ -135,4 +144,31 @@ pub fn Matcher::slide(self : Matcher, shift : Int32) -> Unit {
     table[i] = if table[i] > shift { table[i] - shift } else { 0 }
   }
   self.next = (self.next - shift).max(0)
+}
+
+///|
+/// `data[i]`, without the index check on native and Wasm, where each check
+/// is a call on Wasm: each caller says why `i` is within `data`.
+#cfg(any(target="native", target="wasm"))
+fn[T] read(data : FixedArray[T], i : Int32) -> T {
+  data.unsafe_get(i)
+}
+
+///|
+#cfg(not(any(target="native", target="wasm")))
+fn[T] read(data : FixedArray[T], i : Int32) -> T {
+  data[i]
+}
+
+///|
+/// `data[i] = value`, as `read`.
+#cfg(any(target="native", target="wasm"))
+fn[T] write(data : FixedArray[T], i : Int32, value : T) -> Unit {
+  data.unsafe_set(i, value)
+}
+
+///|
+#cfg(not(any(target="native", target="wasm")))
+fn[T] write(data : FixedArray[T], i : Int32, value : T) -> Unit {
+  data[i] = value
 }

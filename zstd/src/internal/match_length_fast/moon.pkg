@@ -1,3 +1,5 @@
+// Generated from parts/match_length_fast/moon.pkg by scripts/gen_parts.mbtx: edit it there, not here.
+
 import {
   "moonbitlang/core/v128",
 }

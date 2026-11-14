@@ -236,6 +236,10 @@ fn Encoder::write_compressed(
     mb.dist_codes,
   )
   let data = self.data
+  // Each literal's code and its length in one entry, `length | code << 4`.
+  let lit = FixedArray::makei(NUM_LITERALS, b => {
+    mb.lit_lengths[b] | (mb.lit_codes[b] << 4)
+  })
   let mut pos = start
   for i in 0..<mb.count {
     if w.position() > budget {
@@ -248,11 +252,22 @@ fn Encoder::write_compressed(
     let cc = cell_copy_base[cell] + (sym & 7)
     w.write(insert_length_extra[ic], mb.inserts[i] - insert_length_base[ic])
     w.write(copy_length_extra[cc], mb.copies[i] - copy_length_base[cc])
-    for p in pos..<(pos + mb.inserts[i]) {
-      let b = data[p].to_int()
-      w.write(mb.lit_lengths[b], mb.lit_codes[b])
-      if w.position() > budget {
-        return false
+    let inserts = mb.inserts[i]
+    if w.position() + inserts * MAX_CODE_LENGTH <= budget {
+      // The literals' codes, at most 15 bits each, all fit the budget: no
+      // check between them can fail.
+      for p in pos..<(pos + inserts) {
+        // p < end, within `data`; a byte indexes the 256 entries.
+        let e = lit.unsafe_get(data.unsafe_get(p).to_int())
+        w.write(e & 15, e >> 4)
+      }
+    } else {
+      for p in pos..<(pos + inserts) {
+        let e = lit[data[p].to_int()]
+        w.write(e & 15, e >> 4)
+        if w.position() > budget {
+          return false
+        }
       }
     }
     pos += mb.inserts[i] + mb.copies[i]

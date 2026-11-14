@@ -1,3 +1,5 @@
+// Generated from parts/match_length_fast/length_test.mbt by scripts/gen_parts.mbtx: edit it there, not here.
+
 ///|
 test "SIMD equals checked bytes at every alignment mismatch and valid end" {
   for alignment in 0..<16 {

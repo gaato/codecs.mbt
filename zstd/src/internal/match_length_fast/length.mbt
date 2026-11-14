@@ -1,3 +1,5 @@
+// Generated from parts/match_length_fast/length.mbt by scripts/gen_parts.mbtx: edit it there, not here.
+
 ///|
 /// Counts equal bytes for 0 <= q < p <= end <= data.length(). Sixteen
 /// bytes at a time, then eight, then the last valid bytes individually.
@@ -11,7 +13,9 @@ pub fn length(
   end : Int32,
 ) -> Int32 {
   let mut n = 0
-  while p + n + 16 <= end {
+  // Differences, not sums: `p + n + 16` would wrap past the largest Int for
+  // an `end` within 16 of it.
+  while end - p - n >= 16 {
     // q < p and sixteen bytes remain at p + n: both loads fit valid data.
     let equal = @v128.i8x16_bitmask(
       @v128.i8x16_eq(@v128.v128_load(data, p + n), @v128.v128_load(data, q + n)),
@@ -21,7 +25,7 @@ pub fn length(
     }
     n += 16
   }
-  if p + n + 8 <= end {
+  if end - p - n >= 8 {
     // q < p and eight bytes remain at p + n.
     let bytes = data.unsafe_reinterpret_as_bytes()
     let diff = bytes.unsafe_read_uint64_le(p + n) ^
@@ -32,7 +36,7 @@ pub fn length(
     n += 8
   }
   // Only valid input is read: p + n < end and 0 <= q < p.
-  while p + n < end && data.unsafe_get(p + n) == data.unsafe_get(q + n) {
+  while n < end - p && data.unsafe_get(p + n) == data.unsafe_get(q + n) {
     n += 1
   }
   n

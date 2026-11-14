@@ -1,0 +1,11 @@
+// Generated from parts/match_length_fast/moon.pkg by scripts/gen_parts.mbtx: edit it there, not here.
+
+import {
+  "moonbitlang/core/v128",
+}
+
+// Experimental SIMD is confined here; only native and Wasm compile it.
+
+warnings = "-alert_experimental-unused_package"
+
+supported_targets = "js + native + wasm + wasm-gc"
