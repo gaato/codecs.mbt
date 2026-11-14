@@ -7,6 +7,8 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-15
+
 ### Changed
 
 - **The encoder is faster on native and Wasm.** Its match finder reads its tables without index checks, rebases them without branches and extends matches sixteen bytes at a time with SIMD (the shared `match_length_fast` of parts/): level 6 compresses the benchmark text (512 KiB) in 13.8 ms in place of 15.7 ms on native and 24.3 in place of 33.1 ms on Wasm, 22.5 in place of 24.6 ms on Wasm GC. JS is unchanged, and the output is the same on all four.

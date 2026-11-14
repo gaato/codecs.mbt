@@ -4,7 +4,7 @@
 
 name = "gaato/png"
 
-version = "0.1.1"
+version = "0.1.2"
 
 license = "Apache-2.0"
 
@@ -23,5 +23,5 @@ preferred_target = "native"
 import {
   "gaato/codec@0.1.1",
   "gaato/codec_image@0.1.0",
-  "gaato/deflate@0.1.1",
+  "gaato/deflate@0.1.2",
 }

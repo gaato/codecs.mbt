@@ -35,7 +35,7 @@ moon build --release --target wasm
 On an Intel Core i5-10400F, pinned to one CPU, with MoonBit 0.10.20 (moon
 0.1.20261104; moonrun for Wasm, Node 26.13.1 for JS, GCC 16.2.1 for Native),
 on 2026-11-15, the mean time over three runs to decode each image with
-gaato/png 0.1.1 and the speed work under [Unreleased] in its changelog, and
+gaato/png 0.1.2, and
 with typst 0.1.9, and the peak memory of `png_memory`, the mean of three
 runs:
 
@@ -75,8 +75,8 @@ Measured on 2026-10-23, on an Intel Core i5-10400F, with MoonBit 0.10.16 (moon
 for Native). The benchmarks build typst 0.1.9, whose `codecs` sources are
 those of 0.1.7. The times of gaato/png, typst, gmlewis/image and
 mizchi/image were measured again on 2026-11-15, on the same machine with
-MoonBit 0.10.20 (moon and moonrun 0.1.20261104, Node 26.13.1), with the
-speed work under [Unreleased] in gaato/png's changelog; bikallem/image's,
+MoonBit 0.10.20 (moon and moonrun 0.1.20261104, Node 26.13.1), with
+gaato/png 0.1.2; bikallem/image's,
 which needs a workspace of its own, are from 2026-10-23.
 
 ### Summary
@@ -276,11 +276,11 @@ library ships:
 | [moonbitlang/core](https://mooncakes.io/docs/moonbitlang/core) `compress/flate`, `compress/zlib`, `compress/gzip` (experimental packages) | MoonBit 0.10.20 | raw DEFLATE, zlib, gzip |
 
 Ours are this repository's main on 2026-11-07: gaato/zstd 0.3.1,
-gaato/brotli 0.4.1 and gaato/deflate 0.1.0, with the changes under
-[Unreleased] in their changelogs. The speed tables are newer: every
+gaato/brotli 0.4.1 and gaato/deflate 0.1.0, with changes not yet released
+that day. The speed tables are newer: every
 package was timed again on 2026-11-15, on the same machine and versions,
-with Node 26.13.1, ours being gaato/zstd 0.4.0, gaato/brotli 0.4.2 and
-gaato/deflate 0.1.1 with the speed work under [Unreleased].
+with Node 26.13.1, ours being gaato/zstd 0.4.1, gaato/brotli 0.4.3 and
+gaato/deflate 0.1.2.
 
 [bikallem/compress](https://mooncakes.io/docs/bikallem/compress) 0.3.4
 (zstd, Brotli, raw DEFLATE, zlib, gzip) is not compared: it does not build
@@ -490,14 +490,15 @@ the output had come out while only the first half of the input had gone in.
 mizchi/brotli and mizchi/zlib take whole inputs only. The times are on
 Native, the mean of 20 decodes (of one, 1 byte at a time), from the second
 of two runs: other work on the machine slowed most of the first by up to
-five times. Ours were timed again on 2026-11-15, after the speed work under
-[Unreleased], alternately with main of that day: in 4 KiB pieces they now
-take as long as whole. One byte at a time, ours took within 5 % of
-main's that day, both 32 to 35 ms (zstd), 81 to 86 ms (Brotli) and 50 to
-52 ms (raw DEFLATE), a day's difference from the times of 2026-11-07,
-which the column keeps so that it compares runs of one day. Fed one byte at a
-time, every decoder refuses the same invalid streams as whole, but for
-hustcer/fbr, which then also refuses bytes after the end of the stream.
+five times. Ours were timed again on 2026-11-15, as gaato/zstd 0.4.1,
+gaato/brotli 0.4.3 and gaato/deflate 0.1.2, alternately with main of that
+day: in 4 KiB pieces they now take as long as whole. One byte at a time,
+ours took within 5 % of main's that day, both 32 to 35 ms (zstd), 81 to
+86 ms (Brotli) and 50 to 52 ms (raw DEFLATE), a day's difference from the
+times of 2026-11-07, which the column keeps so that it compares runs of
+one day. Fed one byte at a time, every decoder refuses the same invalid
+streams as whole, but for hustcer/fbr, which then also refuses bytes after
+the end of the stream.
 
 - Milky2018/zstd's `Decompressor` decodes the frame again from its start at
   every `pull` and hands out again what it handed out before when the frame

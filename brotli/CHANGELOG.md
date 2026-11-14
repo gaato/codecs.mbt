@@ -7,6 +7,8 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-11-15
+
 ### Changed
 
 - **The decoder is faster.** It decodes runs of literals and whole commands in loops that keep the bit reader in place while the input surely holds their bits, refills three bytes at a time, copies short matches eight bytes at a time, and reads its prefix-code tables without index checks. The benchmark text (512 KiB, made by `brotli -q 9`) decodes in 2.57 ms in place of 3.77 ms on native, 4.11 in place of 7.31 ms on Wasm GC and 9.79 in place of 15.95 ms on JS; on Wasm, the binary stream (128 KiB) in 2.83 in place of 6.43 ms and the text in 9.09 in place of 9.99 ms. The loop for whole commands is off on Wasm, where it was slower. The output and the errors are unchanged, however the input is split.
