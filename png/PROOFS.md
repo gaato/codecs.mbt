@@ -36,7 +36,12 @@ against the code.
 | `paeth` | `src/internal/filter` | The Paeth predictor of 9.4, as its pseudo-code writes it (ties to a, then b), for bytes a, b and c; the result is one of them, so a byte | unbounded | none | Z3, CVC5 |
 | `unfilter` | `src/internal/filter` | Every index the reversal of the five filter types (9.2 to 9.4) reads or writes, through `sub`, `up`, `average` and `paeth_row`, is from 1 up to and below both rows' lengths, whatever `len` says; the left neighbour is read only `pixel` bytes after the first, so from 1 on; Average's halved sum and Paeth's predictor are bytes; and the answer is whether the type is 0 to 4 | unbounded | `shr`, `byte_add`, `byte_of` | Z3, CVC5 |
 | `up_from` | `src/internal/filter` | The Up filter from byte `from` (at least 1) reads and writes only bytes below both rows' lengths | unbounded | `byte_add` | Z3, CVC5 |
+| `unfilter_range` | `src/internal/filter` | The reversal of types 1 to 4 a byte at a time from byte `from` (at least 1) reads and writes only bytes below both rows' lengths, the left neighbour only from byte 1 on; Average's halved sum and Paeth's predictor are bytes | unbounded | `shr`, `byte_add`, `byte_of` | Z3, CVC5 |
 | `unfilter` | `src/internal/filter_fast` | The decoder's unfilter, with the Up filter sixteen bytes at a time with SIMD, reads and writes only from byte 1 up to and below both rows' lengths and `len + 1`, whatever `len` says (over mathematical integers; that a `len + 1` that wraps past the largest `Int` reads nothing, as in `src/internal/filter`, is the test "a len whose len + 1 overflows reads and writes nothing"): every sixteen-byte load and store lies within the row it touches, and `@filter.up_from` finishes the row; the answer is whether the type is 0 to 4 | unbounded | `load16`, `store16`, `add16` | Z3, CVC5 |
+| `pixels` | `src/internal/filter_fast` | Sub, Average and Paeth on a row of 3- or 4-byte pixels, at least two pixels and sixteen bytes long, read and write only below `stop`, within both rows: `@filter.unfilter_range` reverses the first pixel and the last bytes, and the SIMD loops the pixels between | unbounded | none | Z3, CVC5 |
+| `sub_pixels` | `src/internal/filter_fast` | Sub a pixel at a time with SIMD reads only below `stop` and writes only the four bytes from the pixel it reverses, below `stop` too; the loop ends, where `@filter.unfilter_range` goes on | unbounded | `load16`, `store4`, `add16` | Z3, CVC5 |
+| `average_pixels` | `src/internal/filter_fast` | Average a pixel at a time with SIMD, as `sub_pixels`, reading the row above below `stop` | unbounded | `load16`, `store4`, `add16`, `avg16` | Z3, CVC5 |
+| `paeth_pixels` | `src/internal/filter_fast` | Paeth a pixel at a time with SIMD, as `average_pixels`, reading above left from byte 1 on | unbounded | `load16`, `store4`, `add16`, `paeth16` | Z3, CVC5 |
 | `packed_sample` | `src/internal/convert` | Sample `k` of a byte packed at 1, 2 or 4 bits (7.2) is the byte's bits from 8 − depth × (k + 1) up, and below 2^depth, so every palette index it gives is inside the converter's table of 256 | unbounded | `shr`, `low_bits` | Z3, CVC5 |
 | `widen` | `src/internal/convert` | A sample of 1, 2, 4 or 8 bits on 8 bits is exactly v × 255 / (2^depth − 1), from 0 to 255: repeating its bits (12.4) | unbounded | none | Z3, CVC5 |
 | `narrow` | `src/internal/convert` | A 16-bit sample on 8 bits is the nearest: 257 × r − v is from −128 to 128, which only round(v × 255 / 65535) meets | unbounded | none | Z3, CVC5 |
@@ -73,11 +78,15 @@ specification's tables written out apart from the code:
   zlib is `gaato/deflate`'s.
 - That `src/internal/filter_fast`'s `unfilter` computes the same bytes as
   `src/internal/filter`'s: the proof covers where its SIMD loads and stores
-  go, not what `add16` adds, since a proved function's body cannot hold a
-  SIMD operation and the bridges state only where they read and write. Its
-  tests compare it with the proved `unfilter` for every type, pixel size and
-  row length from 0 to 40 bytes and an image's, with `len` and the rows'
-  lengths disagreeing.
+  go, not what `add16`, `avg16` and `paeth16` compute, since a proved
+  function's body cannot hold a SIMD operation and the bridges state only
+  where they read and write. Its tests compare it with the proved
+  `unfilter` for every type, pixel size and row length from 0 to 40 bytes
+  and an image's, with `len` and the rows' lengths disagreeing; for RGB and
+  RGBA rows of 0 to 200 bytes, random and extreme; and with `prev` the same
+  array as `cur`. The tests of `avg16` and `paeth16` compare them with the
+  scalar arithmetic and `@filter.paeth` over every pair and every three
+  bytes.
 
 ## Trusted bridges
 
@@ -91,8 +100,11 @@ specification's tables written out apart from the code:
 | `load16` | `src/internal/filter_fast` | `@v128.v128_load(a, off)` reads bytes `off` to `off + 15` of `a` and no others, for `0 <= off` and `off + 16 <= a.length()` | `src/internal/filter_fast/bridges_wbtest.mbt`: "load16 and store16 read and write exactly the sixteen bytes from off" |
 | `store16` | `src/internal/filter_fast` | `@v128.v128_store(a, off, v)` writes bytes `off` to `off + 15` of `a` and no others, for `0 <= off` and `off + 16 <= a.length()` | `src/internal/filter_fast/bridges_wbtest.mbt`: "load16 and store16 read and write exactly the sixteen bytes from off" |
 | `add16` | `src/internal/filter_fast` | `@v128.i8x16_add` touches no memory (its contract claims nothing about the sum, which the tests compare with `@filter.unfilter`) | `src/internal/filter_fast/bridges_wbtest.mbt`: "add16 adds each byte, wrapped modulo 256, for every pair of bytes" |
+| `store4` | `src/internal/filter_fast` | `@v128.v128_store32_lane(a, off, v, 0)` writes bytes `off` to `off + 3` of `a` and no others, for `0 <= off` and `off + 4 <= a.length()` | `src/internal/filter_fast/bridges_wbtest.mbt`: "store4 writes exactly the four bytes from off" |
+| `avg16` | `src/internal/filter_fast` | Average's prediction touches no memory (its contract claims nothing about the bytes it computes) | `src/internal/filter_fast/bridges_wbtest.mbt`: "avg16 is the mean rounded down, for every pair of bytes" |
+| `paeth16` | `src/internal/filter_fast` | Paeth's prediction touches no memory (its contract claims nothing about the bytes it computes) | `src/internal/filter_fast/bridges_wbtest.mbt`: "paeth16 is @filter.paeth in its first eight bytes, for every three bytes" |
 
 `src/internal/proof_bits` is a copy of `parts/proof_bits`, where lemmas check
 that its table of powers of two doubles at every step.
 
-Bridge budget: 8
+Bridge budget: 11

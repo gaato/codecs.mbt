@@ -279,3 +279,53 @@ fn paeth_row(
     proof_invariant: 0 <= k,
   }
 }
+
+///|
+/// Reverses filter type `kind` (1 to 4) on `cur[from:stop]`, a byte at a
+/// time, where the bytes before `from` are reversed already: the byte on
+/// the left and the one above left are 0 for the first `pixel` bytes of the
+/// row, as in `unfilter`. Another type leaves the bytes as they are. The
+/// SIMD filters of ../filter_fast reverse a row's first pixel and its last
+/// bytes with it.
+pub fn unfilter_range(
+  kind : Byte,
+  cur : FixedArray[Byte],
+  prev : FixedArray[Byte],
+  pixel : Int32,
+  from : Int32,
+  stop : Int32,
+) -> Unit where {
+  proof_require: pixel_ok(pixel) &&
+  1 <= from &&
+  stop <= cur.length() &&
+  stop <= prev.length(),
+  proof_ensure: true,
+} {
+  for i = from; i < stop; {
+    proof_assert in_row(i, cur.length()) && in_row(i, prev.length())
+    let back = i - pixel
+    let mut a = 0
+    let mut c = 0
+    if back >= 1 {
+      proof_assert in_row(back, cur.length()) && in_row(back, prev.length())
+      a = cur.unsafe_get(back).to_int()
+      c = prev.unsafe_get(back).to_int()
+    }
+    let b = prev.unsafe_get(i).to_int()
+    let predicted = if kind == b'\x01' {
+      a
+    } else if kind == b'\x02' {
+      b
+    } else if kind == b'\x03' {
+      @proof_bits.shr(a + b, 1)
+    } else if kind == b'\x04' {
+      paeth(a, b, c)
+    } else {
+      0
+    }
+    cur.unsafe_set(i, byte_add(cur.unsafe_get(i), byte_of(predicted)))
+    continue i + 1
+  } where {
+    proof_invariant: from <= i,
+  }
+}

@@ -144,3 +144,40 @@ test "unfilter: the row as its own row above, as byte by byte" {
     }
   }
 }
+
+///|
+test "unfilter_range: from byte 1 and split at every byte, the same as unfilter; another type changes nothing" {
+  let mut s = 2024
+  let next = () => {
+    s = (s * 1103515245 + 12345) & 0x7FFFFFFF
+    (s >> 16).to_byte()
+  }
+  for unit in [1, 3, 4, 8] {
+    for len in [0, 1, 5, 12, 33] {
+      let cur = FixedArray::makei(len + 1, _ => next())
+      let prev = FixedArray::makei(len + 1, _ => next())
+      for kind in 0..<6 {
+        let want = cur.copy()
+        let _ = @filter.unfilter(kind.to_byte(), want, prev, len, unit)
+        // Kinds 0 and 5 leave the row as it is, as unfilter does for 0.
+        let expected = if kind == 5 { cur } else { want }
+        for split in 1..<=(len + 1) {
+          let got = cur.copy()
+          @filter.unfilter_range(kind.to_byte(), got, prev, unit, 1, split)
+          @filter.unfilter_range(
+            kind.to_byte(),
+            got,
+            prev,
+            unit,
+            split,
+            len + 1,
+          )
+          assert_true(
+            got == expected,
+            msg="kind=\{kind} unit=\{unit} len=\{len} split=\{split}",
+          )
+        }
+      }
+    }
+  }
+}

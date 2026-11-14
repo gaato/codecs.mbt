@@ -93,3 +93,77 @@ test "a len whose len + 1 overflows reads and writes nothing" {
     assert_true(cur.iter().all(b => b == b'\x01'), msg="kind \{kind}")
   }
 }
+
+///|
+test "the pixel loops equal @filter.unfilter: RGB and RGBA rows of 0 to 200 bytes, random and extreme" {
+  let next = lcg(4242)
+  let patterns : Array[(Int32) -> Byte] = [
+    _ => next(),
+    _ => b'\x00',
+    _ => b'\xff',
+    i => if i % 2 == 0 { b'\x00' } else { b'\xff' },
+    i => (i * 37 % 256).to_byte(),
+    i => if i % 3 == 0 { b'\x80' } else { b'\x7f' },
+  ]
+  for unit in [3, 4] {
+    for len in 0..<=200 {
+      for pc in patterns {
+        for pp in patterns {
+          let cur = FixedArray::makei(len + 1, pc)
+          let prev = FixedArray::makei(len + 1, pp)
+          for kind in [1, 3, 4] {
+            check(kind, cur, prev, len, unit)
+          }
+        }
+      }
+    }
+  }
+}
+
+///|
+test "the pixel loops equal @filter.unfilter when cur is prev" {
+  let next = lcg(99)
+  for unit in [3, 4] {
+    for len in [0, 23, 24, 40, 100, 1536] {
+      for kind in [1, 3, 4] {
+        let fast = FixedArray::makei(len + 1, _ => next())
+        let reference = fast.copy()
+        let got = @filter_fast.unfilter(kind.to_byte(), fast, fast, len, unit)
+        let want = @filter.unfilter(
+          kind.to_byte(),
+          reference,
+          reference,
+          len,
+          unit,
+        )
+        assert_eq(got, want)
+        assert_true(
+          fast == reference,
+          msg="kind=\{kind} len=\{len} unit=\{unit}",
+        )
+      }
+    }
+  }
+}
+
+///|
+test "the pixel loops read and write nothing past either row's end" {
+  for unit in [3, 4] {
+    for kind in [1, 3, 4] {
+      let cur = FixedArray::make(80, b'\x01')
+      let prev = FixedArray::make(61, b'\x02')
+      assert_true(@filter_fast.unfilter(kind.to_byte(), cur, prev, 100, unit))
+      for i in 61..<80 {
+        assert_eq(cur[i], b'\x01')
+      }
+      assert_eq(cur[0], b'\x01')
+      // A row that ends inside cur: the bytes after it stay.
+      let cur = FixedArray::make(80, b'\x01')
+      let prev = FixedArray::make(80, b'\x02')
+      assert_true(@filter_fast.unfilter(kind.to_byte(), cur, prev, 50, unit))
+      for i in 51..<80 {
+        assert_eq(cur[i], b'\x01', msg="kind=\{kind} unit=\{unit} i=\{i}")
+      }
+    }
+  }
+}
