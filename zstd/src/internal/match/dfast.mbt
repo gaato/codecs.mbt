@@ -73,7 +73,8 @@ pub fn Dfast::Dfast(
 }
 
 ///|
-/// Releases frame history and invalidates both tables before another frame.
+/// Forgets the frame's history and invalidates both tables before another
+/// frame, keeping the buffers' capacity.
 pub fn Dfast::reset(self : Dfast) -> Unit {
   self.history.reset()
 }

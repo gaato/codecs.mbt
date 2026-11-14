@@ -34,13 +34,15 @@ decoder's read order. Offset values and extras use UInt32, avoiding a
 signed `1 << 31`. Each offset extra write is at most 31 bits; BitPacker's
 JS implementation splits a write that would overflow its accumulator.
 Every partial-byte alignment is tested through a backward reader. Actual
-encoder windows need at most 21 offset extra bits, so external window
+encoder windows need at most 22 offset extra bits (a new offset at the
+4 MiB window's full distance codes `2^22 + 3`), so external window
 fixtures exercise window minus one, while width 31 is a packing test.
 
 `internal/match/Fast` follows
 [Zstandard 1.5.7's no-dictionary fast loop](https://github.com/facebook/zstd/blob/v1.5.7/lib/compress/zstd_fast.c#L192).
-It uses one hash table and a sliding byte buffer of at most window + one
-block. Hash positions rebase after each block, avoiding counter overflow
+It uses one hash table and the shared history buffer (`internal/match/History`):
+two windows and one block at most, slid only when the next whole block
+would not fit. Positions rebase at each slide, so counters cannot overflow
 on long frames. The finder sees only complete cutter blocks, never step
 boundaries, and retains history for raw and RLE blocks too. Hash widths
 and constants follow `ZSTD_hash{4,5,6,7}`; four-byte matches remain eligible
@@ -104,8 +106,8 @@ Sequence coding remains responsible for the actual repeat transitions.
 The finder keeps its two search offsets as the reference loop does;
 the block's encoded repeat history is committed only if selected.
 
-The memory limit is derived from the selected parameters: window plus
-one block, `4 * (2^hashLog + 2^chainLog)` bytes of positions for double-fast
+The memory limit is derived from the selected parameters: two windows
+plus one block of history, `4 * (2^hashLog + 2^chainLog)` bytes of positions for double-fast
 (fast has only its hash and 12 repeat bytes), and the other bounded
 encoder structures in RESOURCE_BOUNDS.md. The double-fast maximum is the
 large-input level-four row (windowLog 21, hashLog 18, chainLog 18). The
@@ -153,8 +155,9 @@ position. Finding a match disables that mode. Subsequent searches insert
 the skipped match bytes as the reference does. Cross-block tail hashes are
 completed only when the next complete block supplies enough bytes.
 
-The bounded byte prefix and both position tables rebase after a block.
-Subtracting the discarded byte count invalidates expired links/heads;
+The shared history and both position tables rebase when the history
+slides (only when the next whole block would not fit). Subtracting the
+discarded byte count invalidates expired links/heads;
 a ring bias preserves each surviving chain slot under this subtraction.
 Search explicitly rejects a distance beyond the window and positions
 before retained frame history. Like fast/dfast, the exact window distance
@@ -347,8 +350,12 @@ Against HC, Silesia ranges from -0.22% to +0.26% and Canterbury from
 against default reached +0.61% (level five); searching rows as the
 reference does brought them to at most +0.19%.
 
-The only file outside an absolute 3% difference is `fields.c` at level
-twelve: 3,133 bytes versus 3,041 (+3.03%) under either reference mode.
+Against the default reference, the only file outside an absolute 3%
+difference is `fields.c` at level twelve: 3,133 bytes versus 3,041
+(+3.03%), the same under HC. Against HC, `silesia/nci` at levels five and
+six is also outside it, smaller (-3.31% and -3.07%): those rows now search
+rows, which find nci's matches better than HC, and stay within 0.7% of
+the default reference.
 Its 11,150-byte source selects the Btopt row: adjusted
 window/chain/hash/search/minMatch/target = 14/15/14/4/3/24. The
 documented mapping uses lazy2 with those numbers. Forcing the reference
@@ -388,7 +395,11 @@ No searchLog, minMatch or targetLength adjustment applies here.
 Tests pin window/chain/hash rows for ten sizes at every level, including
 tiny sources and tree strategies, plus the size-class and 2^30 boundaries.
 For example, level three at 1,000 bytes now uses 10/10/11 instead of
-10/14/15. Table allocations only shrink from each unknown-size row.
+10/14/15. Each log only shrinks from its size class's row. That row is
+not always smaller than the unknown-size one: level one at most 16 KiB
+starts from hashLog 15 and chainLog 14, against 14 and 13 for unknown
+sizes. Its window is far smaller, though, and the bounds test checks the
+whole encoder against the unknown-size maximum at every level and size.
 
 ## Closed investigation: level-two kennedy.xls
 

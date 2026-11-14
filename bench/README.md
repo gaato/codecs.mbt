@@ -71,21 +71,25 @@ same code as `src/compare_png`.
 Measured on 2026-10-23, on an Intel Core i5-10400F, with MoonBit 0.10.16 (moon
 0.1.20261016; moonrun 0.1.20261016 for Wasm, Node 26.12.1 for JS, GCC 16.2.1
 for Native). The benchmarks build typst 0.1.9, whose `codecs` sources are
-those of 0.1.7, which the table above measured.
+those of 0.1.7, which the table above measured. The times of gaato/png,
+typst, gmlewis/image and mizchi/image were measured again on 2026-11-14, on
+the same machine with MoonBit 0.10.20 (moon and moonrun 0.1.20261104, Node
+26.13.1), after gaato/png's faster Up filter and Adler-32; bikallem/image's,
+which needs a workspace of its own, are from 2026-10-23.
 
 ### Summary
 
 | Package | Streaming | Memory for 8192 × 8192 RGBA, limit | Formats | CRC, Adler-32 | Targets | Time, ours = 1 (Native / Wasm / Wasm GC / JS) |
 |---|---|---|---|---|---|---|
-| [gaato/png](https://mooncakes.io/docs/gaato/png) 0.1.0 | Yes | `Decoder` 6.5 MiB; `decode` 262.6 MiB, 512 MiB by default | All, Adam7, APNG frames | All chunks (a bad ancillary one is skipped), yes | All four | 1 |
-| [moonbitlang/typst](https://mooncakes.io/docs/moonbitlang/typst) 0.1.9 | No | 262.5 MiB, none | All, Adam7, APNG's default image | Not IEND's, no | All four | 0.66 / 0.82 / 1.0 / 6.4 |
-| [gmlewis/image](https://mooncakes.io/docs/gmlewis/image) 0.17.18 | Input only | 264.2 MiB, 2^28 pixels | All, Adam7, APNG's default image | All chunks, yes | All four¹ | 8.8 / – / 6.8 / – |
-| [bikallem/image](https://mooncakes.io/docs/bikallem/image) 0.1.0 | No | 526.1 MiB, 2^28 pixels | All, Adam7, APNG's default image | All chunks, yes | None as published² | 1.5 / 2.2 / 1.9 / 6.2 |
-| [mizchi/image](https://mooncakes.io/docs/mizchi/image) 0.4.3 | Rows, once all inflated | Refused: 256 MiB inflated | 8-bit, no Adam7, APNG's default image | All chunks, yes | All four | 2.1 / 2.3 / 2.8 / 9.4 |
+| [gaato/png](https://mooncakes.io/docs/gaato/png) 0.1.1 | Yes | `Decoder` 6.5 MiB; `decode` 262.6 MiB, 512 MiB by default | All, Adam7, APNG frames | All chunks (a bad ancillary one is skipped), yes | All four | 1 |
+| [moonbitlang/typst](https://mooncakes.io/docs/moonbitlang/typst) 0.1.9 | No | 262.5 MiB, none | All, Adam7, APNG's default image | Not IEND's, no | All four | 0.80 / 1.0 / 0.96 / 6.2 |
+| [gmlewis/image](https://mooncakes.io/docs/gmlewis/image) 0.17.18 | Input only | 264.2 MiB, 2^28 pixels | All, Adam7, APNG's default image | All chunks, yes | All four¹ | 11 / – / 6.2 / – |
+| [bikallem/image](https://mooncakes.io/docs/bikallem/image) 0.1.0 | No | 526.1 MiB, 2^28 pixels | All, Adam7, APNG's default image | All chunks, yes | None as published² | 1.9 / 3.0 / 1.9 / 6.2³ |
+| [mizchi/image](https://mooncakes.io/docs/mizchi/image) 0.4.3 | Rows, once all inflated | Refused: 256 MiB inflated | 8-bit, no Adam7, APNG's default image | All chunks, yes | All four | 2.1 / 2.9 / 2.5 / 7.7 |
 
-¹ On JS and Wasm the stack runs out on a 512 × 384 image. ² MoonBit 0.10.16's moon no longer reads its `moon.mod.json`, nor its dependency's; with them migrated, all four.
+¹ On JS and Wasm the stack runs out on a 512 × 384 image. ² MoonBit 0.10.16's moon no longer reads its `moon.mod.json`, nor its dependency's; with them migrated, all four. ³ Its times of 2026-10-23 over ours of 2026-11-14.
 
-The times are for a 512 × 384 RGB image: each package's time over ours, below 1 when it is faster. Ours hands out rows in PNG's layout, the others an RGB or RGBA image; converting our rows to RGBA takes 1.6 (Native) to 2.0 (JS) times as long as the rows alone. The broken files below ran under a 2 GiB limit on the address space.
+The times are for a 512 × 384 RGB image: each package's time over ours, below 1 when it is faster. Ours hands out rows in PNG's layout, the others an RGB or RGBA image; converting our rows to RGBA takes 1.7 (Wasm GC) to 2.0 (Wasm) times as long as the rows alone. The broken files below ran under a 2 GiB limit on the address space.
 
 - **gaato/png**: input in pieces of any size, whole rows into your slices. `Decoder` holds two rows and a zlib decoder, with limits on a row's and a reported chunk's bytes; `decode` holds the whole image and checks its size from IHDR against `max_output` before allocating it. Every fixed-length chunk; text, iCCP, eXIf and any other on request. Every chunk's CRC: a bad one refuses the file in IHDR, PLTE, IDAT, IEND and an APNG's fcTL and fdAT, and leaves out an ancillary chunk; the Adler-32. PngSuite: 162 of 162 images as pypng reads them, 14 of 14 broken ones refused; APNG frames against the png crate; proofs. On 30,590 broken files neither `Decoder` nor `decode` crashes or hangs; `decode` refuses 356 at the header, whose IHDR claims more than 512 MiB.
 - **moonbitlang/typst** (`codecs`): the whole file in, the whole image out. `decode_png` sets no limit: a 1 MB file of a 16384 × 16384 image needed more than 4 GiB of address space. tRNS, pHYs, iCCP and eXIf. The CRC of IHDR, PLTE and IDAT. PngSuite: 162 of 162, 14 of 14; the default image of 45 of 45 APNG vectors; neither crashes nor hangs on 30,590 broken files.
@@ -106,12 +110,12 @@ each row converted by `Converter::rgba8`; typst to the png crate's EXPAND
 
 | Package | Native | Wasm | Wasm GC | JS |
 |---|---:|---:|---:|---:|
-| gaato/png 0.1.0 | 2.36 / 3.23 ms | 3.82 / 5.69 ms | 3.35 / 4.48 ms | 5.65 / 6.54 ms |
-| gaato/png 0.1.0, rows to RGBA | 3.81 / 4.69 ms | 6.79 / 9.32 ms | 5.91 / 7.48 ms | 11.3 / 11.3 ms |
-| moonbitlang/typst 0.1.9 | 1.55 / 2.30 ms | 3.12 / 5.39 ms | 3.40 / 4.42 ms | 36.1 / 41.2 ms |
-| gmlewis/image 0.17.18 | 20.7 / 27.9 ms | stack overflow | 22.9 / 25.5 ms | stack overflow |
-| bikallem/image 0.1.0 | 3.55 / 7.26 ms | 8.44 / 17.3 ms | 6.52 / 11.4 ms | 34.8 / 40.2 ms |
-| mizchi/image 0.4.3 | 5.00 ms / refused | 8.74 ms / refused | 9.30 ms / refused | 53.3 ms / refused |
+| gaato/png 0.1.1 | 1.88 / 2.88 ms | 2.86 / 4.61 ms | 3.46 / 4.72 ms | 5.57 / 6.30 ms |
+| gaato/png 0.1.1, rows to RGBA | 3.39 / 4.38 ms | 5.85 / 7.66 ms | 6.03 / 7.26 ms | 10.1 / 10.9 ms |
+| moonbitlang/typst 0.1.9 | 1.50 / 2.25 ms | 2.92 / 4.85 ms | 3.31 / 4.30 ms | 34.4 / 49.6 ms |
+| gmlewis/image 0.17.18 | 20.5 / 27.2 ms | stack overflow | 21.4 / 24.3 ms | stack overflow |
+| bikallem/image 0.1.0 (2026-10-23) | 3.55 / 7.26 ms | 8.44 / 17.3 ms | 6.52 / 11.4 ms | 34.8 / 40.2 ms |
+| mizchi/image 0.4.3 | 3.90 ms / refused | 8.22 ms / refused | 8.56 ms / refused | 43.0 ms / refused |
 
 gmlewis/image's inflater (gmlewis/flate 0.36.17) recurses for every match,
 `read_literal` and `copy_history` calling each other until its 32 KiB window
@@ -271,7 +275,9 @@ library ships:
 
 Ours are this repository's main on 2026-11-07: gaato/zstd 0.3.1,
 gaato/brotli 0.4.1 and gaato/deflate 0.1.0, with the changes under
-[Unreleased] in their changelogs.
+[Unreleased] in their changelogs. The zstd encoders (gaato/zstd's, under
+[Unreleased], and Milky2018/zstd's) were measured on 2026-11-14, on the
+same machine and versions, with Node 26.13.1.
 
 [bikallem/compress](https://mooncakes.io/docs/bikallem/compress) 0.3.4
 (zstd, Brotli, raw DEFLATE, zlib, gzip) is not compared: it does not build
@@ -314,7 +320,7 @@ zstd:
 
 | Package | Decoder, encoder | Pieces in, caller's buffer out | Memory and limits | Integrity checks | Targets |
 |---|---|---|---|---|---|
-| gaato/zstd | decoder | yes | the window, at most `2^max_window_bits` (27 by default), plus 256 KiB; `decompress(max_output=)` | content checksum (XXH64) | Native, JS, Wasm, Wasm GC |
+| gaato/zstd | decoder; encoder, levels 1 to 12 (3 by default) | yes | decoder: the window, at most `2^max_window_bits` (27 by default), plus 256 KiB; `decompress(max_output=)`. Encoder: by level, 50 MiB at most | content checksum (XXH64) | Native, JS, Wasm, Wasm GC |
 | Milky2018/zstd | decoder, dictionaries; encoder with levels (3 by default) | input in pieces (`push`), output as new `Bytes` from each `pull` | the whole output; no window limit | content checksum (XXH64) | Native, JS, Wasm, Wasm GC |
 
 Brotli (the format has no checksum):
@@ -637,6 +643,10 @@ has another, its highest:
 
 | Encoder | Native | | Wasm | | Wasm GC | | JS | |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
+| gaato/zstd, level 3 | 5.32 | 2.60 | 19.1 | 6.02 | 12.0 | 4.64 | 115 | 52.0 |
+| gaato/zstd, level 12 | 36.6 | 5.75 | 82.9 | 14.2 | 91.7 | 9.23 | 239 | 43.3 |
+| Milky2018/zstd, level 3 (its default) | 1.50 | 0.36 | 3.33 | 0.84 | 3.23 | 0.71 | 11.3 | 2.25 |
+| Milky2018/zstd, level 22 | 449 | 6.04 | 976 | 16.2 | 959 | 12.9 | 2,180 | 36.2 |
 | gaato/brotli (one quality) | 13.8 | 4.53 | 41.6 | 13.3 | 17.4 | 5.47 | 30.6 | 9.92 |
 | hustcer/fbr, quality 11 (its default) | 2,335 | 186 | 7,715 | 604 | 2,625 | 202 | 3,905 | 278 |
 | mizchi/brotli, quality 1 (its default) | 13.3 | 2.32 | 35.2 | 6.46 | 25.3 | 2.56 | 21.2 | 3.84 |
@@ -651,7 +661,12 @@ has another, its highest:
 | moonbitlang/core, level 6 | 11.1 | 3.41 | 17.1 | 6.42 | 24.3 | 5.72 | 27.1 | 11.6 |
 | moonbitlang/core, level 9 | 34.4 | 7.75 | 43.7 | 11.7 | 66.9 | 13.4 | 71.7 | 17.0 |
 
-hustcer/fzip stores the binary input (131,087 bytes), which accounts for its
+The zstd rows are the median of six runs on each target taken in turn, in
+one session (`moon bench --release -p gaato/codec_bench/compare_speed -f
+zstd_test.mbt`). Milky2018/zstd at level 3 writes raw blocks (524,309 bytes
+for the text), which accounts for its times; at level 22 it takes 12 times
+as long as gaato/zstd at level 12 on the text, for a stream twice the size
+(below). hustcer/fzip stores the binary input (131,087 bytes), which accounts for its
 times there. mizchi/brotli's stream for the binary input does not decode
 (below); those times are for writing it. moonbit-community/flate at level 6
 compresses the text faster than gaato/deflate at level 6 on Native, Wasm and
@@ -708,11 +723,27 @@ encoder aborts on that file):
 mizchi/brotli's encoder writes streams that `brotli -d` refuses ("corrupt
 input") for the binary input and for `asyoulik.txt`, 2 of the 13 files. The
 `brotli` rows are brotli 1.2.0 given each file by name.
-Milky2018/zstd's encoder, for reference (gaato/zstd has none): at its
-default level 3 it writes raw blocks, 524,309 bytes for the text; at levels
-10, 19 and 22 it writes about 286,150. No command of the script measures
-them. `zstd -3` (1.5.7, the file named) writes 148,537 bytes for
-the text.
+Zstandard:
+
+| Encoder | Text | Binary | Silesia, six | Silesia | Canterbury |
+|---|---:|---:|---:|---:|---:|
+| gaato/zstd, level 3 | 148,599 | 98,818 | 33,666,781 | 66,370,602 | 634,725 |
+| gaato/zstd, level 12 | 137,779 | 92,767 | 29,624,896 | 58,122,624 | 591,542 |
+| Milky2018/zstd, level 3 (its default) | 524,309 | 131,084 | 128,073,231 | 211,943,551 | 2,810,967 |
+| Milky2018/zstd, level 22 | 286,126 | 131,054 | 92,044,336 | 157,503,983 | 2,244,825 |
+| `zstd -3` | 148,537 | 100,216 | 33,503,748 | 66,216,569 | 634,602 |
+| `zstd -12` | 137,743 | 95,491 | 29,517,080 | 58,033,936 | 592,372 |
+| `zstd -19` | 123,581 | 86,747 | 26,529,866 | 52,895,350 | 516,401 |
+
+Every stream of gaato/zstd and Milky2018/zstd decodes back with `zstd -d`
+and gaato/zstd. gaato/zstd is
+measured at every level from 1 to 12 against zstd 1.5.7 in
+[zstd/docs/compression.md](../zstd/docs/compression.md#compression-sizes):
+the corpus totals are within 1 % at each. Milky2018/zstd writes its input
+raw at level 3, and at level 22 stores the binary input and leaves the
+corpora at three quarters (Silesia) to four fifths (Canterbury) of their
+size. The `zstd` rows are zstd
+1.5.7 given each file by name.
 
 ### Running them again
 

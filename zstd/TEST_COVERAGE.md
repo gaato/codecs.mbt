@@ -129,9 +129,10 @@ levels. The shared harness includes levels 5, 6, 7, 8, 9, 10, 11 and 12,
 with one-byte splits on small inputs, known/unknown sizes, checksums and
 flushes. External crosscheck emits all twelve levels, plus greedy/lazy/
 lazy2 flushes, bytewise input and distant prefixes. The maximum-memory
-test reaches a 4 MiB retained window, one block, 2^22 chain links and
-2^23 hash heads. Hash-chain code has full line coverage; no additional
-uncovered-line allowance is needed.
+test reached a 4 MiB retained window, one block, 2^22 chain links and
+2^23 hash heads while level twelve used hash chains; with rows it reaches
+2^23 positions and tag bytes (below). Hash-chain code has full line
+coverage; no additional uncovered-line allowance is needed.
 
 Row search (greedy, lazy and lazy2 with a window over 2^14 bytes) is
 checked against a plain model of its rows: each row a list of its last

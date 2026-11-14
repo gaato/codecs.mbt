@@ -210,7 +210,7 @@ here, so that adding one later does not require changing it.
 
 | Format | Fit | Notes |
 |---|---|---|
-| Zstandard | implemented (Decode) | Concatenated frames and skippable frames under `EndOfInput`. Dictionary ids map to `DictionaryRequired`. |
+| Zstandard | implemented (Decode and Encode) | Concatenated frames and skippable frames under `EndOfInput`. Dictionary ids map to `DictionaryRequired`. The encoder writes one frame; given a content size (an encoder option, written in the frame header), it raises `ChecksumMismatch` when the input runs past it, after the output for the input up to it, or falls short of it at `Finish`. |
 | Brotli | implemented (Decode and Encode) | No framing: one stream per input, so `EndOfMember` and `EndOfInput` end at the same place. |
 | gzip | implemented (Decode and Encode) | Several members under `EndOfInput`; the header of each member is metadata on the concrete type. Bytes after a member that do not begin another, zero padding included, raise `TrailingData`. |
 | zlib | implemented (Decode and Encode) | A preset dictionary in the header raises `DictionaryRequired` with its Adler-32. No concatenation. |

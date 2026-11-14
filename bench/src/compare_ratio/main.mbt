@@ -2,7 +2,7 @@
 /// usage: compare_ratio --list <zstd|brotli|deflate>
 ///        compare_ratio <zstd|brotli|deflate> <min ms per measurement> <file>...
 /// Prints, for each encoder, level and file: the encoder, `default` or
-/// `max` (zstd: `level1` through `level12`), the level, the file, its size, the stream's size and MB/s (the
+/// `max` (gaato/zstd: `level1` through `level12`), the level, the file, its size, the stream's size and MB/s (the
 /// mean over at least the given time and 2 runs; 0 skips timing), and
 /// whether gaato/brotli or gaato/deflate decodes the stream back to the
 /// file, tab-separated. With the environment variable
@@ -39,7 +39,7 @@ fn main {
     if only != "" && e.name != only {
       continue
     }
-    let levels = if format == "zstd" {
+    let levels = if format == "zstd" && e.name == "gaato/zstd" {
       [
         for level in 1..<=12 => ("level\{level}", level)
       ]

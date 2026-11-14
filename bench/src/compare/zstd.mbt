@@ -81,7 +81,8 @@ fn[D : @codec_bytes.Decode] run_decode(
 }
 
 ///|
-/// The Zstandard encoder; the ratio driver measures all levels 1..12.
+/// The Zstandard encoders. The ratio driver measures gaato/zstd at every
+/// level 1..12, the others at their default and highest levels.
 pub fn zstd_compress() -> Array[Compress] {
   [
     {
@@ -89,6 +90,12 @@ pub fn zstd_compress() -> Array[Compress] {
       default_level: 3,
       max_level: 12,
       encode: (input, level) => @zstd.compress(input, level~),
+    },
+    {
+      name: "Milky2018/zstd 0.1.4",
+      default_level: 3,
+      max_level: 22,
+      encode: (input, level) => @milky_zstd.compress(input, level~),
     },
   ]
 }

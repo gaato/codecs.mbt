@@ -146,7 +146,7 @@ pub fn Lazy::Lazy(
 }
 
 ///|
-/// Invalidates all frame positions and releases retained bytes.
+/// Invalidates all frame positions, keeping the buffers' capacity.
 pub fn Lazy::reset(self : Lazy) -> Unit {
   self.history.reset()
   // Row heads decide where the next positions go: clear them, so a reset

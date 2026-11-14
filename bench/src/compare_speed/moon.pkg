@@ -5,6 +5,7 @@
 // format. The package holds only benchmarks: every import is a test import.
 
 import {
+  "gaato/zstd",
   "gaato/brotli",
   "gaato/deflate",
   "gaato/codec_bench/compare",

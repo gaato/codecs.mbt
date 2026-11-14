@@ -157,7 +157,7 @@ The Paeth predictor, Adam7's pass sizes, a row's bytes, an fcTL's rectangle and 
 
 gaato/png fits input that arrives in pieces or comes from anyone. `Decoder` holds two rows and a zlib decoder whatever the image's size (6.5 MiB at the peak for an 8192 × 8192 RGBA image), `decode` refuses more than 512 MiB of rows by default before allocating them, and neither crashes nor hangs on the 30,590 broken files of [Broken input](https://github.com/gaato/codecs.mbt/blob/main/png/docs/robustness.md). It decodes all of PngSuite as pypng does, checks every CRC and the Adler-32, and gives APNG's frames and the ancillary chunks.
 
-When the whole file is in memory already, a decoder that takes it at once can be faster on Native and Wasm: moonbitlang/typst's `decode_png` takes about 0.7 (Native) and 0.8 (Wasm) times as long as gaato/png on the benchmarks' image, the same on Wasm GC, and 6 times as long on JS.
+When the whole file is in memory already, a decoder that takes it at once can be faster on Native: moonbitlang/typst's `decode_png` takes about 0.8 times as long as gaato/png there on the benchmarks' image, about the same on Wasm and Wasm GC, and 6 times as long on JS.
 
 ## Links
 

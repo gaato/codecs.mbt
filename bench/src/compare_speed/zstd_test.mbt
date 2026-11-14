@@ -14,3 +14,13 @@ test "zstd decode" (b : @bench.T) {
   add_whole(benches, b, @compare.zstd_whole(), "binary", binary, binary_size)
   run_all(b, benches)
 }
+
+///|
+test "zstd encode" (b : @bench.T) {
+  let text = @zstd.decompress(decode64(zstd_text))
+  let binary = @zstd.decompress(decode64(zstd_binary))
+  let benches : Array[(String, () -> Unit)] = []
+  add_encode(benches, b, @compare.zstd_compress(), "text", text)
+  add_encode(benches, b, @compare.zstd_compress(), "binary", binary)
+  run_all(b, benches)
+}
