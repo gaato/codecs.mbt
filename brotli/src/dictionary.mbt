@@ -43,6 +43,7 @@ fn transform_word(
 
 ///|
 /// The literal context ID of `mode` for the last two bytes `p1` and `p2`.
+#inline
 fn literal_context(mode : Int32, p1 : Int32, p2 : Int32) -> Int32 {
   match mode {
     0 => p1 & 0x3f

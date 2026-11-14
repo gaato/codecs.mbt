@@ -473,6 +473,33 @@ fn Decoder::load_byte(self : Decoder) -> Bool {
 /// Loads whole bytes until at least 24 bits are buffered or the input runs
 /// out. `acc` stays below 2^31.
 fn Decoder::refill(self : Decoder) -> Unit {
+  let at = self.in_pos
+  if self.nbits <= 23 &&
+    self.stash_pos >= self.stash.length() &&
+    self.view.length() - at >= 3 {
+    // The bytes the loop below would load, `(31 - nbits) / 8` of them (at
+    // most 3), straight from the view: it holds them.
+    let view = self.view
+    let mut acc = self.acc
+    let mut nbits = self.nbits
+    acc = acc | (view.unsafe_get(at).to_int() << nbits)
+    nbits += 8
+    let mut used = 1
+    if nbits <= 23 {
+      acc = acc | (view.unsafe_get(at + 1).to_int() << nbits)
+      nbits += 8
+      used = 2
+      if nbits <= 23 {
+        acc = acc | (view.unsafe_get(at + 2).to_int() << nbits)
+        nbits += 8
+        used = 3
+      }
+    }
+    self.acc = acc
+    self.nbits = nbits
+    self.in_pos = at + used
+    return
+  }
   while self.nbits <= 23 && self.load_byte() {
 
   }
@@ -480,6 +507,7 @@ fn Decoder::refill(self : Decoder) -> Unit {
 
 ///|
 /// The next `n` (at most 24) bits.
+#inline
 fn Decoder::read_bits(self : Decoder, n : Int32) -> Int32 raise Stop {
   if self.nbits < n {
     self.refill()
@@ -495,6 +523,7 @@ fn Decoder::read_bits(self : Decoder, n : Int32) -> Int32 raise Stop {
 
 ///|
 /// The next `n` (at most 24) bits, left unread.
+#inline
 fn Decoder::peek_bits(self : Decoder, n : Int32) -> Int32 raise Stop {
   if self.nbits < n {
     self.refill()
@@ -507,6 +536,7 @@ fn Decoder::peek_bits(self : Decoder, n : Int32) -> Int32 raise Stop {
 
 ///|
 /// Drops `n` bits that `peek_bits` has made sure are there.
+#inline
 fn Decoder::drop_bits(self : Decoder, n : Int32) -> Unit {
   self.acc = self.acc >> n
   self.nbits -= n
@@ -514,6 +544,7 @@ fn Decoder::drop_bits(self : Decoder, n : Int32) -> Unit {
 
 ///|
 /// The next symbol of tree `tree` of `group`.
+#inline
 fn Decoder::read_symbol(
   self : Decoder,
   group : Group,
@@ -766,7 +797,7 @@ fn Decoder::unit(self : Decoder) -> Status? raise Stop {
     ContextMapEntries => self.context_map_entry()
     ContextMapImtf => self.context_map_imtf()
     TreeCodes => self.tree_code()
-    CommandStart => self.command()
+    CommandStart => return self.commands()
     Literals => return self.literals()
     Distance => return self.distance()
     Copy => return self.copy()
