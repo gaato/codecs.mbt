@@ -1068,3 +1068,31 @@ the kernel), which varies between sessions: the change before row search
 measured 10.78 ms in an earlier session and 17.12 ms in this one. Wasm
 GC is 1.0 to 1.4 times as fast as at the start on the other rows; JS,
 which keeps the checked byte paths, 1.0 to 1.3 times.
+
+### After hashing without 64-bit integers on JS
+
+On JS a 64-bit integer is a BigInt, and each operation on one allocates.
+The fast, double-fast and row and chain searches hashed through them, so
+JS took up to 23 times as long as native. Their hashes now take the
+shifted word and the prime in 32-bit halves and compute only the high half
+of the product, which holds the hash's bits (`hash_bytes` in
+`src/internal/match/access.mbt`); Wasm GC, whose 64-bit integers are
+native, keeps the 64-bit arithmetic. A test compares both with the 64-bit
+hashes for every width and many table sizes. The output is unchanged.
+
+Measured as above, three rounds taken alternately with 0.4.0, the
+medians (the other targets did not change):
+
+| Input, level | JS before | JS after |
+|---|---:|---:|
+| text, 1 | 106.12 ms | 29.16 ms |
+| text, 3 | 142.99 ms | 31.38 ms |
+| text, 5 | 163.42 ms | 49.41 ms |
+| text, 8 | 201.26 ms | 89.00 ms |
+| text, 12 | 323.44 ms | 205.13 ms |
+| binary, 1 | 10.51 ms | 4.56 ms |
+| binary, 3 | 66.06 ms | 12.87 ms |
+| binary, 12 | 96.40 ms | 59.49 ms |
+
+JS now takes 5 to 6 times as long as native at levels one and three on
+the text, and 3 to 4 times at levels eight and twelve.

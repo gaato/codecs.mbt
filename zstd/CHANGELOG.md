@@ -7,6 +7,11 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+### Changed
+
+- **The decoder is two to three times as fast.** It hashes the content checksum once per block, reads 64 bits at a time and executes each block's sequences in one loop with eight-byte copies on native and Wasm, decodes the four Huffman streams of the literals interleaved on all targets but JS, and on JS computes XXH64 in 32-bit halves instead of BigInts. The benchmark text (512 KiB, made by `zstd -3`) decodes in 1.82 ms in place of 4.73 ms on native, 4.02 in place of 10.47 ms on Wasm, 4.36 in place of 8.04 ms on Wasm GC and 10.3 in place of 31.7 ms on JS. The output and the errors are unchanged; a malformed literals section still raises the error of its first bad stream.
+- **The encoder is 1.6 to 5 times as fast on JS**, the most at the low levels. Its hashes no longer use 64-bit integers there, which are BigInts: the benchmark text takes 31.4 ms in place of 143 ms at level 3, 29.2 in place of 106 ms at level 1 and 205 in place of 323 ms at level 12. The other targets are unchanged, and the output is the same on all four.
+
 ## [0.4.0] - 2026-11-14
 
 ### Added

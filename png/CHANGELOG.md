@@ -7,6 +7,11 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+### Changed
+
+- **Decoding is faster, most on native and Wasm.** There, the Sub, Average and Paeth filters of 8-bit RGB and RGBA rows are reversed a pixel at a time with SIMD; on the other targets, and for other pixel sizes, a pixel lane at a time, Paeth without waiting for the byte to its left. The CRC-32 reads its tables and input without index checks. The benchmark image (512 × 384 RGB) decodes in 1.81 ms in place of 2.03 ms on native, 2.22 in place of 2.98 ms on Wasm and 5.24 in place of 6.04 ms on JS, and about as fast as before on Wasm GC; interlaced, in 2.14 in place of 3.23 ms on native, 2.63 in place of 5.39 ms on Wasm, 4.93 in place of 5.65 ms on Wasm GC and 6.15 in place of 6.55 ms on JS. `moon prove` still checks that the filters, the SIMD loops among them, read and write only inside their rows.
+- `Converter::rgba8` converts 8-bit rows with a loop for each color type. The output and the errors are unchanged.
+
 ## [0.1.1] - 2026-11-14
 
 ### Changed

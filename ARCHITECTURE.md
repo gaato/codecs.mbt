@@ -114,13 +114,54 @@ Each module also keeps two ledgers that scripts enforce: RESOURCE_BOUNDS.md
 names the tests that hold every bound, and TEST_COVERAGE.md explains every
 line that tests do not reach.
 
+## Unchecked access
+
+The hot loops of the decoders and encoders (bit readers, match copies and
+match finders, Huffman and prefix-code tables, PNG's filters, CRC-32) read
+and write without index checks, through `unsafe_get` and `unsafe_set`, and
+on native and Wasm through core's unaligned `unsafe_read_uint32_le` and
+`unsafe_read_uint64_le` as well. Each bounds-checked access on Wasm calls
+two out-of-line helpers (the length and the range check), and native spends
+a compare and a branch on each: the slice-by-8 CRC-32 of 512 KiB took
+1.25 ms checked and 0.53 ms unchecked on Wasm, 0.68 and 0.48 ms on Wasm GC,
+0.33 and 0.29 ms on native. They follow these rules:
+
+- **Wide reads on native and Wasm only.** Loads of four or eight bytes at
+  once, and SIMD (below), sit behind
+  `#cfg(any(target="native", target="wasm"))`, where they exist and pay;
+  JS and Wasm GC read a byte at a time there, and their match finders keep
+  checked accesses. Accesses of one byte whose bounds the loop itself
+  establishes are unchecked on every target: the decoders' refills, copies
+  and table lookups, the CRC-32 of `parts/crc32`, and `parts/blit`.
+- **Every unchecked access says why it is in bounds**, at the access or on
+  the helper it goes through (`Caller guarantees 0 <= p and p + 8 <= ...`).
+  A wide read near the end of the data falls back to a byte loop that reads
+  only valid input; a copy that may write past its end (the decoders'
+  `wild_copy`) runs only where the slack is known to be free.
+- **Bounds that can come near the largest `Int` are compared as
+  differences**, `n - i >= 8` and not `i + 8 <= n`, so that such an index
+  cannot wrap past the check. Loops within a block, a ring or an input
+  chunk, whose sizes stay far below it, also compare sums.
+- **The checked targets are a cross-check, not a proof.** The tests and
+  the SHA-256 of every encoder's output run on all four targets, so a wide
+  read that strays on native or Wasm can show up as a result that differs
+  from JS and Wasm GC, which read a byte at a time there; a stray read
+  whose bytes go unused shows nothing. The unchecked accesses rest on their
+  stated reasons, and on the tests that drive them to their bounds: input
+  and output split down to one byte, truncated and corrupted streams.
+- **Proofs stay.** A proved function made faster keeps its proof: PNG's
+  filters, reversed a pixel lane at a time, are still checked by `moon
+  prove` to read and write only inside their rows. Code the prover cannot
+  check, such as SIMD, sits beside the proved reference instead, as below.
+
 ## SIMD
 
 A few loops run sixteen bytes at a time with core's `@v128`: the zlib
-decoder's Adler-32 (`deflate/src/zlib/internal/adler32_fast`) and PNG's Up
-filter (`png/src/internal/filter_fast`), and the Zstandard encoder's match
-length (`zstd/src/internal/match_length_fast`) and row tag comparison
-(`zstd/src/internal/row_tags_fast`). They follow these rules:
+decoder's Adler-32 (`deflate/src/zlib/internal/adler32_fast`), PNG's Up
+filter, and its Sub, Average and Paeth filters a pixel of 3 or 4 bytes at a
+time (`png/src/internal/filter_fast`), and the match length of the
+encoders (`parts/match_length_fast`) and the Zstandard encoder's row tag
+comparison (`zstd/src/internal/row_tags_fast`). They follow these rules:
 
 - **Native and Wasm only**, through `#cfg(any(target="native", target="wasm"))`.
   On JS, `@v128` falls back to code some 300 times slower than a plain loop;
@@ -147,6 +188,58 @@ length (`zstd/src/internal/match_length_fast`) and row tag comparison
   the experimental alert for itself only. If core changes `@v128`, pointing
   the `#cfg` branch at the reference restores the plain loop without
   touching anything else.
+
+CRC-32 (gzip and PNG) does not use carry-less multiplication
+(PCLMULQDQ). Neither `@v128` nor Wasm SIMD has the instruction, so it would
+take the repository's first C stub, on native only. The stub could be built
+with `-mpclmul` through the package's `stub-cc-flags`, but that flag is
+x86's alone and lets the compiler use the instruction anywhere in the stub,
+so the stub would need its own check of the CPU, a fallback, and another
+for arm64. The CRC is about 4% of decoding PNG's benchmark image; the
+slice-by-8 loop without index checks is what it uses instead.
+
+## Parallelism
+
+The codecs run on one thread. MoonBit's core has no public way to run
+MoonBit code on several threads (`core/async`'s workers are for blocking
+I/O), and encoding blocks independently would change the output, which the
+encoders keep the same whatever the input's splits.
+
+A caller with threads can still split the work, since the formats allow
+it: a Zstandard stream may hold several frames and a gzip stream several
+members, and the decoders read every one in turn. Encoding each piece with
+its own `Encoder` and concatenating the results gives a stream that
+these decoders read, as does any decoder that reads every frame or member,
+at the cost of the matches across the pieces' boundaries.
+Raw DEFLATE, zlib and Brotli streams cannot be concatenated this way.
+
+## Speed work left out
+
+Changes measured or considered and not made, with why, so that they are
+not taken up again without new numbers:
+
+- **A margin after the Zstandard decoder's ring**, so that every match copy
+  could write eight bytes at a time past its end. It would add to
+  `memory_usage` and the bounds in RESOURCE_BOUNDS.md; the decoder copies
+  that way only where the ring already has the room.
+- **Sizing the Zstandard decoder's ring from the frame's content size.**
+  That would allocate what a header claims before any output proves it;
+  the ring grows with the output instead.
+- **Block copies through `Uint8Array.copyWithin` and `set` on JS.** They
+  need `extern "js"`, which the repository does not use; `parts/blit` is a
+  forward loop without index checks there.
+- **SIMD Adler-32 in the zlib encoder.** The encoder reads a `BytesView`,
+  the SIMD package an `ArrayView`, and the checksum is 2.4% of encoding.
+- **A 64-bit bit reader in the Brotli decoder.** After the three-byte
+  refills, refilling and reading bits are 1.6% and 2.7% of decoding.
+- **A 64-bit bit writer in the DEFLATE encoder, and the Huffman builder
+  without index checks.** The writer's bound on its output is not local to
+  it, and the builder, about 3% of encoding, is in a shared package whose
+  functions are proved.
+- **Changes that alter an encoder's output** (a one-slot hash table or
+  five-byte hashes in the Brotli encoder, skipping literal runs, other lazy
+  matching limits): the speed work kept every encoder's output byte for
+  byte, which the SHA-256 checks and the compression ratio tables hold.
 
 ## Where things are not
 

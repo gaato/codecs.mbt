@@ -160,7 +160,7 @@ A step that raises first hands out the output that comes before the error (answe
 
 gaato/zstd fits zstd that arrives in pieces or comes from anyone. `Decoder` takes input in pieces down to one byte, writes into your slices and holds the window you allow, 128 MiB by default (a process decoding 256 MiB of output in 64 KiB pieces peaks at 15.9 MiB, most of it the runtime and the compressed input); it allocates nothing from a size a header claims. It agreed with `zstd -d` on all 36 valid and 318 invalid streams of the comparison, checks the content checksum, and its frame headers and Huffman tables are proved against RFC 8878. It runs on Native, JS, Wasm and Wasm GC and takes no dictionary. Its encoder, at each level from 1 to 12, compresses the corpora to within 1 % of `zstd`, and its frames never depend on how the input arrives.
 
-Milky2018/zstd, which also compresses and takes dictionaries, takes about 1.9 (Native), 2.1 (Wasm), 2.3 (Wasm GC) and 1.4 (JS) times as long as gaato/zstd on the benchmarks' text. Its encoder writes the input uncompressed at its default level 3; at level 22 it writes twice what gaato/zstd writes at level 12 on that text, and takes 12 times as long.
+Milky2018/zstd, which also compresses and takes dictionaries, takes about 4.1 (Native), 5.1 (Wasm), 4.0 (Wasm GC) and 2.7 (JS) times as long as gaato/zstd on the benchmarks' text. Its encoder writes the input uncompressed at its default level 3; at level 22 it writes twice what gaato/zstd writes at level 12 on that text, and takes 9 (Wasm GC) to 16 (JS) times as long.
 
 ## Links
 

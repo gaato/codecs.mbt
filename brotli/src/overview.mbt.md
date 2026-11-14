@@ -139,7 +139,7 @@ A step that raises first hands out the output that comes before the error (answe
 
 gaato/brotli fits Brotli that arrives in pieces or comes from anyone. `Decoder` takes input in pieces down to one byte, writes into your slices and holds its window and at most 1.3 MiB of tables (a process decoding 256 MiB of output in 64 KiB pieces peaks at 20.1 MiB, most of it the runtime). It agreed with `brotli -d` on all 81 valid and 359 invalid streams of the comparison, and its decoding rules and the encoder's codes are proved against RFC 7932. It runs on Native, JS, Wasm and Wasm GC; its encoder has one quality, about google/brotli's 4.
 
-A decoder that takes the whole stream at once can be faster: hustcer/fbr's takes about 0.89 (Native), 0.65 (Wasm), 0.96 (Wasm GC) and 1.1 (JS) times as long as gaato/brotli on the benchmarks' text. Its encoder at quality 11 writes 17 % less on that text and takes 135 to 192 times as long as ours.
+On Wasm, a decoder that takes the whole stream at once can be faster: hustcer/fbr's takes about 0.77 times as long as gaato/brotli on the benchmarks' text there, and 1.3 (Native), 1.6 (Wasm GC) and 1.6 (JS) times as long on the other targets. Its encoder at quality 11 writes 17 % less on that text and takes 142 to 386 times as long as ours.
 
 ## Links
 
