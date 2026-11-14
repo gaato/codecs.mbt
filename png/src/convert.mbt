@@ -139,6 +139,13 @@ pub fn Converter::rgba8(
 ) -> Unit {
   let d = self.bit_depth
   let n = self.channels()
+  if d == 8 &&
+    pixels >= 0 &&
+    pixels <= row.length() / n &&
+    pixels <= into.length() / 4 {
+    self.rgba8_bytes(row, pixels, into)
+    return
+  }
   let to8 = (v : Int32) => {
     if d == 16 {
       @convert.narrow(v)
@@ -166,6 +173,82 @@ pub fn Converter::rgba8(
       b'\x00'
     } else {
       b'\xff'
+    }
+  }
+}
+
+///|
+/// `rgba8` for 8-bit samples, one color type at a time: the caller has
+/// checked that `row` holds `pixels` pixels of `channels()` bytes and that
+/// `into` holds `4 × pixels` bytes, so every index below is within them.
+fn Converter::rgba8_bytes(
+  self : Converter,
+  row : ArrayView[Byte],
+  pixels : Int32,
+  into : MutArrayView[Byte],
+) -> Unit {
+  let keyed = self.keyed
+  match self.color_type {
+    6 =>
+      for i in 0..<(4 * pixels) {
+        into.unsafe_set(i, row.unsafe_get(i))
+      }
+    2 => {
+      let (k0, k1, k2) = if keyed {
+        (self.key[0], self.key[1], self.key[2])
+      } else {
+        (-1, -1, -1)
+      }
+      // Each sample is read just before it is written, and the key compared
+      // with the row as written, in `rgba8`'s order: the same result when
+      // `into` overlaps `row`.
+      for p in 0..<pixels {
+        into.unsafe_set(4 * p, row.unsafe_get(3 * p))
+        into.unsafe_set(4 * p + 1, row.unsafe_get(3 * p + 1))
+        into.unsafe_set(4 * p + 2, row.unsafe_get(3 * p + 2))
+        // Without tRNS the key is -1, which no byte equals.
+        let clear = keyed &&
+          row.unsafe_get(3 * p).to_int() == k0 &&
+          row.unsafe_get(3 * p + 1).to_int() == k1 &&
+          row.unsafe_get(3 * p + 2).to_int() == k2
+        into.unsafe_set(4 * p + 3, if clear { b'\x00' } else { b'\xff' })
+      }
+    }
+    0 => {
+      let k0 = if keyed { self.key[0] } else { -1 }
+      for p in 0..<pixels {
+        let v = row.unsafe_get(p)
+        into.unsafe_set(4 * p, v)
+        into.unsafe_set(4 * p + 1, v)
+        into.unsafe_set(4 * p + 2, v)
+        into.unsafe_set(
+          4 * p + 3,
+          if keyed && row.unsafe_get(p).to_int() == k0 {
+            b'\x00'
+          } else {
+            b'\xff'
+          },
+        )
+      }
+    }
+    4 =>
+      for p in 0..<pixels {
+        let v = row.unsafe_get(2 * p)
+        into.unsafe_set(4 * p, v)
+        into.unsafe_set(4 * p + 1, v)
+        into.unsafe_set(4 * p + 2, v)
+        into.unsafe_set(4 * p + 3, row.unsafe_get(2 * p + 1))
+      }
+    _ => {
+      // Indexed: a byte indexes the 256 entries of four bytes of `table`.
+      let table = self.table
+      for p in 0..<pixels {
+        let at = row.unsafe_get(p).to_int() * 4
+        into.unsafe_set(4 * p, table.unsafe_get(at))
+        into.unsafe_set(4 * p + 1, table.unsafe_get(at + 1))
+        into.unsafe_set(4 * p + 2, table.unsafe_get(at + 2))
+        into.unsafe_set(4 * p + 3, table.unsafe_get(at + 3))
+      }
     }
   }
 }

@@ -408,3 +408,60 @@ test "decode: 512 MiB of rows by default, checked at the header" {
     content="{ resource: Memory, needed: Some(8388608), limit: 8000000 }",
   )
 }
+
+///|
+/// `rgba8` takes 8-bit samples a color type at a time, and the rest sample
+/// by sample: both for every color type.
+test "rgba8: 8-bit samples of every color type, and 16-bit truecolor" {
+  let gray = Converter(Grayscale, 8, transparency=Gray(5))
+  debug_inspect(
+    converted(Converter::rgba8, gray, packed([5, 6], 8), 2, 4),
+    content="[5, 5, 5, 0, 6, 6, 6, 255]",
+  )
+  debug_inspect(
+    converted(Converter::rgba8, Converter(Grayscale, 8), packed([5], 8), 1, 4),
+    content="[5, 5, 5, 255]",
+  )
+  let ga = Converter(GrayscaleAlpha, 8)
+  debug_inspect(
+    converted(Converter::rgba8, ga, packed([7, 200, 9, 0], 8), 2, 4),
+    content="[7, 7, 7, 200, 9, 9, 9, 0]",
+  )
+  let palette : FixedArray[Byte] = [
+    b'\x10', b'\x20', b'\x30', b'\x40', b'\x50', b'\x60',
+  ]
+  let indexed = Converter(
+    IndexedColor,
+    8,
+    palette=palette[:],
+    transparency=Alpha(palette[:1]),
+  )
+  debug_inspect(
+    converted(Converter::rgba8, indexed, packed([0, 1, 200], 8), 3, 4),
+    content="[16, 32, 48, 16, 64, 80, 96, 255, 0, 0, 0, 255]",
+  )
+  let rgb16 = Converter(Truecolor, 16)
+  debug_inspect(
+    converted(
+      Converter::rgba8,
+      rgb16,
+      packed([0x0100, 0x0200, 0x0300], 16),
+      1,
+      4,
+    ),
+    content="[1, 2, 3, 255]",
+  )
+}
+
+///|
+/// The 8-bit paths read each sample just before writing, as the general
+/// one does: the same bytes when `into` overlaps `row`.
+test "rgba8: into overlapping row, sample by sample" {
+  let backing : FixedArray[Byte] = [b'\x01', b'\x02', b'\x03', b'\x00', b'\x00']
+  Converter(Truecolor, 8).rgba8(
+    backing[0:3],
+    1,
+    backing.mut_view(start=1, end=5),
+  )
+  debug_inspect(backing, content="<FixedArray: [0x01, 0x01, 0x01, 0x01, 0xff]>")
+}

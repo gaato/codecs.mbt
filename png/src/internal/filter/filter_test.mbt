@@ -110,3 +110,37 @@ test "unfilter: nothing past either row's end is read or written, whatever len s
     assert_eq(cur[3], b'\x01')
   }
 }
+
+///|
+/// The filters walk a pixel's bytes one lane at a time; with the row above
+/// the same array as the row, they must still read what the byte-by-byte
+/// order reads.
+test "unfilter: the row as its own row above, as byte by byte" {
+  for kind in 1..<5 {
+    for pixel in [1, 2, 3, 4] {
+      let row = FixedArray::makei(20, i => (i * 37 + 5).to_byte())
+      let expected = FixedArray::makei(20, i => row[i])
+      // Byte by byte, with the same array above.
+      for i in 1..<20 {
+        let a = if i > pixel { expected[i - pixel].to_int() } else { 0 }
+        let b = expected[i].to_int()
+        let c = if i > pixel { expected[i - pixel].to_int() } else { 0 }
+        let pred = match kind {
+          1 => a
+          2 => b
+          3 => (a + b) / 2
+          _ => @filter.paeth(a, b, c)
+        }
+        expected[i] = (expected[i].to_int() + pred).to_byte()
+      }
+      assert_true(@filter.unfilter(kind.to_byte(), row, row, 19, pixel))
+      for i in 1..<20 {
+        assert_eq(
+          row[i],
+          expected[i],
+          msg="kind \{kind} pixel \{pixel} at \{i}",
+        )
+      }
+    }
+  }
+}

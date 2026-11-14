@@ -9,10 +9,12 @@ pub fn paeth(
   proof_require: bytes3(a, b, c),
   proof_ensure: result => paeth_post(a, b, c, result),
 } {
-  let p = a + b - c
-  let pa = distance(p, a)
-  let pb = distance(p, b)
-  let pc = distance(p, c)
+  // The distances from p = a + b - c, written so that the first does not
+  // wait for `a`, the byte just decoded on the left: |p - a| = |b - c|,
+  // |p - b| = |a - c| and |p - c| = |(a + b) - 2c|.
+  let pa = distance(b, c)
+  let pb = distance(a, c)
+  let pc = distance(a + b, c + c)
   if pa <= pb && pa <= pc {
     a
   } else if pb <= pc {
@@ -102,7 +104,9 @@ fn bounded_end(
 }
 
 ///|
-/// Sub (9.3): each byte plus the one `pixel` bytes to its left.
+/// Sub (9.3): each byte plus the one `pixel` bytes to its left. Each of the
+/// pixel's bytes is a lane of its own, walked `pixel` at a time with the
+/// byte on the left in a local: the byte just stored is not read back.
 fn sub(
   cur : FixedArray[Byte],
   pixel : Int32,
@@ -112,12 +116,28 @@ fn sub(
   proof_require: rows_pre(cur.length(), cur.length(), pixel, first, stop),
   proof_ensure: true,
 } {
-  for i = first; i < stop; {
-    proof_assert in_row(i, cur.length()) && in_row(i - pixel, cur.length())
-    cur.unsafe_set(i, byte_add(cur.unsafe_get(i), cur.unsafe_get(i - pixel)))
-    continue i + 1
+  for k = 0; k < pixel; {
+    let s = first + k
+    if s < stop {
+      proof_assert in_row(s - pixel, cur.length())
+      let mut left = cur.unsafe_get(s - pixel)
+      for i = s; i < stop; {
+        proof_assert in_row(i, cur.length())
+        let v = byte_add(cur.unsafe_get(i), left)
+        cur.unsafe_set(i, v)
+        left = v
+        // Stops before `i + pixel` could wrap past the largest Int.
+        if stop - i <= pixel {
+          break
+        }
+        continue i + pixel
+      } where {
+        proof_invariant: s <= i,
+      }
+    }
+    continue k + 1
   } where {
-    proof_invariant: first <= i,
+    proof_invariant: 0 <= k,
   }
 }
 
@@ -158,7 +178,8 @@ pub fn up_from(
 
 ///|
 /// Average: each byte plus the mean, rounded down, of the one to its left
-/// (0 for the first `pixel` bytes) and the one above.
+/// (0 for the first `pixel` bytes) and the one above. From `first` on, a
+/// lane at a time with the byte on the left in a local, as `sub`.
 fn average(
   cur : FixedArray[Byte],
   prev : FixedArray[Byte],
@@ -177,22 +198,38 @@ fn average(
   } where {
     proof_invariant: 1 <= i,
   }
-  for i = first; i < stop; {
-    proof_assert in_row(i, cur.length()) && in_row(i - pixel, cur.length())
-    proof_assert in_row(i, prev.length())
-    let sum = cur.unsafe_get(i - pixel).to_int() + prev.unsafe_get(i).to_int()
-    let half = @proof_bits.shr(sum, 1)
-    cur.unsafe_set(i, byte_add(cur.unsafe_get(i), byte_of(half)))
-    continue i + 1
+  for k = 0; k < pixel; {
+    let s = first + k
+    if s < stop {
+      proof_assert in_row(s - pixel, cur.length())
+      let mut left = cur.unsafe_get(s - pixel)
+      for i = s; i < stop; {
+        proof_assert in_row(i, cur.length()) && in_row(i, prev.length())
+        let sum = left.to_int() + prev.unsafe_get(i).to_int()
+        let half = @proof_bits.shr(sum, 1)
+        let v = byte_add(cur.unsafe_get(i), byte_of(half))
+        cur.unsafe_set(i, v)
+        left = v
+        // Stops before `i + pixel` could wrap past the largest Int.
+        if stop - i <= pixel {
+          break
+        }
+        continue i + pixel
+      } where {
+        proof_invariant: s <= i,
+      }
+    }
+    continue k + 1
   } where {
-    proof_invariant: first <= i,
+    proof_invariant: 0 <= k,
   }
 }
 
 ///|
 /// Paeth: each byte plus `paeth` of the one to its left, the one above and
 /// the one above left (0 for the first `pixel` bytes, where the predictor is the
-/// byte above).
+/// byte above). From `first` on, a lane at a time with the byte on the left
+/// in a local, as `sub`.
 fn paeth_row(
   cur : FixedArray[Byte],
   prev : FixedArray[Byte],
@@ -210,17 +247,35 @@ fn paeth_row(
   } where {
     proof_invariant: 1 <= i,
   }
-  for i = first; i < stop; {
-    proof_assert in_row(i, cur.length()) && in_row(i - pixel, cur.length())
-    proof_assert in_row(i, prev.length()) && in_row(i - pixel, prev.length())
-    let p = paeth(
-      cur.unsafe_get(i - pixel).to_int(),
-      prev.unsafe_get(i).to_int(),
-      prev.unsafe_get(i - pixel).to_int(),
-    )
-    cur.unsafe_set(i, byte_add(cur.unsafe_get(i), byte_of(p)))
-    continue i + 1
+  for k = 0; k < pixel; {
+    let s = first + k
+    if s < stop {
+      proof_assert in_row(s - pixel, cur.length())
+      let mut left = cur.unsafe_get(s - pixel)
+      for i = s; i < stop; {
+        proof_assert in_row(i, cur.length()) && in_row(i, prev.length())
+        proof_assert in_row(i - pixel, prev.length())
+        // Above left is read afresh, as the one-byte loop reads it, should
+        // `prev` be `cur`.
+        let p = paeth(
+          left.to_int(),
+          prev.unsafe_get(i).to_int(),
+          prev.unsafe_get(i - pixel).to_int(),
+        )
+        let v = byte_add(cur.unsafe_get(i), byte_of(p))
+        cur.unsafe_set(i, v)
+        left = v
+        // Stops before `i + pixel` could wrap past the largest Int.
+        if stop - i <= pixel {
+          break
+        }
+        continue i + pixel
+      } where {
+        proof_invariant: s <= i,
+      }
+    }
+    continue k + 1
   } where {
-    proof_invariant: first <= i,
+    proof_invariant: 0 <= k,
   }
 }
