@@ -7,6 +7,8 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-14
+
 ### Changed
 
 - **The README has sections and a compile-checked example.** It has Install, Usage (handling a `CodecError` by its kind), the error kinds, and Links, and lives in `src/overview.mbt.md`, linked as `README.md`, so its example is compiled by `moon test`. The derived `equal`, `not_equal` and `to_repr` methods have doc comments.

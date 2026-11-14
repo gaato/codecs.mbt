@@ -16,7 +16,7 @@ source = "src"
 preferred_target = "native"
 
 import {
-  "gaato/codec@0.1.0",
-  "gaato/codec_bytes@0.1.1",
+  "gaato/codec@0.1.1",
+  "gaato/codec_bytes@0.1.2",
   "gaato/codec_image@0.1.0",
 }

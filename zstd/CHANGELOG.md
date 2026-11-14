@@ -7,6 +7,8 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-14
+
 ### Added
 
 - **An encoder.** `Encoder` (streaming, `gaato/codec_bytes`'s `Encode`, with `Continue`, `Flush` and `Finish`) and `compress` write one Zstandard frame at zstd's levels 1 to 12, 3 by default, with zstd 1.5.7's parameters for each level and input size: fast, double-fast, and greedy, lazy and lazy2 searching rows of tags as zstd does (hash chains for windows of at most 16 KiB, and for the small-input rows of levels 9 to 12 where zstd uses binary trees, which are not implemented). Raw, RLE and compressed blocks, Huffman-coded literals and FSE-coded sequences, the XXH64 content checksum unless `checksum=false`, and the content size when it is known (`compress`, or `Encoder(content_size=n)`, which then raises `ChecksumMismatch` when the input does not match it). On the Silesia and Canterbury corpora the totals are within 1 % of `zstd -N`'s at every level, and the output does not depend on how input and output are split. Levels 13 to 22 act as 12; dictionaries are not supported. `EncodeAction` is re-exported from `gaato/codec_bytes`. [docs/compression.md](https://github.com/gaato/codecs.mbt/blob/main/zstd/docs/compression.md) describes each level and its measurements.

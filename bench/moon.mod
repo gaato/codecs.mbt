@@ -15,13 +15,13 @@ source = "src"
 preferred_target = "native"
 
 import {
-  "gaato/codec@0.1.0",
-  "gaato/codec_bytes@0.1.1",
+  "gaato/codec@0.1.1",
+  "gaato/codec_bytes@0.1.2",
   "gaato/codec_harness@0.0.0",
-  "gaato/zstd@0.3.1",
-  "gaato/brotli@0.4.1",
-  "gaato/deflate@0.1.0",
-  "gaato/png@0.1.0",
+  "gaato/zstd@0.4.0",
+  "gaato/brotli@0.4.2",
+  "gaato/deflate@0.1.1",
+  "gaato/png@0.1.1",
   "moonbitlang/typst@0.1.9",
   "gmlewis/image@0.17.18",
   "gmlewis/io@0.23.20",

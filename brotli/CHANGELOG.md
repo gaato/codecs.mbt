@@ -7,6 +7,8 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-14
+
 ### Changed
 
 - **The README has sections.** Install, Usage, What it decodes, Encoding, Memory, Errors and Links; links are absolute, so they work on mooncakes.io. The cross-check with google/brotli's decoder is described in TEST_COVERAGE.md instead. The `gaato/codec_bytes` trait methods have doc comments, and the repository-only `scripts/` is no longer packaged.

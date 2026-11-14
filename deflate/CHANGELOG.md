@@ -7,6 +7,8 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-14
+
 ### Changed
 
 - gzip's CRC-32 is computed eight bytes at a time (slice-by-8), from 9 KiB of tables computed at start-up and shared by every decoder and encoder, in place of 1 KiB. The output and the errors are unchanged.
