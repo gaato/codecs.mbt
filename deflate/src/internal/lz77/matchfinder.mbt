@@ -89,8 +89,9 @@ fn may_beat(
 
 ///|
 /// How many bytes from `a` equal those from `b`, counting from `start`
-/// (which the caller knows to match) up to at most `max_len`: four at a
-/// time, then byte by byte. Reads before `a + max_len` and `b + max_len`.
+/// (which the caller knows to match) up to at most `max_len`: sixteen at a
+/// time (`@match_length_fast`). `b < a`, and the caller has the bytes up to
+/// `a + max_len` in `data`.
 #cfg(any(target="native", target="wasm"))
 #inline
 fn extend_match(
@@ -100,18 +101,7 @@ fn extend_match(
   start : Int32,
   max_len : Int32,
 ) -> Int32 {
-  let mut len = start
-  while len + 4 <= max_len {
-    let x = load_u32(data, a + len) ^ load_u32(data, b + len)
-    if x != 0 {
-      return len + (x.ctz() >> 3)
-    }
-    len += 4
-  }
-  while len < max_len && data[a + len] == data[b + len] {
-    len += 1
-  }
-  len
+  start + @match_length_fast.length(data, a + start, b + start, a + max_len)
 }
 
 ///|
@@ -138,7 +128,8 @@ fn extend_match(
 /// those that fall out of reach become `NO_POSITION`.
 fn rebase(table : FixedArray[Int16]) -> Unit {
   for i in 0..<table.length() {
-    let v = table[i].to_int()
-    table[i] = if v >= 0 { Int16::from_int(v - WINDOW) } else { NO_POSITION }
+    // Without a branch: a negative v (out of reach) gives 0 - WINDOW, which
+    // is NO_POSITION. i < table.length().
+    write(table, i, Int16::from_int(read(table, i).to_int().max(0) - WINDOW))
   }
 }

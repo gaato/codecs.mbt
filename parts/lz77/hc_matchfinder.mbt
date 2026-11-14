@@ -139,12 +139,14 @@ pub fn HcMatchfinder::longest_match(
   let mut best_len = best_len
   let mut best_match = in_next
   let mut depth_remaining = max_search_depth
-  // Insert this position, and hash the next one.
-  let cur_node3 = self.hash3[self.next_hash3].to_int()
-  let mut cur_node4 = self.hash4[self.next_hash4].to_int()
-  self.hash3[self.next_hash3] = Int16::from_int(cur_pos)
-  self.hash4[self.next_hash4] = Int16::from_int(cur_pos)
-  next_tab[cur_pos] = Int16::from_int(cur_node4)
+  // Insert this position, and hash the next one. The hashes are below the
+  // sizes of their tables (`hash_bits`), and 0 <= cur_pos < WINDOW, the
+  // size of `next`, once slid.
+  let cur_node3 = read(self.hash3, self.next_hash3).to_int()
+  let mut cur_node4 = read(self.hash4, self.next_hash4).to_int()
+  write(self.hash3, self.next_hash3, Int16::from_int(cur_pos))
+  write(self.hash4, self.next_hash4, Int16::from_int(cur_pos))
+  write(next_tab, cur_pos, Int16::from_int(cur_node4))
   let next_seq = load_u32(data, in_next + 1)
   self.next_hash3 = hash_bits(next_seq & 0xFFFFFF, HASH3_BITS)
   self.next_hash4 = hash_bits(next_seq, HASH4_BITS)
@@ -169,7 +171,7 @@ pub fn HcMatchfinder::longest_match(
     }
     // The first 4-byte candidate whose bytes match.
     while load_u32(data, base + cur_node4) != seq4 {
-      cur_node4 = next_tab[cur_node4 & (WINDOW - 1)].to_int()
+      cur_node4 = read(next_tab, cur_node4 & (WINDOW - 1)).to_int()
       depth_remaining -= 1
       if cur_node4 <= cutoff || depth_remaining == 0 {
         self.offset = in_next - best_match
@@ -182,7 +184,7 @@ pub fn HcMatchfinder::longest_match(
       self.offset = in_next - best_match
       return best_len
     }
-    cur_node4 = next_tab[cur_node4 & (WINDOW - 1)].to_int()
+    cur_node4 = read(next_tab, cur_node4 & (WINDOW - 1)).to_int()
     depth_remaining -= 1
     if cur_node4 <= cutoff || depth_remaining == 0 {
       self.offset = in_next - best_match
@@ -207,7 +209,7 @@ pub fn HcMatchfinder::longest_match(
         }
       }
     }
-    cur_node4 = next_tab[cur_node4 & (WINDOW - 1)].to_int()
+    cur_node4 = read(next_tab, cur_node4 & (WINDOW - 1)).to_int()
     depth_remaining -= 1
     if cur_node4 <= cutoff || depth_remaining == 0 {
       break
@@ -243,9 +245,11 @@ pub fn HcMatchfinder::skip_bytes(
     if cur_pos == WINDOW {
       cur_pos = self.slide_if_needed(cur_pos)
     }
-    hash3_tab[hash3] = Int16::from_int(cur_pos)
-    next_tab[cur_pos] = hash4_tab[hash4]
-    hash4_tab[hash4] = Int16::from_int(cur_pos)
+    // As in `longest_match`: hashes below their tables' sizes, and
+    // cur_pos < WINDOW once slid.
+    write(hash3_tab, hash3, Int16::from_int(cur_pos))
+    write(next_tab, cur_pos, read(hash4_tab, hash4))
+    write(hash4_tab, hash4, Int16::from_int(cur_pos))
     pos += 1
     let seq = load_u32(data, pos)
     hash3 = hash_bits(seq & 0xFFFFFF, HASH3_BITS)

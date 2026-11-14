@@ -145,30 +145,3 @@ pub fn Matcher::slide(self : Matcher, shift : Int32) -> Unit {
   }
   self.next = (self.next - shift).max(0)
 }
-
-///|
-/// `data[i]`, without the index check on native and Wasm, where each check
-/// is a call on Wasm: each caller says why `i` is within `data`.
-#cfg(any(target="native", target="wasm"))
-fn[T] read(data : FixedArray[T], i : Int32) -> T {
-  data.unsafe_get(i)
-}
-
-///|
-#cfg(not(any(target="native", target="wasm")))
-fn[T] read(data : FixedArray[T], i : Int32) -> T {
-  data[i]
-}
-
-///|
-/// `data[i] = value`, as `read`.
-#cfg(any(target="native", target="wasm"))
-fn[T] write(data : FixedArray[T], i : Int32, value : T) -> Unit {
-  data.unsafe_set(i, value)
-}
-
-///|
-#cfg(not(any(target="native", target="wasm")))
-fn[T] write(data : FixedArray[T], i : Int32, value : T) -> Unit {
-  data[i] = value
-}

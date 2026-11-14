@@ -42,3 +42,30 @@ pub fn match_length(
 ) -> Int32 {
   @match_length_fast.length(data, b, a, b + limit)
 }
+
+///|
+/// `data[i]`, without the index check on native and Wasm, where each check
+/// is a call on Wasm: each caller says why `i` is within `data`.
+#cfg(any(target="native", target="wasm"))
+fn[T] read(data : FixedArray[T], i : Int32) -> T {
+  data.unsafe_get(i)
+}
+
+///|
+#cfg(not(any(target="native", target="wasm")))
+fn[T] read(data : FixedArray[T], i : Int32) -> T {
+  data[i]
+}
+
+///|
+/// `data[i] = value`, as `read`.
+#cfg(any(target="native", target="wasm"))
+fn[T] write(data : FixedArray[T], i : Int32, value : T) -> Unit {
+  data.unsafe_set(i, value)
+}
+
+///|
+#cfg(not(any(target="native", target="wasm")))
+fn[T] write(data : FixedArray[T], i : Int32, value : T) -> Unit {
+  data[i] = value
+}
