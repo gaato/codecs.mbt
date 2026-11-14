@@ -29,7 +29,8 @@ and corruptions.
   (the decoder and the encoder), and under the internal packages it ships (`src/internal/header/`,
   `src/internal/frame/`, `src/internal/huffman/`, `src/internal/xxhash/`,
   the encoder's `src/internal/fse/` and `src/internal/huffenc/`, the copies
-  of `parts/` in `src/internal/bits/` and `src/internal/huffman_code/`, and
+  of `parts/` in `src/internal/blit/`, `src/internal/bits/` and
+  `src/internal/huffman_code/`, and
   the proof packages). The test-only checksum package and the crosscheck
   tool under `src/internal/` are not measured. The shared `seqcases`
   fixture generator is measured alongside `match` and `seqenc`, so every
@@ -208,6 +209,7 @@ No uncovered-line budget is added for shared history.
 
 | File | Budget | Reason |
 | --- | --- | --- |
+| src/internal/blit/blit.mbt | 4 | `bytes` and `into_view` for JS (`#cfg(target="js")`), forward loops without index checks: the ledger measures native, which compiles the block copies instead. The gates run the same tests on JS: `src/internal/blit/blit_test.mbt` and the decoder's tests, which write through both. |
 | src/internal/match/access.mbt | 5 | Checked `read`, `write`, `match_length` and `may_beat` for JS/Wasm GC, excluded by native's cfg. The gates run the same matcher tests and unchanged SHA-256 pins on both checked targets. |
 | src/internal/match/fast.mbt | 12 | Original JS/Wasm GC construction and byte-wise hash, excluded by native's cfg. The gates run the boundary round trips, width fingerprints and unchanged SHA-256 pins there. |
 | src/internal/match/dfast.mbt | 15 | Original JS/Wasm GC construction, byte-wise hashes and their wrappers, excluded by native's cfg. The gates run all widths, rebase fixtures, boundary round trips and unchanged SHA-256 pins there. |

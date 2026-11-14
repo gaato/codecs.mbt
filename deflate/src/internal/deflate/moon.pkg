@@ -2,6 +2,7 @@
 // package's `Encoder` and the zlib and gzip encoders each hold one.
 
 import {
+  "gaato/deflate/internal/blit",
   "gaato/codec_bytes",
   "gaato/deflate/internal/huffman",
   "gaato/deflate/internal/lz77",

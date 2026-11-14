@@ -4,6 +4,7 @@
 // `moon prove` checks its judgement of code lengths, `shape` (PROOFS.md).
 
 import {
+  "gaato/deflate/internal/blit",
   "gaato/codec",
   "gaato/codec_bytes",
   "gaato/deflate/internal/huffman",

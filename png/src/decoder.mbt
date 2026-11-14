@@ -810,11 +810,8 @@ fn Decoder::run(
         // SAFETY: `n <= output.length()` was checked above, and the block
         // holds `n` bytes.
         match self.fixed_out {
-          Some(out) => blit(out, 0, self.block.data, 0, n)
-          None =>
-            for i in 0..<n {
-              output.unsafe_set(i, self.block.data.unsafe_get(i))
-            }
+          Some(out) => @blit.bytes(out, 0, self.block.data, 0, n)
+          None => @blit.into_view(output, 0, self.block.data, 0, n)
         }
         self.produced = n
         self.metadata_chunk = self.block.chunk
@@ -1370,11 +1367,8 @@ fn Decoder::write_row(self : Decoder, output : MutArrayView[Byte]) -> Bool {
   // SAFETY: `produced + n <= output.length()` was checked above, and `row`
   // holds 1 + the bytes of a full row, at least `1 + n`.
   match self.fixed_out {
-    Some(out) => blit(out, self.produced, row, 1, n)
-    None =>
-      for i in 0..<n {
-        output.unsafe_set(self.produced + i, row.unsafe_get(1 + i))
-      }
+    Some(out) => @blit.bytes(out, self.produced, row, 1, n)
+    None => @blit.into_view(output, self.produced, row, 1, n)
   }
   if self.rows_count == 0 {
     self.rows_pass = self.pass
@@ -1389,38 +1383,6 @@ fn Decoder::write_row(self : Decoder, output : MutArrayView[Byte]) -> Bool {
     self.start_pass(self.pass + 1)
   }
   true
-}
-
-///|
-/// Copies `n` bytes of `src` from `at` into `dst` from `to`, which the
-/// caller has checked both arrays hold, in one block copy: native and Wasm
-/// decode the benchmarks' image 10 to 15% faster with it than byte by byte.
-#cfg(not(target="js"))
-fn blit(
-  dst : FixedArray[Byte],
-  to : Int32,
-  src : FixedArray[Byte],
-  at : Int32,
-  n : Int32,
-) -> Unit {
-  FixedArray::unsafe_blit(dst, to, src, at, n)
-}
-
-///|
-/// The same, byte by byte: on JS the block copy is a loop that checks every
-/// index, and decoded the benchmarks' image 10% slower than this one
-/// (bench/, 2026-10-22).
-#cfg(target="js")
-fn blit(
-  dst : FixedArray[Byte],
-  to : Int32,
-  src : FixedArray[Byte],
-  at : Int32,
-  n : Int32,
-) -> Unit {
-  for i in 0..<n {
-    dst.unsafe_set(to + i, src.unsafe_get(at + i))
-  }
 }
 
 ///|

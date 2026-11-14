@@ -32,7 +32,7 @@ ledger OK, 1 = an unexplained or over-budget file, 2 = the run itself failed
   `src/internal/filter_fast/` (the decoder's faster Up filter),
   `src/internal/convert/` (a sample's arithmetic) and `src/internal/sizes/`
   (a row's bytes and a frame's rectangle, proved), and of the copies of the shared parts
-  `src/internal/crc32/` and `src/internal/proof_bits/` (generated from
+  `src/internal/blit/`, `src/internal/crc32/` and `src/internal/proof_bits/` (generated from
   `parts/`, with their tests).
 - Counts are Coveralls lines: lines with at least one instrumented point,
   covered when any point on them ran.
@@ -74,5 +74,5 @@ broken files from typst, image-png and libspng.
 
 | File | Budget | Reason |
 |---|---|---|
-| src/decoder.mbt | 2 | `blit` for JS (`#cfg(target="js")`), which copies a row byte by byte: the ledger measures native, which compiles the block copy instead. The gates run the same tests on JS, among them "step_into writes what step writes, into a whole array". |
+| src/internal/blit/blit.mbt | 4 | `bytes` and `into_view` for JS (`#cfg(target="js")`), forward loops without index checks: the ledger measures native, which compiles the block copies instead. The gates run the same tests on JS: `src/internal/blit/blit_test.mbt`, and the decoder's, among them "step_into writes what step writes, into a whole array". |
 | src/internal/filter_fast/filter_fast.mbt | 1 | `unfilter` for JS and Wasm GC (`#cfg(not(any(target="native", target="wasm")))`), which calls `@filter.unfilter`: the ledger measures native, which compiles the SIMD one instead. The gates run the package's tests, which compare it with `@filter.unfilter`, on JS and Wasm GC too. |

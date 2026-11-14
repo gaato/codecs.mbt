@@ -25,9 +25,9 @@ streams built bit by bit, and seeded pseudo-random splits and corruptions.
 ### What is measured
 
 - Sources: every non-test `.mbt` directly under `src/`, the library package;
-  under `src/internal/bits/`, `src/internal/huffman/` and
-  `src/internal/lz77/`, the building blocks copied from `parts/` (the bit
-  writer, prefix codes and decoding tables, the match finder), measured
+  under `src/internal/blit/`, `src/internal/bits/`, `src/internal/huffman/`
+  and `src/internal/lz77/`, the building blocks copied from `parts/` (the
+  byte copy, the bit writer, prefix codes and decoding tables, the match finder), measured
   here through the tests copied with them, with the proof packages
   `src/internal/proof_bits/` and `src/internal/proof_codes/`; and under
   `src/internal/rules/` and `src/internal/transform/`, the decoder's pure
@@ -87,4 +87,5 @@ Budgets are exact uncovered counts at the last measurement.
 | --- | --- | --- |
 | src/decoder.mbt | 1 | In `next_aligned_byte`, loading a byte from `stash`: uncompressed and metadata bytes would come from it only if `stash` held bytes there, and it never does. A unit leaves bytes in `stash` only when they fall short of what it needs, so when it completes it has consumed them all; the byte-aligned loops start after that unit. |
 | src/internal/bits/bit_packer.mbt | 10 | `BitPacker::write`, `BitPacker::write_fitting` and `BitPacker::flush` for JS (`#cfg(target="js")`), the 32-bit accumulator moved a byte at a time: the ledger measures native, which compiles the 64-bit `write` and the eight-byte `flush` instead. The gates run the same tests on JS: `src/internal/bits/bit_packer_test.mbt` and the encoder's, including the SHA-256 of its output. |
+| src/internal/blit/blit.mbt | 4 | `bytes` and `into_view` for JS (`#cfg(target="js")`), forward loops without index checks: the ledger measures native, which compiles the block copies instead. The gates run the same tests on JS: `src/internal/blit/blit_test.mbt` and the decoder's tests, which write through both. |
 | src/internal/huffman/decode_table.mbt | 3 | The `abort`s of `Builder::Builder` (a root outside 1 to 15 bits, an alphabet past 4096 symbols) and of `Builder::build` (a table without room): the `panic` tests of `src/internal/huffman/decode_table_spec_test.mbt` run them, but the abort ends the test before its coverage counts are written. |

@@ -1,0 +1,15 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/deflate/internal/blit"
+
+// Values
+pub fn bytes(FixedArray[Byte], Int32, FixedArray[Byte], Int32, Int32) -> Unit
+
+pub fn into_view(MutArrayView[Byte], Int32, FixedArray[Byte], Int32, Int32) -> Unit
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+
+// Traits

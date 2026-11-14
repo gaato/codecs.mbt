@@ -1,4 +1,5 @@
 import {
+  "gaato/zstd/internal/blit",
   "gaato/codec",
   "gaato/codec_bytes",
   "gaato/zstd/internal/bits",

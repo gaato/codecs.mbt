@@ -1,4 +1,5 @@
 import {
+  "gaato/png/internal/blit",
   "gaato/codec",
   "gaato/codec_image",
   "gaato/deflate/zlib",

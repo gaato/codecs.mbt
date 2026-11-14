@@ -1,0 +1,3 @@
+// Copying bytes from one array into another, as fast as each target allows.
+
+supported_targets = "js + native + wasm + wasm-gc"

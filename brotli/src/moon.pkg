@@ -1,4 +1,5 @@
 import {
+  "gaato/brotli/internal/blit",
   "gaato/codec",
   "gaato/codec_bytes",
   "gaato/brotli/internal/bits",

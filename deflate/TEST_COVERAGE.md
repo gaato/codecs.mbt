@@ -27,7 +27,7 @@ streams built bit by bit, and seeded pseudo-random splits and corruptions.
 - Sources: every non-test `.mbt` of the three library packages, `src/`,
   `src/zlib/` and `src/gzip/`, and of their internal packages: the raw
   DEFLATE decoder `src/internal/inflate/` and encoder `src/internal/deflate/`,
-  the copies of the shared parts `src/internal/crc32/`,
+  the copies of the shared parts `src/internal/blit/`, `src/internal/crc32/`,
   `src/internal/huffman/` and `src/internal/lz77/` (generated from `parts/`, with their tests), the
   proof packages `src/internal/proof_bits/` and `src/internal/proof_codes/`,
   `src/zlib/internal/adler32/`, `src/zlib/internal/adler32_fast/`,
@@ -99,6 +99,7 @@ Budgets are exact uncovered counts at the last measurement.
 
 | File | Budget | Reason |
 | --- | --- | --- |
+| src/internal/blit/blit.mbt | 4 | `bytes` and `into_view` for JS (`#cfg(target="js")`), forward loops without index checks: the ledger measures native, which compiles the block copies instead. The gates run the same tests on JS: `src/internal/blit/blit_test.mbt` and the decoders' and encoders' tests, which write through both. |
 | src/internal/huffman/decode_table.mbt | 3 | The `abort`s of `Builder::Builder` (a root outside 1 to 15 bits, an alphabet past 4096 symbols) and of `Builder::build` (a table without room): the `panic` tests of `src/internal/huffman/decode_table_spec_test.mbt` run them, but the abort ends the test before its coverage counts are written. |
 | src/internal/inflate/blocks.mbt | 1 | In `Inflater::run`, the `abort` for the fast path running out of input: unreachable by construction, since it runs only while the input holds the 8 bytes a unit can need. |
 | src/internal/inflate/inflater.mbt | 1 | In `Inflater::step_with`, the `abort` for an unfinished unit that keeps more bytes than `stash` holds: unreachable by construction, since a unit needs at most 6 bytes beyond the bits held and keeps only those it fell short with. |

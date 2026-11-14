@@ -709,11 +709,8 @@ fn Decoder::drain(self : Decoder) -> Unit {
 ///|
 fn Decoder::write_out(self : Decoder, start : Int32, n : Int32) -> Unit {
   match self.fixed_out {
-    Some(out) => FixedArray::unsafe_blit(out, self.out_pos, self.ring, start, n)
-    None =>
-      for i in 0..<n {
-        self.out[self.out_pos + i] = self.ring[start + i]
-      }
+    Some(out) => @blit.bytes(out, self.out_pos, self.ring, start, n)
+    None => @blit.into_view(self.out, self.out_pos, self.ring, start, n)
   }
   self.out_pos += n
 }
