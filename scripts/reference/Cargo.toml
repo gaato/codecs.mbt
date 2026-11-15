@@ -1,0 +1,15 @@
+# Reference decoders written apart from this repository's and from zlib, for
+# the crosschecks: miniz_oxide (a Rust port of miniz) for raw DEFLATE and
+# zlib. Run by deflate/scripts/crosscheck.mbtx; not part of any MoonBit
+# module. The versions are pinned here and in Cargo.lock.
+
+[package]
+name = "codecs-reference"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+miniz_oxide = "=0.9.1"
+base64 = "=0.22.1"
+sha2 = "=0.10.9"

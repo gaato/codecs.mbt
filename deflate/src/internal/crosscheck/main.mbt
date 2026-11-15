@@ -205,4 +205,36 @@ fn main {
     1,
     1,
   )
+  streamed("gzip bytewise l6", @gzip.Encoder(), flushed[:300].to_owned(), 1, 1)
+  // Smaller windows streamed and flushed, and with a dictionary, which a
+  // match may reach into only within the window.
+  for bits in [9, 12] {
+    streamed(
+      "raw flushed l6 w\{bits}",
+      @deflate.Encoder(window_bits=bits),
+      flushed,
+      777,
+      10000,
+    )
+    streamed(
+      "zlib flushed l9 w\{bits}",
+      @zlib.Encoder(level=9, window_bits=bits),
+      flushed,
+      4096,
+      65537,
+    )
+    let input = text(60000)
+    emit(
+      "raw dict l6 w\{bits}",
+      input,
+      @deflate.compress(input, dictionary~, window_bits=bits),
+      dictionary~,
+    )
+    emit(
+      "zlib dict l6 w\{bits}",
+      input,
+      @zlib.compress(input, dictionary~, window_bits=bits),
+      dictionary~,
+    )
+  }
 }

@@ -30,6 +30,9 @@ import {
 //   zlib then returns what it gave out instead of raising "unexpected end of
 //   file", so a stream that holds back some of its input decodes to fewer
 //   bytes, and the length and SHA-256 catch that;
+// - a whole raw DEFLATE or zlib stream without a dictionary also with
+//   miniz_oxide (scripts/reference, a Rust port of miniz, which shares no
+//   code with zlib; run with cargo, versions pinned by its Cargo.lock);
 // - a whole gzip stream also with the `gzip -d` command, which checks the
 //   CRC-32 and the length.
 //
@@ -215,6 +218,39 @@ async fn main {
     )
     return
   }
+  // The whole raw DEFLATE and zlib streams without a dictionary, also through
+  // miniz_oxide (scripts/reference, a decoder that shares no code with zlib),
+  // in one process.
+  let second : Map[Int, String] = Map([])
+  let picked = []
+  let ref_input = StringBuilder()
+  for n, s in streams {
+    if !s.flushed && s.dictionary == "" && s.format is ("raw" | "zlib") {
+      picked.push(n)
+      ref_input.write_string("\{s.format}\t\{@base64.encode(s.data)}\n")
+    }
+  }
+  let reference = @shell.Cmd(
+    "cargo",
+    [
+      "run", "--quiet", "--release", "--locked", "--manifest-path", "scripts/reference/Cargo.toml",
+    ],
+    stdin=Text(ref_input.to_string()),
+  ).output(max_output_bytes=max_output)
+  if reference.exit_code() != 0 {
+    setup_failure("scripts/reference: \{reference.stderr()}")
+    return
+  }
+  let answers = reference.stdout().split("\n").map(l => l.to_owned()).collect()
+  if answers.length() != picked.length() + 1 {
+    setup_failure(
+      "scripts/reference answered \{answers.length() - 1} of \{picked.length()} streams",
+    )
+    return
+  }
+  for i, n in picked {
+    second[n] = answers[i]
+  }
   let mut failures = 0
   let mut checked = 0
   for n, s in streams {
@@ -232,6 +268,11 @@ async fn main {
     }
     if s.flushed {
       checked += 1
+      continue
+    }
+    if second.get(n) is Some(answer) && answer != "\{s.size} \{s.digest}" {
+      println("FAIL \{s.name}: miniz_oxide: \{answer}")
+      failures += 1
       continue
     }
     if s.format == "gzip" {
