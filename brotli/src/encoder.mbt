@@ -20,6 +20,8 @@ const INITIAL_BUFFER : Int32 = 1024
 /// input so far) plus at most a meta-block (64 KiB) of input and its
 /// output, and fixed-size tables.
 pub struct Encoder {
+  // The LZ77 dictionary matches may copy from.
+  priv dictionary : Dictionary?
   priv window_bits : Int32
   // The longest distance: the window less 16 bytes (section 9.1).
   priv max_distance : Int32
@@ -52,13 +54,24 @@ pub struct Encoder {
 /// An encoder at the start of a stream, with a window of
 /// `1 << window_bits` bytes (clamped to 10..24). The default 22 is the
 /// reference encoder's; a decoder needs up to that much memory.
-pub fn Encoder::Encoder(window_bits~ : Int32 = 22) -> Encoder {
+///
+/// With `dictionary`, a match may copy from it as RFC 9841 section 3.2 has
+/// it, as `brotli -D` writes and RFC 9842's `dcb` coding reads: at a
+/// distance past the window's reach, however far into the stream. A
+/// decoder needs the same dictionary. The dictionary keeps the index the
+/// encoder searches it with, built the first time and shared by every
+/// encoder given it (`Dictionary::memory_usage`).
+pub fn Encoder::Encoder(
+  window_bits~ : Int32 = 22,
+  dictionary? : Dictionary,
+) -> Encoder {
   let window_bits = window_bits.clamp(min=10, max=24)
   let window = 1 << window_bits
   // Room to slide by at least a quarter window (or a meta-block) at a time.
   let slack = (window >> 2).max(BLOCK_SIZE)
   {
     window_bits,
+    dictionary,
     max_distance: window - 16,
     data: FixedArray::make(0, b'\x00'),
     data_len: 0,

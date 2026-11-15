@@ -84,7 +84,13 @@ struct Stream {
   size : Int
   digest : String
   data : Bytes
+  /// The LZ77 dictionary the stream needs, or empty.
+  dictionary : Bytes
 }
+
+///|
+/// Where a stream's LZ77 dictionary is written for `brotli -d -D`.
+let dict_file : String = "_build/crosscheck-brotli.dict"
 
 ///|
 fn sha256_hex(data : Bytes) -> String {
@@ -155,7 +161,8 @@ async fn main {
     if line.is_empty() {
       continue
     }
-    guard line.split("\t").collect() is [name, size, digest, data] else {
+    let fields = line.split("\t").collect()
+    guard fields is [name, size, digest, data, ..] && fields.length() <= 5 else {
       setup_failure("unexpected line from the crosscheck tool: \{line}")
       return
     }
@@ -164,6 +171,11 @@ async fn main {
       size: @string.parse_int(size),
       digest: digest.to_owned(),
       data: @base64.decode(data),
+      dictionary: if fields.length() == 5 {
+        @base64.decode(fields[4])
+      } else {
+        b""
+      },
     })
   }
   // The flushed streams, all through one Node process.
@@ -207,7 +219,13 @@ async fn main {
       }
       continue
     }
-    let output = @shell.Cmd("brotli", ["-d", "-c"], stdin=Binary(s.data)).output(
+    let dict_args = if s.dictionary.length() == 0 {
+      []
+    } else {
+      @fs.write_binary(dict_file, s.dictionary)
+      ["-D", dict_file]
+    }
+    let output = @shell.Cmd("brotli", ["-d", "-c", ..dict_args], stdin=Binary(s.data)).output(
       max_output_bytes=max_output,
     )
     if output.exit_code() != 0 {

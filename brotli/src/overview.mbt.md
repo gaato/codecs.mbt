@@ -125,6 +125,8 @@ Not included: the rest of Shared Brotli (RFC 9841): serialized shared dictionari
 
 The encoder uses greedy LZ77 (lazy by one byte) and one prefix code per meta-block: about google/brotli's quality 4, and close to gzip -6. Higher-quality encoding (context modeling, block splitting, static dictionary references) is not included. The encoder never raises.
 
+`Encoder(dictionary=d)` and `compress(dictionary=d)` let matches copy from an LZ77 dictionary as `brotli -D` writes them, for RFC 9842's `dcb` coding: at a distance past the window's reach, however far into the stream. A record of 314 bytes that shares words with a 50,000-byte dictionary compresses to 100 bytes with it and 201 without (`brotli -q 5 -D`: 95). The dictionary builds the index encoders search it with once, the first time, and every encoder given it shares that (`Dictionary::memory_usage`).
+
 ## Memory
 
 The decoder's memory is the window (at most 16 MiB, and no more than the output so far) plus tables of at most 1.3 MiB; `memory_usage()` reports it. `Decoder(max_window_bits=n)` refuses streams that need a window over `2^n - 16` bytes with `LimitExceeded`, saying how much the stream needs.

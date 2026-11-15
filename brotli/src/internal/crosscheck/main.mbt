@@ -49,9 +49,20 @@ fn repeats(rng : Rng, n : Int32) -> Bytes {
 }
 
 ///|
-fn emit(name : String, input : BytesView, stream : BytesView) -> Unit {
+fn emit(
+  name : String,
+  input : BytesView,
+  stream : BytesView,
+  dictionary? : BytesView,
+) -> Unit {
   let digest = @checksum.sha256(input)
-  println("\{name}\t\{input.length()}\t\{digest}\t\{@base64.encode(stream)}")
+  let dict = match dictionary {
+    Some(d) => "\t\{@base64.encode(d)}"
+    None => ""
+  }
+  println(
+    "\{name}\t\{input.length()}\t\{digest}\t\{@base64.encode(stream)}\{dict}",
+  )
 }
 
 ///|
@@ -148,4 +159,53 @@ fn main {
   streamed("flushed", flushed, 16, 65536, 70000)
   // A flush after every byte.
   streamed("bytewise", flushed[:3000].to_owned(), 10, 1, 1)
+  // With an LZ77 dictionary (RFC 9841 section 3.2), as `brotli -D` reads
+  // them: windows smaller and larger than it, inputs that fill the window
+  // and go on reaching into it, through `compress` and streamed.
+  let dict_bytes = text(Rng::{ state: 9841, }, 60000)
+  let dict = @brotli.Dictionary(dict_bytes)
+  for n in [0, 1, 300, 4000, 100000, 300000] {
+    let input = text(rng, n)
+    for window_bits in [10, 16, 22] {
+      emit(
+        "dict text\{n} w\{window_bits}",
+        input,
+        @brotli.compress(input, window_bits~, dictionary=dict),
+        dictionary=dict_bytes,
+      )
+      let encoder = @brotli.Encoder(window_bits~, dictionary=dict)
+      let out = Buffer()
+      let buffer = FixedArray::make(1000, b'\x00')
+      let mut pos = 0
+      while pos <= input.length() {
+        let end = (pos + 4096).min(input.length())
+        let action : @brotli.EncodeAction = if end == input.length() {
+          Finish
+        } else {
+          Continue
+        }
+        let mut rest = input[pos:end]
+        for ;; {
+          let status = encoder.step_into(rest, buffer, action~)
+          rest = rest[encoder.last_consumed():]
+          out.write_bytesview(
+            Bytes::from_array(buffer[:encoder.last_produced()])[:],
+          )
+          if status is (Done | NeedMoreInput) {
+            break
+          }
+        }
+        if end == input.length() {
+          break
+        }
+        pos = end
+      }
+      emit(
+        "dict text\{n} w\{window_bits} streamed",
+        input,
+        out.to_bytes(),
+        dictionary=dict_bytes,
+      )
+    }
+  }
 }

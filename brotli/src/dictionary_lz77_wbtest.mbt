@@ -89,3 +89,112 @@ test "lz77_address: the dictionary from its end, static words after it" {
   // Without a dictionary, every distance past the reach is a word.
   assert_eq(address(101, 100, 0, 4), -1)
 }
+
+///|
+/// The inputs of the dictionary vectors: records that share words with the
+/// dictionary.
+fn dict_inputs() -> Array[(String, Bytes)] raise {
+  let dict = lz77_dictionary()
+  let inputs = []
+  for v in dict_vectors {
+    if v.name.has_suffix("_q5_w22") || v.name.has_suffix("_q11_w22") {
+      inputs.push((v.name, decompress(v.input(), dictionary=dict)))
+    }
+  }
+  inputs
+}
+
+///|
+test "streams made with a dictionary decode with it, reach into it, and are smaller" {
+  let dict = lz77_dictionary()
+  let mut reached = 0
+  for named in dict_inputs() {
+    let (name, input) = named
+    for window_bits in [10, 16, 22] {
+      let stream = compress(input, window_bits~, dictionary=dict)
+      assert_eq(
+        decompress(stream, dictionary=dict),
+        input,
+        msg="\{name} \{window_bits}",
+      )
+      if input.length() >= 300 {
+        assert_true(
+          stream.length() < compress(input, window_bits~).length(),
+          msg="\{name} \{window_bits}",
+        )
+        let without = try decompress(stream) catch {
+          _ => b""
+        } noraise {
+          got => got
+        }
+        if without != input {
+          reached += 1
+        }
+      }
+    }
+  }
+  assert_true(reached > 0)
+}
+
+///|
+/// `input` through `encoder`, `chunk` bytes per step into 333-byte slices.
+fn encode_split(encoder : Encoder, input : Bytes, chunk : Int32) -> Bytes {
+  let out = Buffer()
+  let buffer = FixedArray::make(333, b'\x00')
+  let mut pos = 0
+  for ;; {
+    let end = (pos + chunk).min(input.length())
+    let action : EncodeAction = if end == input.length() {
+      Finish
+    } else {
+      Continue
+    }
+    let mut rest = input[pos:end]
+    for ;; {
+      let status = encoder.step_into(rest, buffer, action~)
+      rest = rest[encoder.last_consumed():]
+      out.write_bytesview(
+        Bytes::from_array(buffer[:encoder.last_produced()])[:],
+      )
+      if status is Done {
+        return out.to_bytes()
+      }
+      if status is NeedMoreInput {
+        break
+      }
+    }
+    pos = end
+  }
+}
+
+///|
+test "a dictionary stream's bytes do not depend on the split; encoders share one" {
+  let dict = lz77_dictionary()
+  for named in dict_inputs() {
+    let (name, input) = named
+    let whole = encode_split(
+      Encoder(window_bits=16, dictionary=dict),
+      input,
+      1 << 20,
+    )
+    for chunk in [1, 7, 4096] {
+      let split = encode_split(
+        Encoder(window_bits=16, dictionary=dict),
+        input,
+        chunk,
+      )
+      assert_eq(split, whole, msg="\{name} \{chunk}")
+    }
+    assert_eq(decompress(whole, dictionary=dict), input, msg=name)
+    // A reset encoder writes the same stream again.
+    let encoder = Encoder(window_bits=16, dictionary=dict)
+    let first = encode_split(encoder, input, 4096)
+    encoder.reset()
+    assert_eq(encode_split(encoder, input, 4096), first, msg="reset \{name}")
+  }
+  // Two encoders share the dictionary's index and give the same bytes.
+  let input = dict_inputs()[0].1
+  assert_eq(compress(input, dictionary=dict), compress(input, dictionary=dict))
+  assert_true(dict.memory_usage() > 0)
+  assert_eq(Dictionary(b"abc").memory_usage(), 0)
+}

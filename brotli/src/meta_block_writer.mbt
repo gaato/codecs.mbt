@@ -134,6 +134,30 @@ fn Encoder::longest_match(self : Encoder, pos : Int32, end : Int32) -> Int32 {
 }
 
 ///|
+/// `longest_match`, and a longer match in the LZ77 dictionary `index` for
+/// a short one, past the window's reach; ties keep the window's, whose
+/// distance is shorter.
+fn Encoder::best_match(
+  self : Encoder,
+  index : DictionaryIndex,
+  pos : Int32,
+  end : Int32,
+) -> Int32 {
+  let best = self.longest_match(pos, end)
+  if best < LAZY_LIMIT {
+    self.dictionary_match(
+      index,
+      pos,
+      end - pos,
+      pos.min(self.max_distance),
+      best,
+    )
+  } else {
+    best
+  }
+}
+
+///|
 /// Parses `data[start..end)` into commands: at each position the longest
 /// match, unless the next position has a longer one (lazy matching, as in
 /// gzip). Updates the ring of last distances as the decoder will.
@@ -161,6 +185,67 @@ fn Encoder::parse(self : Encoder, start : Int32, end : Int32) -> Unit {
     }
     if len < LAZY_LIMIT && pos + 1 < end {
       let later = self.longest_match(pos + 1, end)
+      if later > len {
+        mb.lit_freqs[data[pos].to_int()] += 1
+        pos += 1
+        next_len = later
+        next_dist = self.found_dist
+        continue
+      }
+    }
+    let mut code = -1
+    for k in 0..<4 {
+      if ring[(self.dist_ring_index - 1 - k) & 3] == dist {
+        code = k
+        break
+      }
+    }
+    mb.push(pos - lit_start, len, code, dist)
+    if code != 0 {
+      ring[self.dist_ring_index & 3] = dist
+      self.dist_ring_index += 1
+    }
+    pos += len
+    lit_start = pos
+  }
+  if lit_start < end {
+    mb.push(end - lit_start, 2, -2, 0)
+  }
+}
+
+///|
+/// `parse`, with matches also in an LZ77 dictionary (`best_match`). A copy
+/// of `parse` rather than a test in it: the test in the loop made encoding
+/// without a dictionary 3 to 6 % slower on Wasm.
+fn Encoder::parse_with_dictionary(
+  self : Encoder,
+  start : Int32,
+  end : Int32,
+  index : DictionaryIndex,
+) -> Unit {
+  let mb = self.meta_block
+  mb.clear()
+  let data = self.data
+  let ring = self.dist_ring
+  let mut pos = start
+  let mut lit_start = start
+  // The match at `pos` when the previous position already looked it up.
+  let mut next_len = -1
+  let mut next_dist = 0
+  while pos < end {
+    let (len, dist) = if next_len >= 0 {
+      (next_len, next_dist)
+    } else {
+      (self.best_match(index, pos, end), self.found_dist)
+    }
+    next_len = -1
+    if len == 0 {
+      mb.lit_freqs[data[pos].to_int()] += 1
+      pos += 1
+      continue
+    }
+    if len < LAZY_LIMIT && pos + 1 < end {
+      let later = self.best_match(index, pos + 1, end)
       if later > len {
         mb.lit_freqs[data[pos].to_int()] += 1
         pos += 1
@@ -310,7 +395,10 @@ fn Encoder::encode_block(
   let mark = w.mark()
   let saved_ring = self.dist_ring.copy()
   let saved_index = self.dist_ring_index
-  self.parse(start, end)
+  match self.dictionary {
+    Some(dict) => self.parse_with_dictionary(start, end, dict.search_index())
+    None => self.parse(start, end)
+  }
   if !self.write_compressed(start, end, is_last) {
     // The decoder will not see these commands' distances.
     FixedArray::unsafe_blit(self.dist_ring, 0, saved_ring, 0, 4)
