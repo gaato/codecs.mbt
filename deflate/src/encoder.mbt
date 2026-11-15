@@ -29,8 +29,8 @@ pub struct Encoder {
 ///
 /// `level` trades speed for size as zlib's levels do: 0 writes the input in
 /// stored blocks, 1 is the fastest compression, 9 the smallest, and 6, the
-/// default, a balance. Levels outside 0 to 9 are clamped. The levels are
-/// libdeflate's.
+/// default, a balance. -1, zlib's `Z_DEFAULT_COMPRESSION`, is 6 too, and
+/// other levels outside 0 to 9 are clamped. The levels are libdeflate's.
 ///
 /// `dictionary` is a preset dictionary: the stream's matches may reach back
 /// into its last 32 KiB as if it had come just before the stream, and the

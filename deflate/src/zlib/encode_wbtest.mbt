@@ -34,12 +34,15 @@ test "a stream is the header, raw DEFLATE and the Adler-32" {
   for level in -1..<=10 {
     for input in encoder_inputs() {
       let raw = @deflate.compress(input, level~)
-      let expected = @header.build(level.clamp(min=0, max=9), None) +
+      let expected = @header.build(@deflater.effective_level(level), None) +
         raw +
         @header.put_be32(@adler32.of_bytes(input))
       assert_eq(compress(input, level~), expected)
       let raw = @deflate.compress(input, level~, dictionary~)
-      let expected = @header.build(level, Some(dictionary_id(dictionary))) +
+      let expected = @header.build(
+          @deflater.effective_level(level),
+          Some(dictionary_id(dictionary)),
+        ) +
         raw +
         @header.put_be32(@adler32.of_bytes(input))
       assert_eq(compress(input, level~, dictionary~), expected)

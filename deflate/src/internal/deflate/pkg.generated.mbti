@@ -6,6 +6,7 @@ import {
 }
 
 // Values
+pub fn effective_level(Int32) -> Int32
 
 // Errors
 

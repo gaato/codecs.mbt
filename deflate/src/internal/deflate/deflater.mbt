@@ -195,13 +195,26 @@ pub struct Deflater {
 }
 
 ///|
-/// An encoder at the start of a stream. `level` is clamped to 0 to 9 and
-/// chooses libdeflate's strategy and search settings for that level. Matches
+/// The level an encoder works at for `level`: -1, zlib's
+/// `Z_DEFAULT_COMPRESSION`, is the default 6, and any other level outside 0
+/// to 9 is the nearest of them.
+pub fn effective_level(level : Int32) -> Int32 {
+  if level == -1 {
+    6
+  } else {
+    level.clamp(min=0, max=9)
+  }
+}
+
+///|
+/// An encoder at the start of a stream. `level` is as `effective_level`
+/// makes it and chooses libdeflate's strategy and search settings for that
+/// level. Matches
 /// may reach back into `dictionary` as if it had come just before the
 /// stream: the encoder keeps a view of its last 32 KiB and copies them into
 /// the window at the start of every stream.
 pub fn Deflater::new(level~ : Int32, dictionary? : BytesView) -> Deflater {
-  let level = level.clamp(min=0, max=9)
+  let level = effective_level(level)
   let (strategy, depth, nice) : (Strategy, Int32, Int32) = match level {
     0 => (Stored, 0, 0)
     1 => (Fastest, 0, 32)

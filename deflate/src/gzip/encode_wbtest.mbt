@@ -74,7 +74,7 @@ test "compress round-trips through the decoder at every level" {
 test "the default header: no fields, MTIME 0, OS 255, XFL as zlib sets it" {
   for level in -1..<=10 {
     let stream = compress(b"", level~)
-    let xfl = match level.clamp(min=0, max=9) {
+    let xfl = match @deflater.effective_level(level) {
       0 | 1 => b'\x04'
       9 => b'\x02'
       _ => b'\x00'

@@ -38,7 +38,7 @@ pub fn decompress(
 
 ///|
 /// Compresses `input` into a whole gzip stream of one member, at `level` (0
-/// to 9, clamped; 6 by default) and with `header` if given, as `Encoder`
+/// to 9, clamped, with -1 as 6; 6 by default) and with `header` if given, as `Encoder`
 /// does: a header that is not writable (`Header::is_writable`) aborts.
 pub fn compress(
   input : BytesView,

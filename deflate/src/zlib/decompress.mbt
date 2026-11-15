@@ -36,8 +36,8 @@ pub fn decompress(
 }
 
 ///|
-/// Compresses `input` into a whole zlib stream, at `level` (0 to 9, clamped;
-/// 6 by default) and with the preset `dictionary` if given, as `Encoder`
+/// Compresses `input` into a whole zlib stream, at `level` (0 to 9, clamped,
+/// with -1 as 6; 6 by default) and with the preset `dictionary` if given, as `Encoder`
 /// does.
 pub fn compress(
   input : BytesView,

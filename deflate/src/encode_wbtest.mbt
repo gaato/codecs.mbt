@@ -60,8 +60,10 @@ test "the shortest streams: empty, short and after a flush" {
 }
 
 ///|
-test "levels outside 0 to 9 are clamped" {
+test "levels outside 0 to 9 are clamped, but -1 is the default 6" {
   let input = @fixtures.sample(4, 30000)
+  assert_eq(compress(input, level=-1), compress(input, level=6))
+  assert_eq(compress(input, level=-2), compress(input, level=0))
   assert_eq(compress(input, level=-5), compress(input, level=0))
   assert_eq(compress(input, level=42), compress(input, level=9))
   assert_eq(compress(input), compress(input, level=6))

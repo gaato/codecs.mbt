@@ -24,7 +24,7 @@ pub fn Header::is_writable(self : Header) -> Bool {
 /// the same bytes everywhere, and XFL as zlib sets it for `level`: 4 (the
 /// fastest) at levels 0 and 1, 2 (the slowest) at 9, 0 otherwise.
 fn default_header(level : Int32) -> Header {
-  let level = level.clamp(min=0, max=9)
+  let level = @deflater.effective_level(level)
   {
     text: false,
     mtime: 0,
@@ -66,7 +66,7 @@ pub struct Encoder {
 /// An encoder at the start of a stream.
 ///
 /// `level` is as for `@deflate.Encoder`: 0 (stored) to 9 (smallest), 6 by
-/// default, clamped.
+/// default, clamped, and -1 is 6 as in zlib.
 ///
 /// `header` is written as it is: FTEXT from `text`, MTIME, XFL and OS, and
 /// the extra field, the name and the comment when they are given (never a

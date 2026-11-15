@@ -30,8 +30,8 @@ pub struct Encoder {
 /// An encoder at the start of a stream.
 ///
 /// `level` is as for `@deflate.Encoder`: 0 (stored) to 9 (smallest), 6 by
-/// default, clamped; the header's FLEVEL says which kind of level it was, as
-/// zlib's does.
+/// default, clamped, and -1 is 6 as in zlib; the header's FLEVEL says which
+/// kind of level it was, as zlib's does.
 ///
 /// `dictionary` is a preset dictionary: the header names it by its Adler-32
 /// (`dictionary_id`), and the stream's matches may reach back into its last
@@ -39,6 +39,7 @@ pub struct Encoder {
 /// the dictionary's last 32 KiB, not a copy, so the bytes the view belongs to
 /// stay alive as long as the encoder.
 pub fn Encoder::Encoder(level~ : Int32 = 6, dictionary? : BytesView) -> Encoder {
+  let level = @deflater.effective_level(level)
   let header = @header.build(level, dictionary.map(dictionary_id))
   {
     inner: @deflater.Deflater::new(level~, dictionary?),
