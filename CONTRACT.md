@@ -248,6 +248,7 @@ google/brotli):
 | RFC 8878 9223, reserved dictionary ids | Reported | Any non-zero dictionary id is refused unless that dictionary is available. |
 | RFC 8878 9227, reserved bits of the sequences header | Reported | Non-zero reserved bits raise `Corrupt`, as zstd 1.5.7 does. |
 | RFC 8878 9228, content checksum | Reported | The checksum is always verified. |
+| RFC 8878 section 3.1.1.1.4, a Frame_Content_Size the blocks do not match (not an erratum) | — | zstd's streaming decoder (`ZSTD_decompressStream`, which the `zstd` command and Node use) decodes such a frame; its one-shot `ZSTD_decompress` refuses it. gaato/zstd checks the size after every block and refuses it: `Corrupt`. The seeded corruptions of `zstd/src/oracle_vectors_wbtest.mbt` hold one such frame. |
 | RFC 9841 section 3.2, a copy past the LZ77 dictionary's end (not an erratum) | — | RFC 9841 has such a copy go on "from the regular LZ77 window starting at the beginning"; a full window no longer holds those bytes once more than 16 have come from the dictionary. google/brotli's decoder refuses the copy and its encoder never writes one, and so does gaato/brotli: `Corrupt`. |
 | RFC 7932 6977, implicit zero distance | Reported | The distance block count is not decremented for an implicit distance, as in the reference decoder; streams from google/brotli at quality 5, 9 and 11 that reach this case decode. |
 

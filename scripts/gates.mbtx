@@ -119,6 +119,9 @@ async fn main {
   run("moon", ["run", "brotli/scripts/gen_vectors.mbtx", "--", "--check"])
   run("moon", ["run", "brotli/scripts/gen_dict_vectors.mbtx", "--", "--check"])
   run("moon", ["run", "scripts/gen_deflate_vectors.mbtx", "--", "--check"])
+  // Seeded corruptions of the zstd and brotli vectors, with the zstd and
+  // brotli commands' verdicts, which the decoders are held to.
+  run("moon", ["run", "scripts/gen_oracle_vectors.mbtx", "--", "--check"])
   run("moon", ["run", "scripts/gen_conformance_vectors.mbtx", "--", "--check"])
   run("moon", ["run", "scripts/gen_bench_data.mbtx", "--", "--check"])
   // PngSuite's images, with pypng's answer for each.
