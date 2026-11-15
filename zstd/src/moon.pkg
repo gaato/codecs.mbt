@@ -10,6 +10,7 @@ import {
   "gaato/zstd/internal/match" @matcher,
   "gaato/zstd/internal/seqenc",
   "gaato/zstd/internal/xxhash",
+  "moonbitlang/core/debug",
 }
 
 import {

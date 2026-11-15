@@ -4,12 +4,21 @@ package "gaato/zstd"
 import {
   "gaato/codec",
   "gaato/codec_bytes",
+  "moonbitlang/core/debug",
 }
 
 // Values
 pub fn compress(BytesView, level? : Int32, checksum? : Bool) -> Bytes
 
 pub fn decompress(BytesView, max_output? : Int32, max_window_bits? : Int32) -> Bytes raise @codec.CodecError
+
+pub fn frame_size(BytesView) -> Int64 raise @codec.CodecError
+
+pub fn inspect_frame(BytesView) -> Frame raise @codec.CodecError
+
+pub fn read_skippable_frame(BytesView) -> (Int32, BytesView) raise @codec.CodecError
+
+pub fn skippable_frame(Int32, BytesView) -> Bytes
 
 // Errors
 
@@ -39,6 +48,29 @@ pub fn Encoder::reset(Self) -> Unit
 pub fn Encoder::step(Self, BytesView, MutArrayView[Byte], action~ : @codec_bytes.EncodeAction) -> @codec_bytes.Status raise @codec.CodecError
 pub fn Encoder::step_into(Self, BytesView, FixedArray[Byte], action~ : @codec_bytes.EncodeAction) -> @codec_bytes.Status raise @codec.CodecError
 pub impl @codec_bytes.Encode for Encoder
+
+#non_exhaustive
+#derive(Eq, @debug.Debug)
+pub(all) enum Frame {
+  Zstd(FrameInfo)
+  Skippable(variant~ : Int32, size~ : UInt32)
+}
+pub fn Frame::equal(Self, Self) -> Bool
+pub fn Frame::not_equal(Self, Self) -> Bool
+pub fn Frame::to_repr(Self) -> @debug.Repr
+
+#derive(Eq, @debug.Debug)
+pub struct FrameInfo {
+  window_size : UInt64
+  content_size : UInt64?
+  dictionary_id : UInt32
+  has_checksum : Bool
+  single_segment : Bool
+  header_len : Int32
+}
+pub fn FrameInfo::equal(Self, Self) -> Bool
+pub fn FrameInfo::not_equal(Self, Self) -> Bool
+pub fn FrameInfo::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 pub using @codec_bytes {type EncodeAction}

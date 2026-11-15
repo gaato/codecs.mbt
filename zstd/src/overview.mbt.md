@@ -125,6 +125,25 @@ Input comes in chunks of any size, down to one byte, and output goes into slices
 
 Not included: dictionaries (RFC 8878 says the `zstd` content coding should not use one; a frame that names one raises `DictionaryRequired(Some(id))`).
 
+## Reading frames without decoding them
+
+`inspect_frame` reads the header of the frame at the start of some bytes: a Zstandard frame's window, content size, dictionary and checksum flag, or a skippable frame's variant and size. `frame_size` walks the frame's block headers to where it ends, without decoding it, as zstd's `ZSTD_findFrameCompressedSize` does, so a stream can be cut into frames, or checked to be whole, cheaply. `skippable_frame` writes a skippable frame, which carries bytes of your own beside Zstandard frames and which every decoder passes over (RFC 9842's `dcz` coding starts with one), and `read_skippable_frame` reads one back.
+
+```mbt check
+///|
+test "frames, read without decoding them" {
+  let note = @zstd.skippable_frame(3, b"made by me")
+  let frame = @zstd.compress(b"hello, hello, hello")
+  let stream = Bytes::from_array([..note[:], ..frame[:]])
+  assert_eq(@zstd.frame_size(stream), 18)
+  let rest = stream[18:]
+  guard @zstd.inspect_frame(rest) is Zstd(info) else { fail("not a frame") }
+  assert_eq(info.content_size, Some(19))
+  assert_eq(@zstd.read_skippable_frame(stream).1, b"made by me")
+  assert_eq(@zstd.decompress(stream), b"hello, hello, hello")
+}
+```
+
 ## Encoding
 
 `Encoder(level=n)` and `compress(level=n)` take zstd's levels 1 to 12, 3 by default as in zstd, with zstd 1.5.7's parameters for each level and input size. For large inputs, and those of unknown size, that is fast at 1 and 2, double-fast at 3 and 4, and greedy, lazy and lazy2 from 5 to 12; a smaller input can get another strategy, as in zstd. On the Silesia and Canterbury corpora, the totals come within 1 % of `zstd -N`'s at every level. The frame carries the XXH64 content checksum unless `checksum=false`. Its bytes do not depend on how the input or the output is split: only on the input, the options and where `Flush` falls.
