@@ -1,0 +1,143 @@
+----
+import {
+  "moonbitlang/core/async",
+  "moonbitlang/core/async/fs",
+  "moonbitlang/core/async/shell",
+  "moonbitlang/core/encoding/base64",
+  "moonbitlang/core/encoding/hex",
+  "moonbitlang/core/env",
+  "moonbitlang/x@0.5.6/crypto",
+}
+----
+
+// Decodes the encoders' streams with the reference, the snap crate
+// (scripts/reference, BurntSushi's Snappy, which shares no code with
+// Google's; run with cargo, versions pinned by its Cargo.lock), and compares
+// their sizes with what snap writes for the same inputs.
+//
+// Runs src/internal/crosscheck, which prints one line per stream: a name,
+// the format (snappy-raw or snappy-frame), the base64 of the input and of
+// the stream. Each stream must decode with snap to exactly the input. The
+// totals of each format's streams, flushed ones left out, must be within
+// 1 % of snap's for the same inputs: the encoder works as snappy's does.
+//
+// Usage, from the repository root (needs cargo):
+//   moon run snappy/scripts/crosscheck.mbtx
+
+///|
+let max_output : Int = 1 << 30
+
+///|
+fn[T] setup_failure(message : String) -> T {
+  eprintln(message)
+  @env.exit(2)
+}
+
+///|
+fn sha256_hex(data : Bytes) -> String {
+  @hex.encode(Bytes::from_array(@crypto.sha256(data)))
+}
+
+///|
+/// Runs the reference over `lines`, one answer a line.
+async fn reference(lines : Array[String]) -> Array[String] {
+  let input = StringBuilder()
+  for l in lines {
+    input.write_string(l + "\n")
+  }
+  let run = @shell.Cmd(
+    "cargo",
+    [
+      "run", "--quiet", "--release", "--locked", "--manifest-path", "scripts/reference/Cargo.toml",
+    ],
+    stdin=Text(input.to_string()),
+  ).output(max_output_bytes=max_output)
+  if run.exit_code() != 0 {
+    setup_failure("scripts/reference: \{run.stderr()}")
+  }
+  let answers = run.stdout().split("\n").map(l => l.to_owned()).collect()
+  if answers.length() != lines.length() + 1 {
+    setup_failure(
+      "scripts/reference answered \{answers.length() - 1} of \{lines.length()} lines",
+    )
+  }
+  answers
+}
+
+///|
+async fn main {
+  if !@fs.exists("snappy/moon.mod") {
+    setup_failure("run from the repository root")
+  }
+  let env = if @env.get_env_var("MOON_CC") is None {
+    { "MOON_CC": "cc" }
+  } else {
+    {}
+  }
+  let run = @shell.Cmd(
+    "moon",
+    ["run", "--release", "--target", "native", "src/internal/crosscheck"],
+    cwd="snappy",
+    env~,
+  ).output(max_output_bytes=max_output)
+  if run.exit_code() != 0 {
+    setup_failure(run.stderr())
+  }
+  let names = []
+  let formats = []
+  let inputs : Array[Bytes] = []
+  let streams : Array[Bytes] = []
+  for line in run.stdout().split("\n") {
+    if line.is_empty() {
+      continue
+    }
+    guard line.split("\t").collect() is [name, format, input, stream] else {
+      setup_failure("unexpected line from the crosscheck tool: \{line}")
+    }
+    names.push(name.to_string())
+    formats.push(format.to_string())
+    inputs.push(@base64.decode(input))
+    streams.push(@base64.decode(stream))
+  }
+  let decode_lines = []
+  let encode_lines = []
+  for i, f in formats {
+    decode_lines.push("\{f}\t\{@base64.encode(streams[i])}")
+    encode_lines.push("\{f}-encode\t\{@base64.encode(inputs[i])}")
+  }
+  let decoded = reference(decode_lines)
+  let encoded = reference(encode_lines)
+  let mut failures = 0
+  let ours : Map[String, Int] = Map([])
+  let theirs : Map[String, Int] = Map([])
+  for i, name in names {
+    let expected = "\{inputs[i].length()} \{sha256_hex(inputs[i])}"
+    if decoded[i] != expected {
+      println("FAIL \{name} \{formats[i]}: snap gives \{decoded[i]}")
+      failures += 1
+    } else {
+      println("ok   \{name} \{formats[i]}: \{inputs[i].length()} -> \{streams[i].length()} bytes")
+    }
+    if !name.has_suffix("_flushed") {
+      let f = formats[i]
+      ours[f] = ours.get(f).unwrap_or(0) + streams[i].length()
+      theirs[f] = theirs.get(f).unwrap_or(0) +
+        @base64.decode(encoded[i]).length()
+    }
+  }
+  for f in ["snappy-raw", "snappy-frame"] {
+    let a = ours.get(f).unwrap_or(0)
+    let b = theirs.get(f).unwrap_or(1)
+    let ratio = a.to_double() / b.to_double()
+    println("size \{f}: ours \{a}, snap \{b} (\{ratio})")
+    if ratio > 1.01 {
+      println("FAIL \{f}: more than 1 % larger than snap's")
+      failures += 1
+    }
+  }
+  if failures > 0 {
+    println("crosscheck: \{failures} failures")
+    @env.exit(1)
+  }
+  println("crosscheck: \{names.length()} streams decode with snap")
+}

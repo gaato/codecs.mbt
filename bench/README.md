@@ -10,7 +10,9 @@ The inputs (`src/data_test.mbt`) are a deterministic text and a deterministic
 binary stream, compressed by the reference implementations (`zstd -3`,
 `brotli -q 9` and `gzip -6`), so that the decoders meet what common encoders
 produce; the encoders compress what the decoders give back. The DEFLATE
-benchmarks decode the raw DEFLATE data inside the gzip members.
+benchmarks decode the raw DEFLATE data inside the gzip members. The Snappy
+benchmarks decode what gaato/snappy writes for the same text and binary,
+which is what the snap crate writes, to the byte (`snappy/scripts/crosscheck.mbtx`).
 `moon run scripts/gen_bench_data.mbtx` regenerates them; it needs the `zstd`,
 `brotli` and `gzip` commands.
 

@@ -11,6 +11,7 @@ import {
   "gaato/deflate/gzip",
   "gaato/codec_image",
   "gaato/png",
+  "gaato/snappy",
   "moonbitlang/typst/codecs",
   "moonbitlang/core/debug",
   "moonbitlang/core/encoding/base64",

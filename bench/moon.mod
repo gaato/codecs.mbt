@@ -22,6 +22,7 @@ import {
   "gaato/brotli@0.5.0",
   "gaato/deflate@0.2.0",
   "gaato/png@0.1.3",
+  "gaato/snappy@0.1.0",
   "moonbitlang/typst@0.1.9",
   "gmlewis/image@0.17.18",
   "gmlewis/io@0.23.20",

@@ -1,8 +1,10 @@
 {
-  "modules": ["codec", "codec_bytes", "codec_image", "crc", "zstd", "brotli", "deflate", "png"],
+  "modules": ["codec", "codec_bytes", "codec_image", "crc", "snappy", "zstd", "brotli", "deflate", "png"],
   "generated": [
     "crc/src/internal/crc32",
     "crc/src/internal/crc32c",
+    "snappy/src/internal/blit",
+    "snappy/src/internal/crc32c",
     "zstd/src/internal/bits",
     "zstd/src/internal/huffman_code",
     "zstd/src/internal/proof_bits",

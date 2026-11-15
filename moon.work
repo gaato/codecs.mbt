@@ -3,6 +3,7 @@ members = [
   "codec_bytes",
   "codec_image",
   "crc",
+  "snappy",
   "harness",
   "conformance",
   "bench",

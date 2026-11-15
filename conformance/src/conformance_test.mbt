@@ -3,7 +3,9 @@
 /// agrees and stays within `memory_limit`, prefixes are `Truncated`, each of
 /// `garbage` after a stream is `TrailingData` with the stream consumed and
 /// its output written, the stream cut in half and the stream followed by
-/// garbage give the same output and error under every split, a decoder that
+/// `broken_tail` (the first of `garbage` unless given, for a format that has
+/// no garbage, every byte of which could begin more of the stream) give the
+/// same output and error under every split, a decoder that
 /// stops after the first member leaves the next vector unread (for vectors
 /// that `one_member` says hold a single member), and `reset` forgets. `make`
 /// builds a decoder for a window of the given bits.
@@ -13,8 +15,13 @@ fn[D : @codec_bytes.Decode] conform(
   make : (Int32, @codec_bytes.Until) -> D,
   memory_limit~ : (Int32) -> Int32,
   garbage~ : Array[Bytes],
+  broken_tail? : Bytes,
   one_member~ : (Vector) -> Bool,
 ) -> Unit raise {
+  let tail = match broken_tail {
+    Some(tail) => tail
+    None => garbage[0]
+  }
   for i, v in vectors {
     let input = v.input()
     let codec = () => {
@@ -39,7 +46,7 @@ fn[D : @codec_bytes.Decode] conform(
       e => fail("\{label} \{v.name}: \{e}")
     }
     let cut = input[:input.length() / 2]
-    let followed = Bytes::from_array([..input, ..garbage[0]])
+    let followed = Bytes::from_array([..input, ..tail])
     for broken in [cut, followed[:]] {
       let _ = @codec_harness.check_error_splits(
         codec,

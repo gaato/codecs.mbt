@@ -16,7 +16,8 @@ import {
 // (already generated from reference implementations and upstream test data),
 // so that the suite covers every kind of stream without the run time of the
 // large ones, and the stream of flushed messages of the formats that have one
-// (zlib's, shaped as Discord sends it).
+// (zlib's, shaped as Discord sends it). Snappy's vectors hold raw and framed
+// streams; only the framed ones stream, so only they are taken.
 //
 // Usage, from the repository root:
 //   moon run scripts/gen_conformance_vectors.mbtx [--check]
@@ -30,7 +31,13 @@ let formats : Array[(String, String)] = [
   ("deflate", "deflate/src/vectors_wbtest.mbt"),
   ("zlib", "deflate/src/zlib/vectors_wbtest.mbt"),
   ("gzip", "deflate/src/gzip/vectors_wbtest.mbt"),
+  ("snappy", "snappy/src/vectors_wbtest.mbt"),
 ]
+
+///|
+/// The streams a vector's `format` names that the decoders under the
+/// contract read; a vector without a `format` is always one.
+let streamed_formats : Array[String] = ["snappy-frame"]
 
 ///|
 /// Decoded bytes.
@@ -62,6 +69,7 @@ fn entries(text : String) -> Array[Entry] raise {
   let mut size = 0
   let mut sha256 = ""
   let mut window_bits : Int? = None
+  let mut format : String? = None
   for raw in text.split("\n") {
     let line = raw.trim()
     if !inside {
@@ -75,15 +83,19 @@ fn entries(text : String) -> Array[Entry] raise {
       name = rest.strip_suffix("\",").unwrap().to_owned()
       base64 = StringBuilder()
       window_bits = None
+      format = None
     } else if line.strip_prefix("#|") is Some(rest) {
       base64.write_view(rest)
+    } else if line.strip_prefix("format: \"") is Some(rest) {
+      format = Some(rest.strip_suffix("\",").unwrap().to_owned())
     } else if line.strip_prefix("size: ") is Some(rest) {
       size = @string.parse_int(rest.strip_suffix(",").unwrap())
     } else if line.strip_prefix("sha256: \"") is Some(rest) {
       sha256 = rest.strip_suffix("\",").unwrap().to_owned()
     } else if line.strip_prefix("window_bits: ") is Some(rest) {
       window_bits = Some(@string.parse_int(rest.strip_suffix(",").unwrap()))
-    } else if line == "}," {
+    } else if line == "}," &&
+      (format is None || streamed_formats.contains(format.unwrap())) {
       entries.push({ name, base64: base64.to_string(), size, sha256, window_bits })
     }
   }

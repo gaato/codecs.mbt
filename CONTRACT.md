@@ -220,6 +220,7 @@ here, so that adding one later does not require changing it.
 | gzip | implemented (Decode and Encode) | Several members under `EndOfInput`; the header of each member is metadata on the concrete type. Bytes after a member that do not begin another, zero padding included, raise `TrailingData`. |
 | zlib | implemented (Decode and Encode) | A preset dictionary in the header raises `DictionaryRequired` with its Adler-32. No concatenation. |
 | raw DEFLATE | implemented (Decode and Encode) | No header and no checksum. Trailing bytes after the final block raise `TrailingData`. |
+| Snappy | implemented (framing format: Decode and Encode) | Streams one after another under `EndOfInput`; `EndOfMember` stops before the identifier of a stream that follows data. Skippable chunks and padding are skipped. A chunk's output comes out as soon as it is decoded, and `ChecksumMismatch` after it when its CRC-32C fails (rule 6). No bytes at all are the empty stream, as the snap crate writes it; the encoder writes the identifier alone, as every stream begins with it. A compressed chunk is held whole, up to what 64 KiB compresses to; a longer one, which the format allows and no encoder writes, raises `LimitExceeded`. The raw format has its length first and copies that reach the start of the output, so it is whole only, outside the contract. |
 | LZ4 frame | fits | Concatenated frames and skippable frames. The legacy frame has no end marker and rejects `EndOfMember`. |
 | xz | fits | Several streams with padding. The memory limit is resumable on the concrete type. Filter chains that cannot flush raise `Unsupported`. |
 | .lzma | fits | No magic and no checksum; trailing bytes are `TrailingData`. Cannot flush. |
@@ -236,6 +237,7 @@ here, so that adding one later does not require changing it.
 | RFC 9841, Shared Brotli | Informational | Extends brotli with shared dictionaries, a large window (up to 62 bits) and a framing format. Its LZ77 dictionary (section 3.2), which RFC 9842's `dcb` coding uses, is implemented; the rest is not. |
 | RFC 9842, Compression Dictionary Transport | Proposed Standard | The `dcb` and `dcz` HTTP codings: a hash of the dictionary in a fixed header, then Shared Brotli or Zstandard. |
 | RFC 1950, 1951, 1952 | Informational, neither updated nor obsoleted | zlib, DEFLATE and gzip, in gaato/deflate. Its errata (7764, 8429, 7517) clarify wording and change no decoder's behaviour. |
+| Snappy's format description and framing format (google/snappy) | not RFCs | gaato/snappy. |
 | LZ4 Frame Format, .xz File Format 1.2.1 | not RFCs | Used only for the paper check above. |
 
 ### Errata

@@ -168,6 +168,73 @@ test "encode" (b : @bench.T) {
 }
 
 ///|
+/// Decodes a framed Snappy stream whole into 64 KiB slices, as a consumer
+/// would, and returns how many bytes came out.
+fn snappy_decode(input : Bytes) -> Int32 {
+  let decoder = @snappy.Decoder()
+  let out = FixedArray::make(1 << 16, b'\x00')
+  let mut rest = input[:]
+  let mut total = 0
+  for ;; {
+    let status = decoder.step(rest, out.mut_view(), end=true) catch {
+      _ => abort("snappy: bad stream")
+    }
+    rest = rest[decoder.last_consumed():]
+    total += decoder.last_produced()
+    if status is Done {
+      return total
+    }
+  }
+}
+
+///|
+/// Compresses `input` into a framed Snappy stream in 64 KiB slices with
+/// `Finish`, and returns how many bytes came out.
+fn snappy_encode(input : Bytes) -> Int32 {
+  let encoder = @snappy.Encoder()
+  let out = FixedArray::make(1 << 16, b'\x00')
+  let mut rest = input[:]
+  let mut total = 0
+  for ;; {
+    let status = encoder.step(rest, out.mut_view(), action=Finish)
+    rest = rest[encoder.last_consumed():]
+    total += encoder.last_produced()
+    if status is Done {
+      return total
+    }
+  }
+}
+
+///|
+test "snappy" (b : @bench.T) {
+  // The inputs, as the reference decoders give them back; our streams are
+  // the snap crate's, to the byte (snappy/scripts/crosscheck.mbtx).
+  let text = @brotli.decompress(decode64(brotli_text)) catch {
+    _ => abort("brotli: bad stream")
+  }
+  let binary = @brotli.decompress(decode64(brotli_binary)) catch {
+    _ => abort("brotli: bad stream")
+  }
+  let st = @snappy.compress(text)
+  let sb = @snappy.compress(binary)
+  let rt = @snappy.compress_raw(text)
+  assert_eq(snappy_decode(st), text_size)
+  assert_eq(snappy_decode(sb), binary_size)
+  b.bench(name="snappy text 512 KiB", () => b.keep(snappy_decode(st)))
+  b.bench(name="snappy binary 128 KiB", () => b.keep(snappy_decode(sb)))
+  b.bench(name="snappy raw text 512 KiB", () => {
+    b.keep(@snappy.decompress_raw(rt) catch { _ => abort("snappy: bad") })
+  })
+  b.bench(name="snappy encode text 512 KiB", () => b.keep(snappy_encode(text)))
+  b.bench(name="snappy encode binary 128 KiB", () => {
+    b.keep(snappy_encode(binary))
+  })
+  b.bench(name="snappy raw encode text 512 KiB", () => {
+    b.keep(@snappy.compress_raw(text))
+  })
+}
+
+///|
 /// Decodes a PNG image whole into 64 KiB slices of rows, as a consumer
 /// would, and returns how many bytes of rows came out.
 fn png_decode(input : Bytes) -> Int32 {

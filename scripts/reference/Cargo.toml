@@ -1,7 +1,9 @@
-# Reference decoders written apart from this repository's and from zlib, for
-# the crosschecks: miniz_oxide (a Rust port of miniz) for raw DEFLATE and
-# zlib. Run by deflate/scripts/crosscheck.mbtx; not part of any MoonBit
-# module. The versions are pinned here and in Cargo.lock.
+# Reference codecs written apart from this repository's, for the
+# crosschecks: miniz_oxide (a Rust port of miniz) for raw DEFLATE and zlib,
+# run by deflate/scripts/crosscheck.mbtx; snap (BurntSushi's Snappy) for
+# Snappy's raw and framing formats, run by snappy/scripts/crosscheck.mbtx.
+# Not part of any MoonBit module. The versions are pinned here and in
+# Cargo.lock.
 
 [package]
 name = "codecs-reference"
@@ -13,3 +15,4 @@ publish = false
 miniz_oxide = "=0.9.1"
 base64 = "=0.22.1"
 sha2 = "=0.10.9"
+snap = "=1.1.1"

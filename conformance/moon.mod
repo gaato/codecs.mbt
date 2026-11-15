@@ -23,5 +23,6 @@ import {
   "gaato/deflate@0.2.0",
   "gaato/codec_image@0.1.0",
   "gaato/png@0.1.3",
+  "gaato/snappy@0.1.0",
   "moonbitlang/typst@0.1.7",
 }

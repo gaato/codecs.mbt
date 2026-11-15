@@ -1,0 +1,55 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/snappy"
+
+import {
+  "gaato/codec",
+  "gaato/codec_bytes",
+}
+
+// Values
+pub fn compress(BytesView) -> Bytes
+
+pub fn compress_bound(Int64) -> Int64
+
+pub fn compress_raw(BytesView) -> Bytes
+
+pub fn decoder_memory_bound() -> Int64
+
+pub fn decompress(BytesView, max_output? : Int32) -> Bytes raise @codec.CodecError
+
+pub fn decompress_raw(BytesView, max_output? : Int32) -> Bytes raise @codec.CodecError
+
+pub fn encoder_memory_bound() -> Int64
+
+pub fn raw_compress_bound(Int64) -> Int64
+
+// Errors
+
+// Types and methods
+pub struct Decoder {
+  // private fields
+}
+pub fn Decoder::Decoder(until? : @codec_bytes.Until, verify_checksums? : Bool) -> Self
+pub fn Decoder::is_finished(Self) -> Bool
+pub fn Decoder::last_consumed(Self) -> Int32
+pub fn Decoder::last_produced(Self) -> Int32
+pub fn Decoder::memory_usage(Self) -> Int32
+pub fn Decoder::reset(Self) -> Unit
+pub fn Decoder::step(Self, BytesView, MutArrayView[Byte], end~ : Bool) -> @codec_bytes.Status raise @codec.CodecError
+pub impl @codec_bytes.Decode for Decoder
+
+pub struct Encoder {
+  // private fields
+}
+pub fn Encoder::Encoder() -> Self
+pub fn Encoder::is_finished(Self) -> Bool
+pub fn Encoder::last_consumed(Self) -> Int32
+pub fn Encoder::last_produced(Self) -> Int32
+pub fn Encoder::memory_usage(Self) -> Int32
+pub fn Encoder::reset(Self) -> Unit
+pub fn Encoder::step(Self, BytesView, MutArrayView[Byte], action~ : @codec_bytes.EncodeAction) -> @codec_bytes.Status
+pub impl @codec_bytes.Encode for Encoder
+
+// Type aliases
+
+// Traits

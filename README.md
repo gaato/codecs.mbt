@@ -11,6 +11,7 @@ stays within limits the caller sets.
 | [`gaato/zstd`](https://mooncakes.io/docs/gaato/zstd) | Zstandard (RFC 8878) decoder and encoder | [`zstd/`](zstd/) |
 | [`gaato/brotli`](https://mooncakes.io/docs/gaato/brotli) | Brotli (RFC 7932) decoder and encoder | [`brotli/`](brotli/) |
 | [`gaato/deflate`](https://mooncakes.io/docs/gaato/deflate) | DEFLATE (RFC 1951), zlib (RFC 1950) and gzip (RFC 1952) decoders and encoders | [`deflate/`](deflate/) |
+| [`gaato/snappy`](https://mooncakes.io/docs/gaato/snappy) | Snappy's raw format, whole, and its framing format, streamed, decoders and encoders | [`snappy/`](snappy/) |
 | [`gaato/codec_image`](https://mooncakes.io/docs/gaato/codec_image) | The contract of image decoders | [`codec_image/`](codec_image/) |
 | [`gaato/png`](https://mooncakes.io/docs/gaato/png) | PNG and APNG decoder | [`png/`](png/) |
 | [`gaato/crc`](https://mooncakes.io/docs/gaato/crc) | CRCs of up to 64 bits by parameters or name, combined across pieces; fast CRC-32, CRC-32C and CRC-64/XZ | [`crc/`](crc/) |
