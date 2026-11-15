@@ -20,9 +20,10 @@ pub fn Dictionary::Dictionary(content : BytesView) -> Dictionary {
 
 ///|
 /// Bytes the dictionary holds of its own: once an encoder has used it, the
-/// index encoders search it with, a copy of its content and five bytes per
-/// byte of it at most, shared by every encoder given it. Its content is
-/// the caller's and not counted.
+/// index encoders search it with, shared by every encoder given it: a copy
+/// of the dictionary's last 64 MiB at most (the part a distance can reach),
+/// four bytes per byte of that, and a table of at most 512 KiB. Its content
+/// is the caller's and not counted.
 pub fn Dictionary::memory_usage(self : Dictionary) -> Int32 {
   match self.index {
     Some(index) =>
@@ -93,9 +94,15 @@ const DICTIONARY_ATTEMPTS : Int32 = 16
 const MAX_CODED_DISTANCE : Int32 = 67108860
 
 ///|
+/// The index of `content`'s last `MAX_CODED_DISTANCE` bytes at most: a
+/// distance past the window reaches no further into the dictionary, so the
+/// rest is never searched, and the sizes stay within 32-bit arithmetic.
+/// Positions count from the start of that part, which ends where the
+/// dictionary ends, so distances are the same.
 fn DictionaryIndex::new(content : BytesView) -> DictionaryIndex {
-  let n = content.length()
-  let bytes = content.to_fixedarray()
+  let part = content[(content.length() - MAX_CODED_DISTANCE).max(0):]
+  let n = part.length()
+  let bytes = part.to_fixedarray()
   // A table about as long as the dictionary, of 256 to 2^17 entries.
   let bits = (if n < 2 { 1 } else { 32 - (n - 1).clz() }).clamp(min=8, max=17)
   let head = FixedArray::make(1 << bits, 0)
@@ -145,11 +152,12 @@ fn Encoder::dictionary_match(
   let mut q = index.head[@lz77.hash4(data, pos, index.bits)] - 1
   let mut attempts = DICTIONARY_ATTEMPTS
   while q >= 0 && attempts > 0 {
-    let dist = reach + (n - q)
-    if dist > MAX_CODED_DISTANCE {
-      // Older candidates lie further back still.
+    // n - q is at most MAX_CODED_DISTANCE and reach at most 2^24, so the sum
+    // is checked before it is formed. Older candidates lie further back.
+    if n - q > MAX_CODED_DISTANCE - reach {
       break
     }
+    let dist = reach + (n - q)
     let most = limit.min(n - q)
     if most > best {
       let mut len = 0

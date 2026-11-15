@@ -192,9 +192,46 @@ test "a dictionary stream's bytes do not depend on the split; encoders share one
     encoder.reset()
     assert_eq(encode_split(encoder, input, 4096), first, msg="reset \{name}")
   }
-  // Two encoders share the dictionary's index and give the same bytes.
-  let input = dict_inputs()[0].1
-  assert_eq(compress(input, dictionary=dict), compress(input, dictionary=dict))
-  assert_true(dict.memory_usage() > 0)
   assert_eq(Dictionary(b"abc").memory_usage(), 0)
+}
+
+///|
+test "two encoders, interleaved, share one index and write the same bytes" {
+  let bytes = @base64.decode(dict_content, ignore_whitespace=true)
+  let dict = Dictionary(bytes)
+  assert_eq(dict.memory_usage(), 0)
+  let input = dict_inputs().filter(named => named.1.length() >= 4000)[0].1
+  let a = Encoder(window_bits=16, dictionary=dict)
+  let b = Encoder(window_bits=16, dictionary=dict)
+  let out_a = Buffer()
+  let out_b = Buffer()
+  let buffer = FixedArray::make(4096, b'\x00')
+  // A meta-block each, in turns.
+  for pos = 0; pos < input.length(); pos = pos + 1000 {
+    let end = (pos + 1000).min(input.length())
+    let action : EncodeAction = if end == input.length() {
+      Finish
+    } else {
+      Flush
+    }
+    for pair in [(a, out_a), (b, out_b)] {
+      let (encoder, out) = pair
+      let mut rest = input[pos:end]
+      for ;; {
+        let status = encoder.step_into(rest, buffer, action~)
+        rest = rest[encoder.last_consumed():]
+        out.write_bytesview(
+          Bytes::from_array(buffer[:encoder.last_produced()])[:],
+        )
+        if status is (Done | NeedMoreInput) {
+          break
+        }
+      }
+    }
+  }
+  let index = dict.search_index()
+  assert_true(physical_equal(dict.search_index(), index))
+  assert_true(dict.memory_usage() > 0)
+  assert_eq(out_a.to_bytes(), out_b.to_bytes())
+  assert_eq(decompress(out_a.to_bytes(), dictionary=dict), input)
 }
