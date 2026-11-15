@@ -135,16 +135,22 @@ fn Inflater::go_fast(self : Inflater) -> Unit raise Stop {
         error = "a distance reaches before the start of the data"
         break
       }
-      for _ in 0..<length {
-        let back = distance - (wpos + reach)
-        ring.unsafe_set(
-          wpos,
-          if back > 0 {
-            dictionary[dictionary.length() - back]
-          } else {
-            ring.unsafe_get(wpos - distance)
-          },
-        )
+      // The dictionary's part in one copy; a match that runs on past its
+      // end goes on from the output's first byte, a byte at a time, since
+      // it may repeat what it writes.
+      let back = distance - (wpos + reach)
+      let from_dictionary = back.min(length)
+      let at = dictionary.length() - back
+      if DICTIONARY_BYTE_COPY {
+        for i in 0..<from_dictionary {
+          ring.unsafe_set(wpos + i, dictionary.unsafe_get(at + i))
+        }
+      } else {
+        ring.blit_from_bytesview(wpos, dictionary[at:at + from_dictionary])
+      }
+      wpos += from_dictionary
+      for _ in from_dictionary..<length {
+        ring.unsafe_set(wpos, ring.unsafe_get(wpos - distance))
         wpos += 1
       }
       continue
@@ -183,3 +189,14 @@ fn Inflater::go_fast(self : Inflater) -> Unit raise Stop {
     raise Fail(Corrupt, error)
   }
 }
+
+///|
+/// JS's bulk copy keeps a checked loop and costs a view; the other
+/// backends provide a block move. A constant keeps either choice inline.
+#cfg(target="js")
+const DICTIONARY_BYTE_COPY : Bool = true
+
+///|
+/// Use the backend's block move outside JS.
+#cfg(not(target="js"))
+const DICTIONARY_BYTE_COPY : Bool = false

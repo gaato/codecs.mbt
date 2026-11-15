@@ -77,7 +77,44 @@ pub fn update(crc : UInt32, data : ArrayView[Byte]) -> UInt32 {
 }
 
 ///|
+/// The four bytes of `data` at `i`, little-endian, in one load: native and
+/// Wasm read a word wherever it is. The caller has checked that they are
+/// within `data`.
+#cfg(any(target="native", target="wasm"))
+#inline
+fn load32(data : BytesView, i : Int32) -> UInt32 {
+  data.unsafe_read_uint32_le(i)
+}
+
+///|
 /// The CRC-32 of the data so far, `crc`, extended by `data`.
+#cfg(any(target="native", target="wasm"))
+pub fn update_bytes(crc : UInt32, data : BytesView) -> UInt32 {
+  let mut c = crc ^ 0xFFFFFFFF
+  let n = data.length()
+  let mut i = 0
+  // i + 7 < n: the eight reads are within `data`. (`i + 8 <= n` would
+  // wrap past the largest Int for n within 8 of it.)
+  while n - i >= 8 {
+    c = fold8(c, load32(data, i), load32(data, i + 4))
+    i += 8
+  }
+  // i < n, and the index is a byte.
+  while i < n {
+    c = table.unsafe_get(
+        ((c ^ data.unsafe_get(i).to_uint()) & 0xFF).reinterpret_as_int(),
+      ) ^
+      (c >> 8)
+    i += 1
+  }
+  c ^ 0xFFFFFFFF
+}
+
+///|
+/// The CRC-32 of the data so far, `crc`, extended by `data`.
+/// Keep the byte assembly in this loop on JS and Wasm GC: factoring it
+/// through load32 slows Wasm GC even with #inline (Q13 A/B measurements).
+#cfg(not(any(target="native", target="wasm")))
 pub fn update_bytes(crc : UInt32, data : BytesView) -> UInt32 {
   let mut c = crc ^ 0xFFFFFFFF
   let n = data.length()

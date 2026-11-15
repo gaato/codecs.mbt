@@ -61,8 +61,14 @@ fn Decoder::dictionary_copy(self : Decoder) -> Status? {
       return Some(NeedMoreOutput)
     }
     self.ensure_space(n) |> ignore
-    for i in 0..<n {
-      self.put(content[self.dict_at + i])
+    // In one copy, or two where the ring wraps.
+    let mut done = 0
+    while done < n {
+      let chunk = (n - done).min(self.ring.length() - self.wpos)
+      let at = self.dict_at + done
+      self.ring.blit_from_bytesview(self.wpos, content[at:at + chunk])
+      self.advance(chunk)
+      done += chunk
     }
     self.dict_at += n
     self.copy_remaining -= n

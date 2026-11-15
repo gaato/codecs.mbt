@@ -191,9 +191,7 @@ fn Decoder::copy_from_dictionary(
   let mut remaining = from_dict
   while remaining > 0 {
     let chunk = remaining.min(self.ring.length() - self.wpos)
-    for i in 0..<chunk {
-      self.ring[self.wpos + i] = content[at + i]
-    }
+    self.ring.blit_from_bytesview(self.wpos, content[at:at + chunk])
     self.advance(chunk)
     at += chunk
     remaining -= chunk

@@ -44,8 +44,8 @@ streams built bit by bit, and seeded pseudo-random splits and corruptions.
 The pitfalls the script pins (stale counters, `-f summary` skewing totals,
 tcc on openSUSE) are described in zstd's ledger, `zstd/TEST_COVERAGE.md`.
 
-Snapshot at the last full measurement (2026-11-15): **98.1 %** (1598/1629
-lines); the 31 uncovered lines are ledgered below, most of them the JS and
+Snapshot at the last full measurement (2026-11-15): **97.2 %** (1608/1654
+lines); the 46 uncovered lines are ledgered below, most of them the JS and
 Wasm GC variants that native does not compile.
 
 ## Policy
@@ -104,8 +104,10 @@ Budgets are the exact uncovered counts: the script fails on any difference.
 | File | Budget | Reason |
 | --- | --- | --- |
 | src/internal/blit/blit.mbt | 6 | `bytes` and `into_view` for JS (`#cfg(target="js")`), forward loops without index checks, and `forward` for JS and Wasm GC, a byte at a time where native and Wasm copy eight: the ledger measures native, which compiles the block copies and the eight-byte steps instead. The gates run the same tests on JS: `src/internal/blit/blit_test.mbt` and the decoders' and encoders' tests, which write through both. |
+| src/internal/crc32/crc32.mbt | 13 | `update_bytes` for JS and Wasm GC (`#cfg(not(any(target="native", target="wasm")))`), which assembles bytes in the caller's loop to preserve those backends' performance. Native compiles the word-load variant instead. The same `crc32_test.mbt` runs on JS and Wasm GC, checking the bitwise reference, offsets 0 to 7, lengths 0 to 64, and CRC continuation across every tested split. |
 | src/internal/huffman/decode_table.mbt | 3 | The `abort`s of `Builder::Builder` (a root outside 1 to 15 bits, an alphabet past 4096 symbols) and of `Builder::build` (a table without room): the `panic` tests of `src/internal/huffman/decode_table_spec_test.mbt` run them, but the abort ends the test before its coverage counts are written. |
 | src/internal/inflate/blocks.mbt | 1 | In `Inflater::run`, the `abort` for the fast path running out of input: unreachable by construction, since it runs only while the input holds the 8 bytes a unit can need. |
+| src/internal/inflate/fast.mbt | 2 | The dictionary byte-copy loop selected only on JS by `DICTIONARY_BYTE_COPY`; the cfg constant is false on native, which uses the block move instead. The same `inflater_wbtest.mbt` runs on JS, including dictionary-to-output matches through the fast path and byte-sized input, and the zlib dictionary vectors run on all four targets. |
 | src/internal/inflate/inflater.mbt | 1 | In `Inflater::step_with`, the `abort` for an unfinished unit that keeps more bytes than `stash` holds: unreachable by construction, since a unit needs at most 6 bytes beyond the bits held and keeps only those it fell short with. |
 | src/gzip/encoder.mbt | 1 | In `Encoder::Encoder`, the `abort` for a header that cannot be written (`Header::is_writable`): the `panic` tests of `src/gzip/encode_wbtest.mbt` run it, for `Encoder` and `compress`, but the abort ends the test before its coverage counts are written. |
 | src/internal/huffman/code_maker.mbt | 1 | The `abort` of `CodeMaker::CodeMaker` for an alphabet outside 2 to 1,024 symbols: the `panic` test of `src/internal/huffman/code_maker_test.mbt` runs it, but the abort ends the test before its coverage counts are written. |

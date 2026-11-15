@@ -43,8 +43,8 @@ run itself failed
 The pitfalls the script pins (stale counters, `-f summary` skewing totals,
 tcc on openSUSE) are described in zstd's ledger, `zstd/TEST_COVERAGE.md`.
 
-Snapshot at the last full measurement (2026-11-15): **99.3 %** (1051/1058
-lines); the 7 uncovered lines are ledgered below, all of them the JS and Wasm
+Snapshot at the last full measurement (2026-11-15): **98.1 %** (1044/1064
+lines); the 20 uncovered lines are ledgered below, all of them the JS and Wasm
 GC variants that native does not compile.
 
 ## Policy
@@ -90,4 +90,5 @@ Budgets are the exact uncovered counts: the script fails on any difference.
 | File | Budget | Reason |
 |---|---|---|
 | src/internal/blit/blit.mbt | 6 | `bytes` and `into_view` for JS (`#cfg(target="js")`), forward loops without index checks, and `forward` for JS and Wasm GC, a byte at a time where native and Wasm copy eight: the ledger measures native, which compiles the block copies and the eight-byte steps instead. The gates run the same tests on JS: `src/internal/blit/blit_test.mbt`, and the decoder's, among them "step_into writes what step writes, into a whole array". |
+| src/internal/crc32/crc32.mbt | 13 | `update_bytes` for JS and Wasm GC (`#cfg(not(any(target="native", target="wasm")))`), which assembles bytes in the caller's loop to preserve those backends' performance. Native compiles the word-load variant instead. The same `crc32_test.mbt` runs on JS and Wasm GC, checking the bitwise reference, offsets 0 to 7, lengths 0 to 64, and CRC continuation across every tested split. |
 | src/internal/filter_fast/filter_fast.mbt | 1 | `unfilter` for JS and Wasm GC (`#cfg(not(any(target="native", target="wasm")))`), which calls `@filter.unfilter`: the ledger measures native, which compiles the SIMD one instead. The gates run the package's tests, which compare it with `@filter.unfilter`, on JS and Wasm GC too. |
