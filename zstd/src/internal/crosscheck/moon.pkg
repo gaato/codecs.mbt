@@ -6,6 +6,7 @@ import {
   "gaato/zstd",
   "gaato/zstd/internal/checksum",
   "moonbitlang/core/encoding/base64",
+  "moonbitlang/core/env",
 }
 
 pkgtype(kind: "executable")

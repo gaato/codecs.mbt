@@ -123,7 +123,7 @@ Every RFC 8878 frame without a dictionary: raw, RLE and compressed blocks, Huffm
 
 Input comes in chunks of any size, down to one byte, and output goes into slices of any size, under the rules of `gaato/codec_bytes`. The header decisions and the Huffman decoding tables are proved against RFC 8878; [PROOFS.md](https://github.com/gaato/codecs.mbt/blob/main/zstd/PROOFS.md) lists what is proved and what is trusted.
 
-A dictionary of raw content (`Dictionary::raw`), given to `Decoder(dictionary=d)` or `decompress(dictionary=d)`, comes as if just before every frame's output, so a frame made with `zstd -D` decodes, and so does RFC 9842's `dcz` coding, whose frames use one. A frame that names another dictionary raises `DictionaryMismatch`, and one that names a dictionary when none is given `DictionaryRequired(Some(id))`.
+A dictionary, given to `Decoder(dictionary=d)` or `decompress(dictionary=d)`, comes as if just before every frame's output, so a frame made with `zstd -D` decodes, and so does RFC 9842's `dcz` coding. `Dictionary::raw(bytes)` takes the bytes as they are, as `dcz` does; `Dictionary::parse(bytes)` reads a formatted dictionary, as `zstd --train` writes them, whose entropy tables and repeat offsets the frames start from, and takes anything else as raw content, as `zstd -D` does. A frame that names another dictionary raises `DictionaryMismatch`, and one that names a dictionary when none is given `DictionaryRequired(Some(id))`.
 
 ## Reading frames without decoding them
 
@@ -150,7 +150,7 @@ test "frames, read without decoding them" {
 
 `compress` and `Encoder(content_size=n)` write the size in the frame header and pick the parameters for it, as zstd does: a small input gets small tables and declares a window no larger than itself.
 
-`Encoder(dictionary=d)` and `compress(dictionary=d)` put a `Dictionary` before the frame as `zstd -D` does: the frame's matches may reach into it until the input is a window past it, and the parameters are chosen for the input and the dictionary together. The frames decode with `zstd -d -D`, and on small inputs come out the size of zstd's or smaller.
+`Encoder(dictionary=d)` and `compress(dictionary=d)` put a `Dictionary` before the frame as `zstd -D` does: the frame's matches may reach into it until the input is a window past it, and the parameters are chosen for the input and the dictionary together. With a formatted dictionary, the frame names it by its id, and its first block may code literals and sequences with the dictionary's tables and start from its repeat offsets. The frames decode with `zstd -d -D`, and on small inputs come out the size of zstd's or smaller.
 
 Not included: levels 13 to 22 (they act as 12), long-distance matching, multithreading, and training dictionaries (`zstd --train` makes them).
 

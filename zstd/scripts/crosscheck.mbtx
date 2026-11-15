@@ -45,6 +45,37 @@ import {
 // Exit status: 0 = every stream decodes, 1 = one does not, 2 = setup failure.
 
 ///|
+/// A formatted dictionary trained by `zstd --train` (id 777) on records made
+/// here, for the frames the tool makes with one.
+async fn train_dictionary() -> Bytes {
+  let dir = "_build/crosscheck-samples"
+  if @fs.exists(dir) {
+    @fs.rmdir(dir, recursive=true)
+  }
+  @fs.mkdir(dir, recursive=true)
+  let words = [
+    "the", "zstd", "frame", "window", "dictionary", "block", "literal", "offset",
+    "match", "table", "MoonBit", "sequence", "of", "and", "{\"key\": [1, 2, 3]}",
+  ]
+  let mut state = 777U
+  for i in 0..<1000 {
+    let out = Buffer()
+    for _ in 0..<(20 + i % 60) {
+      state = state * 1664525 + 1013904223
+      out.write_string_utf8(words[((state >> 8) % words.length().reinterpret_as_uint()).reinterpret_as_int()])
+      out.write_byte(b' ')
+    }
+    @fs.write_binary("\{dir}/\{i}", out.to_bytes())
+  }
+  let path = "_build/crosscheck-trained.dict"
+  @shell.Cmd("zstd", [
+    "-q", "-f", "--train", "-r", dir, "--maxdict=16384", "--dictID=777", "-o", path,
+  ]).output().check()
+  @fs.rmdir(dir, recursive=true)
+  @fs.read_binary(path)
+}
+
+///|
 /// Where a frame's dictionary is written for `zstd -d -D`.
 let dict_file : String = "_build/crosscheck.dict"
 
@@ -146,6 +177,7 @@ async fn main {
   } else {
     {}
   }
+  env["ZSTD_TRAINED_DICT"] = @base64.encode(train_dictionary())
   let run = @shell.Cmd(
     "moon",
     ["run", "--release", "--target", target, "src/internal/crosscheck"],

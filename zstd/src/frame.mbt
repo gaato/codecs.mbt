@@ -78,11 +78,27 @@ fn Decoder::frame_header(self : Decoder) -> Unit raise Stop {
   self.has_checksum = header.has_checksum
   self.frame_out = 0
   self.xxh.reset()
-  self.huffman_valid = false
-  self.ll_table = None
-  self.of_table = None
-  self.ml_table = None
-  self.rep.reset()
+  match self.dictionary {
+    Some({ entropy: Some(e), .. }) => {
+      // A formatted dictionary's tables and repeat offsets, as if from a
+      // block before the frame. Decoding only reads the sequence tables (it
+      // builds new ones in its own stores), so they are shared; the
+      // Huffman table, which a new tree overwrites, is copied.
+      self.huffman.copy_from(e.huffman)
+      self.huffman_valid = true
+      self.ll_table = Some(e.ll)
+      self.of_table = Some(e.of)
+      self.ml_table = Some(e.ml)
+      self.rep.set(e.rep[0], e.rep[1], e.rep[2])
+    }
+    _ => {
+      self.huffman_valid = false
+      self.ll_table = None
+      self.of_table = None
+      self.ml_table = None
+      self.rep.reset()
+    }
+  }
   self.new_frame = true
   self.hdr_len = 0
   self.state = BlockHeader

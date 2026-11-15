@@ -260,6 +260,29 @@ fn main {
       dictionary~,
     )
   }
+  // A formatted dictionary, trained by `zstd --train` in
+  // scripts/crosscheck.mbtx and given here in ZSTD_TRAINED_DICT (base64):
+  // its id in the header, its tables and repeat offsets from the first
+  // block.
+  if @env.get_env_var("ZSTD_TRAINED_DICT") is Some(b64) {
+    let trained_bytes = @base64.decode(b64) catch {
+      _ => abort("ZSTD_TRAINED_DICT is not base64")
+    }
+    let trained = @zstd.Dictionary::parse(trained_bytes) catch {
+      _ => abort("ZSTD_TRAINED_DICT is not a dictionary")
+    }
+    for n in [300, 4000, 100000] {
+      let input = text(rng, n)
+      for level in [-1, 1, 3, 5, 9, 12] {
+        emit(
+          "fdict text\{n} l\{level}",
+          input,
+          @zstd.compress(input, level~, dictionary=trained),
+          dictionary=trained_bytes,
+        )
+      }
+    }
+  }
   streamed(
     "dict flushed l3",
     @zstd.Encoder(dictionary=raw),

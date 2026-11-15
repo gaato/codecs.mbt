@@ -12,6 +12,9 @@ priv struct Huffman {
   symbol : FixedArray[Byte]
   nbits : FixedArray[Byte]
   mut max_bits : Int32
+  // The symbols the last description gave weights to, the implied last one
+  // included: `weights[0:symbols]` once a table is built.
+  mut symbols : Int32
   // Scratch: the weights of a description, how many of each weight there
   // are, and where the entries of each weight go.
   weights : FixedArray[Int32]
@@ -26,11 +29,20 @@ fn Huffman::new() -> Huffman {
     symbol: FixedArray::make(1 << MAX_HUF_BITS, b'\x00'),
     nbits: FixedArray::make(1 << MAX_HUF_BITS, b'\x00'),
     max_bits: 0,
+    symbols: 0,
     weights: FixedArray::make(256, 0),
     weight_count: FixedArray::make(MAX_HUF_BITS + 1, 0),
     entry_start: FixedArray::make(MAX_HUF_BITS + 2, 0),
     weight_table: Fse::new(6),
   }
+}
+
+///|
+/// Takes `other`'s table: its entries and code length.
+fn Huffman::copy_from(self : Huffman, other : Huffman) -> Unit {
+  FixedArray::unsafe_blit(self.symbol, 0, other.symbol, 0, self.symbol.length())
+  FixedArray::unsafe_blit(self.nbits, 0, other.nbits, 0, self.nbits.length())
+  self.max_bits = other.max_bits
 }
 
 ///|
@@ -134,6 +146,7 @@ fn Huffman::build(self : Huffman, count : Int32) -> Unit raise Stop {
     )
   }
   self.max_bits = result
+  self.symbols = count + 1
 }
 
 ///|

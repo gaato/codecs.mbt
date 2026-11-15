@@ -99,7 +99,7 @@ pub fn Encoder::Encoder(
     Some(size) if single_segment => size.min(MAX_BLOCK_SIZE.to_int64()).to_int()
     _ => (1 << window_log).min(MAX_BLOCK_SIZE)
   }
-  {
+  let encoder : Encoder = {
     checksum,
     content_size,
     dictionary,
@@ -124,6 +124,8 @@ pub fn Encoder::Encoder(
     step_consumed: 0,
     step_produced: 0,
   }
+  encoder.seed_dictionary()
+  encoder
 }
 
 ///|
@@ -147,6 +149,7 @@ pub fn Encoder::reset(self : Encoder) -> Unit {
   self.failure = None
   self.step_consumed = 0
   self.step_produced = 0
+  self.seed_dictionary()
 }
 
 ///|
@@ -401,7 +404,31 @@ fn Encoder::write_header(self : Encoder) -> Unit {
     self.params.window_log,
     self.single_segment,
     self.checksum,
+    dictionary_id=match self.dictionary {
+      Some(d) => d.id
+      None => 0
+    },
   )
+}
+
+///|
+/// Starts the frame from a formatted dictionary's entropy tables and repeat
+/// offsets, as if a block before the frame had used them, as zstd does: a
+/// first block may then code its literals with the dictionary's Huffman
+/// table (treeless) and repeat its sequence tables.
+fn Encoder::seed_dictionary(self : Encoder) -> Unit {
+  guard self.dictionary is Some({ entropy: Some(e), .. }) else { return }
+  self.literals.previous.set_weights(e.weights, e.weights.length())
+  self.literals.previous_valid = true
+  self.sequence_writer.seed(
+    e.ll_norm,
+    e.ll.log,
+    e.ml_norm,
+    e.ml.log,
+    e.of_norm,
+    e.of.log,
+  )
+  self.sequence_writer.repeats.set(e.rep[0], e.rep[1], e.rep[2])
 }
 
 ///|

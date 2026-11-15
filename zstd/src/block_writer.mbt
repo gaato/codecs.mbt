@@ -424,13 +424,15 @@ fn all_same(data : FixedArray[Byte], start : Int32, n : Int32) -> Bool {
 /// Writes the magic number and the frame header (section 3.1.1.1): the
 /// content size when known, in the shortest field that holds it as zstd
 /// writes it, and the window as a Window_Descriptor with no mantissa unless
-/// the frame is single-segment. No dictionary.
+/// the frame is single-segment, and `dictionary_id` (0 for none) in the
+/// shortest of zstd's 1, 2 and 4 bytes that holds it.
 fn write_frame_header(
   out : @bits.BitPacker,
   content_size : Int64?,
   window_log : Int32,
   single_segment : Bool,
   checksum : Bool,
+  dictionary_id~ : UInt32 = 0,
 ) -> Unit {
   out.write(32, FRAME_MAGIC.reinterpret_as_int())
   let fcs_flag = match content_size {
@@ -440,15 +442,24 @@ fn write_frame_header(
       (if size >= 65536 + 256 { 1 } else { 0 }) +
       (if size >= 0xFFFFFFFFL { 1 } else { 0 })
   }
-  // Dictionary_ID_Flag 0, Content_Checksum_Flag, Single_Segment_Flag and
+  // Dictionary_ID_Flag, Content_Checksum_Flag, Single_Segment_Flag and
   // Frame_Content_Size_Flag.
-  out.write(2, 0)
+  let did_flag = (if dictionary_id > 0 { 1 } else { 0 }) +
+    (if dictionary_id >= 256 { 1 } else { 0 }) +
+    (if dictionary_id >= 65536 { 1 } else { 0 })
+  out.write(2, did_flag)
   out.write(1, if checksum { 1 } else { 0 })
   out.write(2, 0)
   out.write(1, if single_segment { 1 } else { 0 })
   out.write(2, fcs_flag)
   if !single_segment {
     out.write(8, (window_log - 10) << 3)
+  }
+  match did_flag {
+    0 => ()
+    1 => out.write(8, dictionary_id.reinterpret_as_int())
+    2 => out.write(16, dictionary_id.reinterpret_as_int())
+    _ => out.write(32, dictionary_id.reinterpret_as_int())
   }
   // A frame that is not single-segment has a content size larger than its
   // window, at least 1 KiB, so its flag is never 0 with a size: the field

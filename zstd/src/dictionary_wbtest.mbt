@@ -157,3 +157,71 @@ test "a dictionary is not counted in memory_usage" {
     assert_eq(plain.memory_usage(), Decoder().memory_usage())
   }
 }
+
+///|
+test "zstd -D frames with a trained dictionary decode to their input" {
+  let trained = Dictionary::parse(dict_bytes("trained"))
+  assert_true(trained.is_formatted())
+  assert_eq(trained.id(), 1234567)
+  let mut n = 0
+  for v in dict_vectors {
+    guard v.dictionary == "trained" else { continue }
+    let got = decompress(v.input(), dictionary=trained)
+    assert_eq(@checksum.sha256(got), v.sha256, msg=v.name)
+    for split in [(1, 1), (7, 3), (4096, 64)] {
+      let (in_chunk, out_chunk) = split
+      guard v.size <= 5000 else { break }
+      let next_out = () => out_chunk
+      let got = drive(
+        Decoder(dictionary=trained),
+        v.input(),
+        next_in=() => in_chunk,
+        next_out~,
+      )
+      assert_eq(@checksum.sha256(got), v.sha256, msg="\{v.name} \{in_chunk}")
+    }
+    n += 1
+  }
+  assert_true(n >= 20)
+  // Parsed as raw, the same bytes are another dictionary, which the frames
+  // do not name.
+  let v = dict_vectors[dict_vectors
+    .search_by(v => v.name == "trained/record_level3")
+    .unwrap()]
+  assert_eq(
+    dict_refusal(v.input(), dictionary=Dictionary::raw(dict_bytes("trained"))),
+    DictionaryMismatch,
+  )
+}
+
+///|
+test "formatted dictionaries that do not parse are Corrupt" {
+  let good = dict_bytes("trained")
+  let kind = (data : Bytes) => {
+    try Dictionary::parse(data) catch {
+      CodecError(kind, _) => Some(kind)
+    } noraise {
+      _ => None
+    }
+  }
+  assert_eq(kind(good), None)
+  // Cut inside the entropy tables, and before the repeat offsets end.
+  for cut in [8, 9, 20, 60] {
+    assert_eq(kind(good[:cut].to_owned()), Some(Corrupt), msg="\{cut}")
+  }
+  // The magic number alone, and a header without it, are raw content.
+  assert_eq(kind(good[:7].to_owned()), None)
+  assert_false(Dictionary::parse(good[1:]).is_formatted())
+  // A repeat offset of 0, and one past the content. Find where the
+  // offsets are: the content is what follows them.
+  let parsed = Dictionary::parse(good)
+  let at = good.length() - parsed.content().length() - 12
+  let zero = good.to_fixedarray()
+  for i in 0..<4 {
+    zero[at + i] = b'\x00'
+  }
+  assert_eq(kind(Bytes::from_array(zero)), Some(Corrupt))
+  let far = good.to_fixedarray()
+  far[at + 7] = b'\x7f'
+  assert_eq(kind(Bytes::from_array(far)), Some(Corrupt))
+}

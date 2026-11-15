@@ -29,6 +29,24 @@ pub fn Writer::reset(self : Writer) -> Unit {
 }
 
 ///|
+/// Starts the frame from a formatted dictionary's sequence tables, given by
+/// their normalized counts and accuracy logs, as if a block before it had
+/// used them: a block may repeat them (mode 3).
+pub fn Writer::seed(
+  self : Writer,
+  ll : FixedArray[Int32],
+  ll_log : Int32,
+  ml : FixedArray[Int32],
+  ml_log : Int32,
+  of : FixedArray[Int32],
+  of_log : Int32,
+) -> Unit {
+  self.ll.seed(ll, ll_log)
+  self.ml.seed(ml, ml_log)
+  self.of.seed(of, of_log)
+}
+
+///|
 /// The modes chosen by the latest nonempty `write`, LL, OF, ML (0..3).
 pub fn Writer::modes(self : Writer) -> (Int32, Int32, Int32) {
   (self.ll.mode, self.of.mode, self.ml.mode)

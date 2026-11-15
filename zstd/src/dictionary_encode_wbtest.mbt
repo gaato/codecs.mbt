@@ -149,3 +149,39 @@ test "without a dictionary, the parameters are those of before" {
   // The encoder keeps at most the last 512 MiB of a dictionary.
   assert_eq(encoder_view(b"abc"[:]).length(), 3)
 }
+
+///|
+test "a trained dictionary: its id in the header, its tables from the first block" {
+  let trained = Dictionary::parse(dict_bytes("trained"))
+  let content_only = Dictionary::raw(trained.content())
+  let mut with_tables = 0
+  let mut without = 0
+  for named in dict_inputs() {
+    let (name, input) = named
+    for level in [-1, 1, 3, 5, 9, 12] {
+      let frame = compress(input, level~, dictionary=trained)
+      guard inspect_frame(frame) is Zstd(info) else { fail("not a frame") }
+      assert_eq(info.dictionary_id, 1234567U, msg=name)
+      assert_eq(
+        decompress(frame, dictionary=trained),
+        input,
+        msg="\{name} \{level}",
+      )
+      let streamed = encode_drive(
+        Encoder(level~, dictionary=trained),
+        input,
+        next_in=() => 777,
+        next_out=() => 4096,
+      )
+      assert_eq(
+        decompress(streamed, dictionary=trained),
+        input,
+        msg="streamed \{name} \{level}",
+      )
+      with_tables += frame.length()
+      without += compress(input, level~, dictionary=content_only).length()
+    }
+  }
+  // The dictionary's tables and repeat offsets pay on small records.
+  assert_true(with_tables < without, msg="\{with_tables} \{without}")
+}

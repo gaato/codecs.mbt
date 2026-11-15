@@ -41,6 +41,8 @@ pub struct Dictionary {
 }
 pub fn Dictionary::content(Self) -> BytesView
 pub fn Dictionary::id(Self) -> UInt32
+pub fn Dictionary::is_formatted(Self) -> Bool
+pub fn Dictionary::parse(BytesView) -> Self raise @codec.CodecError
 pub fn Dictionary::raw(BytesView) -> Self
 
 pub struct Encoder {

@@ -75,6 +75,7 @@ pub fn Repeats::encode(Self, Distance, Int32) -> OffsetValue
 pub fn Repeats::get(Self, Int32) -> Distance
 pub fn Repeats::reset(Self) -> Unit
 pub fn Repeats::resolve(Self, OffsetValue, Int32) -> Distance
+pub fn Repeats::set(Self, UInt32, UInt32, UInt32) -> Unit
 
 type Stream
 
@@ -87,6 +88,7 @@ pub fn Writer::commit(Self, Block) -> Unit
 pub fn Writer::memory_usage(Self) -> Int32
 pub fn Writer::modes(Self) -> (Int32, Int32, Int32)
 pub fn Writer::reset(Self) -> Unit
+pub fn Writer::seed(Self, FixedArray[Int32], Int32, FixedArray[Int32], Int32, FixedArray[Int32], Int32) -> Unit
 pub fn Writer::write(Self, @bits.BitPacker, Block) -> Unit
 
 // Type aliases

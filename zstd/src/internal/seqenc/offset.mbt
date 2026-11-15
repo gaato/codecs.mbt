@@ -33,6 +33,19 @@ pub fn Repeats::reset(self : Repeats) -> Unit {
 }
 
 ///|
+/// Sets the three repeat offsets, as a formatted dictionary gives them.
+pub fn Repeats::set(
+  self : Repeats,
+  r1 : UInt32,
+  r2 : UInt32,
+  r3 : UInt32,
+) -> Unit {
+  self.values[0] = r1
+  self.values[1] = r2
+  self.values[2] = r3
+}
+
+///|
 /// Copies history, for a speculative block or match search.
 pub fn Repeats::copy_from(self : Repeats, other : Repeats) -> Unit {
   for i in 0..<3 {

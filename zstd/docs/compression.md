@@ -375,6 +375,22 @@ without the dictionary for comparison. Sizes in bytes.
 | records_100k (100000) | -5 | 27931 | 29362 | 30797 |
 | records_100k (100000) | 3 | 23658 | 23559 | 24466 |
 
+With the trained dictionary (`zstd --train` on 2,000 records, 16 KiB, id
+1234567), against `zstd -D trained -n` and against this encoder given only
+the dictionary's content, without its tables and repeat offsets:
+
+| Input | Level | gaato, formatted | zstd -D | gaato, content only |
+|---|---:|---:|---:|---:|
+| record (321) | -5 | 126 | 135 | 130 |
+| record (321) | 1 | 112 | 115 | 120 |
+| record (321) | 3 | 104 | 106 | 114 |
+| record (321) | 9 | 92 | 100 | 102 |
+| record_small (118) | 1 | 54 | 52 | 57 |
+| record_small (118) | 9 | 44 | 47 | 45 |
+| records_4k (4000) | -5 | 1274 | 1457 | 1270 |
+| records_4k (4000) | 3 | 968 | 990 | 973 |
+| records_100k (100000) | 3 | 23775 | 23855 | 23771 |
+
 zstd attaches a small dictionary to the frame (`ZSTD_shouldAttachDict`)
 instead of copying it into the window, and searches the two apart; this
 encoder always copies it, which explains most of the small differences.

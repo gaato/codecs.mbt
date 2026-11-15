@@ -135,6 +135,17 @@ fn Stream::describe(self : Stream, out : @bits.BitPacker) -> Unit {
 }
 
 ///|
+/// Takes `norm`, a distribution of accuracy log `log`, as the previous
+/// block's.
+fn Stream::seed(self : Stream, norm : FixedArray[Int32], log : Int32) -> Unit {
+  self.previous.fill(0)
+  for s in 0..<norm.length().min(self.previous.length()) {
+    self.previous[s] = norm[s]
+  }
+  self.previous_log = log
+}
+
+///|
 fn Stream::commit(self : Stream) -> Unit {
   for s in 0..<self.norm.length() {
     self.previous[s] = self.norm[s]

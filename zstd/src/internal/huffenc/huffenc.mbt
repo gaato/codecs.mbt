@@ -116,6 +116,39 @@ pub fn HuffmanEncoder::build(
 }
 
 ///|
+/// Takes the code a tree description of `weights[0:n]` gives, the last
+/// symbol's weight included, as a formatted dictionary's literals table
+/// holds it: for literals coded with it, treeless. The weights must make a
+/// code, as a decoder has already checked.
+pub fn HuffmanEncoder::set_weights(
+  self : HuffmanEncoder,
+  weights : FixedArray[Int32],
+  n : Int32,
+) -> Unit {
+  let mut total = 0
+  for s in 0..<n {
+    if weights[s] > 0 {
+      total += 1 << (weights[s] - 1)
+    }
+  }
+  // The weights sum to 2^max_bits.
+  let max_bits = 31 - total.clz()
+  self.symbols = n
+  self.max_bits = max_bits
+  for s in 0..<n {
+    let w = weights[s]
+    self.weights[s] = w
+    self.lengths[s] = if w > 0 { max_bits + 1 - w } else { 0 }
+  }
+  for s in n..<256 {
+    self.weights[s] = 0
+    self.lengths[s] = 0
+  }
+  self.assign_codes()
+  self.description_size = 0
+}
+
+///|
 /// Gives each symbol the code of its first entry in the decoder's table:
 /// the entries go by weight, then symbol, each weight `w` taking 2^(w - 1)
 /// of them per symbol.

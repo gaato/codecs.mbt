@@ -65,6 +65,8 @@ fn entry_base(e : Int32) -> Int32 {
 /// Scratch for building tables: a distribution and the next state of each
 /// symbol.
 priv struct FseScratch {
+  // The last description's normalized counts, `probs[0:count]`.
+  mut count : Int32
   probs : FixedArray[Int32]
   next : FixedArray[Int32]
   symbols : FixedArray[Byte]
@@ -73,6 +75,7 @@ priv struct FseScratch {
 ///|
 fn FseScratch::new() -> FseScratch {
   {
+    count: 0,
     probs: FixedArray::make(256, 0),
     next: FixedArray::make(256, 0),
     symbols: FixedArray::make(1 << 9, b'\x00'),
@@ -184,6 +187,7 @@ fn Fse::read(
   if !self.build(probs, count, log, scratch) {
     raise corrupt("an FSE distribution that does not fill its table")
   }
+  scratch.count = count
   bits.bytes_used()
 }
 
