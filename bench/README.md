@@ -323,14 +323,14 @@ zstd:
 
 | Package | Decoder, encoder | Pieces in, caller's buffer out | Memory and limits | Integrity checks | Targets |
 |---|---|---|---|---|---|
-| gaato/zstd | decoder; encoder, levels 1 to 12 (3 by default) | yes | decoder: the window, at most `2^max_window_bits` (27 by default), plus 256 KiB; `decompress(max_output=)`. Encoder: by level, 50 MiB at most | content checksum (XXH64) | Native, JS, Wasm, Wasm GC |
+| gaato/zstd | decoder and encoder with dictionaries (raw and `zstd --train`'s); encoder, levels 1 to 12 (3 by default) and the negative levels of `--fast`; frame inspection and skippable frames | yes | decoder: the window, at most `2^max_window_bits` (27 by default), plus 256 KiB and 13 KiB of tables; `decompress(max_output=)`. Encoder: by level, 50 MiB at most without a dictionary. `compress_bound` and the memory bounds before making a codec | content checksum (XXH64) | Native, JS, Wasm, Wasm GC |
 | Milky2018/zstd | decoder, dictionaries; encoder with levels (3 by default) | input in pieces (`push`), output as new `Bytes` from each `pull` | the whole output; no window limit | content checksum (XXH64) | Native, JS, Wasm, Wasm GC |
 
 Brotli (the format has no checksum):
 
 | Package | Decoder, encoder | Pieces in, caller's buffer out | Memory and limits | Targets |
 |---|---|---|---|---|
-| gaato/brotli | decoder; encoder with one quality | yes | the window, at most 16 MiB (`max_window_bits`), plus at most 1.3 MiB of tables; `decompress(max_output=)` | Native, JS, Wasm, Wasm GC |
+| gaato/brotli | decoder and encoder with LZ77 dictionaries (RFC 9841, for `dcb`); encoder with one quality | yes | the window, at most 16 MiB (`max_window_bits`), plus at most 1.3 MiB of tables; `decompress(max_output=)`; `compress_bound` and the memory bounds before making a codec | Native, JS, Wasm, Wasm GC |
 | hustcer/fbr | decoder; encoder, qualities 0 to 11 | input in pieces (`push`), output through a callback | the whole output, also when streaming; `max_output_size` 100 MiB and `max_input_size` 1 GiB by default | Native, JS, Wasm, Wasm GC |
 | mizchi/brotli | decoder; encoder, quality 0 (stored) or one other mode | no | no limit to set | Native, JS, Wasm, Wasm GC |
 
@@ -338,7 +338,7 @@ DEFLATE, zlib and gzip:
 
 | Package | Decoder, encoder | Pieces in, caller's buffer out | Memory and limits | Integrity checks | Targets |
 |---|---|---|---|---|---|
-| gaato/deflate | raw DEFLATE, zlib, gzip; levels 0 to 9; preset dictionaries; gzip header fields | yes | about 46 KiB, plus a gzip header's fields up to `max_header_bytes`; `decompress(max_output=)` | Adler-32, CRC-32, ISIZE, gzip header CRC | Native, JS, Wasm, Wasm GC |
+| gaato/deflate | raw DEFLATE, zlib, gzip; levels 0 to 9 (-1 the default, 6, as zlib's); windows of 2^8 to 2^15 for the raw and zlib encoders; preset dictionaries; gzip header fields | yes | about 46 KiB, plus a gzip header's fields up to `max_header_bytes`; `decompress(max_output=)`; `compress_bound` and the memory bounds before making a codec | Adler-32, CRC-32, ISIZE, gzip header CRC | Native, JS, Wasm, Wasm GC |
 | moonbit-community/flate | raw DEFLATE, zlib, gzip, ZIP; levels 0 to 9 and optimal parsing; zlib dictionaries; no access to a gzip header's fields | yes | the window when streaming; `inflate_all(max_output=)`; gzip and zlib `decompress` take no limit | Adler-32, CRC-32, ISIZE, gzip header CRC | Native, JS, Wasm, Wasm GC |
 | gmlewis/flate, zlib, gzip | raw DEFLATE, zlib, gzip; an encoder without levels; zlib dictionaries | it pulls its input from a reader, into the caller's buffer | the window; no output limit | Adler-32, CRC-32, ISIZE, gzip header CRC | decoder: Native (on JS, Wasm and Wasm GC it overflows the stack on the 512 KiB text: `read_literal` and `copy_history` call each other for each match); encoder: all four |
 | mizchi/zlib | raw DEFLATE, zlib, gzip, whole buffers; an encoder without levels; no preset dictionaries | no | `max_size` 256 MiB by default | Adler-32, CRC-32, ISIZE | Native, JS, Wasm, Wasm GC |
