@@ -1,9 +1,4 @@
 ///|
-/// What `memory_usage` reports, with a dictionary or without
-/// (RESOURCE_BOUNDS.md).
-const BOUND : Int32 = 46592
-
-///|
 /// Checks the limits RESOURCE_BOUNDS.md states, after a step that had `room`
 /// bytes of output.
 fn check_bounds(d : Decoder, room : Int32) -> Unit raise {
@@ -14,12 +9,12 @@ fn check_bounds(d : Decoder, room : Int32) -> Unit raise {
   }
   assert_true(dictionary <= WINDOW_SIZE)
   assert_true(d.inflater.kept_bytes() <= 5)
-  assert_eq(d.memory_usage(), BOUND)
+  assert_eq(d.memory_usage(), decoder_memory_bound().to_int())
 }
 
 ///|
 test "output slices and reported memory stay within their bounds" {
-  assert_eq(Decoder().memory_usage(), BOUND)
+  assert_eq(Decoder().memory_usage(), decoder_memory_bound().to_int())
   for v in vectors {
     guard v.size <= 300000 else { continue }
     let (got, _) = @fixtures.drive(
@@ -52,23 +47,16 @@ test "only the last 32 KiB of a dictionary are kept, by reference" {
       check=check_bounds,
     )
     assert_eq(@fixtures.sha256(got), v.sha256, msg=v.name)
-    assert_eq(decoder.memory_usage(), BOUND, msg=v.name)
+    assert_eq(
+      decoder.memory_usage(),
+      decoder_memory_bound().to_int(),
+      msg=v.name,
+    )
   }
   inspect(
     Decoder(dictionary=Bytes::make(40000, b'd')).memory_usage(),
     content="46592",
   )
-}
-
-///|
-/// What `Encoder::memory_usage` reports at `level` (RESOURCE_BOUNDS.md).
-fn encoder_bound(level : Int32) -> Int32 {
-  match level.clamp(min=0, max=9) {
-    0 => 131077
-    1 => 361948
-    2 | 3 | 4 => 542172
-    _ => 542516
-  }
 }
 
 ///|
@@ -87,7 +75,7 @@ test "the encoder reports its bound after every step" {
   let input = @fixtures.sample(10, 150000)
   let dictionary = @fixtures.sample(11, 40000)
   for level in 0..<=9 {
-    let bound = encoder_bound(level)
+    let bound = encoder_memory_bound(level~).to_int()
     for encoder in [Encoder(level~), Encoder(level~, dictionary~)] {
       assert_eq(encoder.memory_usage(), bound, msg="level \{level}")
       assert_eq(encoder.deflater.capacities(), encoder_buffers(level))
@@ -186,6 +174,6 @@ test "the encoder keeps the last 32 KiB of a dictionary, by reference" {
     }
     assert_eq(kept.start_offset() + kept.length(), dictionary.length())
     assert_eq(kept.length(), size.min(32768))
-    assert_eq(encoder.memory_usage(), encoder_bound(6))
+    assert_eq(encoder.memory_usage(), encoder_memory_bound(level=6).to_int())
   }
 }

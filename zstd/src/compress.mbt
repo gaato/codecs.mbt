@@ -15,12 +15,7 @@ pub fn compress(
     content_size=input.length().to_int64(),
     dictionary?,
   )
-  // A block is never larger than its input and its 3-byte header, and the
-  // frame adds at most 18 header and 4 checksum bytes; one block more
-  // allows for an empty last block.
-  let n = input.length()
-  let blocks = n / encoder.block_max.max(1) + 2
-  let bound = n.to_int64() + 3L * blocks.to_int64() + 22L
+  let bound = compress_bound(input.length().to_int64())
   encode_whole(encoder, input, bound.min(0x7fffffffL).to_int())
 }
 

@@ -1,8 +1,4 @@
 ///|
-/// What a raw DEFLATE decoder reports, with a dictionary or without.
-const INNER : Int32 = 46592
-
-///|
 /// Checks the limits RESOURCE_BOUNDS.md states, after a step that had `room`
 /// bytes of output, for a decoder given a dictionary of `dictionary` bytes.
 fn check_bounds(
@@ -19,14 +15,14 @@ fn check_bounds(
   }
   assert_eq(kept, dictionary.min(32768))
   assert_true(d.inner.kept_bytes() <= 5)
-  assert_eq(d.memory_usage(), INNER)
+  assert_eq(d.memory_usage(), decoder_memory_bound().to_int())
 }
 
 ///|
 test "output slices, header bytes and reported memory stay within their bounds" {
   for v in vectors {
     let decoder = Decoder()
-    assert_eq(decoder.memory_usage(), INNER)
+    assert_eq(decoder.memory_usage(), decoder_memory_bound().to_int())
     let (got, _) = @fixtures.drive(
       decoder,
       v.input(),
@@ -35,7 +31,7 @@ test "output slices, header bytes and reported memory stay within their bounds" 
       check=(d, room) => check_bounds(d, room),
     )
     assert_eq(@fixtures.sha256(got), v.sha256, msg=v.name)
-    assert_eq(decoder.memory_usage(), INNER)
+    assert_eq(decoder.memory_usage(), decoder_memory_bound().to_int())
   }
   for entry in dictionary_vectors {
     let (v, dictionary) = entry
@@ -49,7 +45,7 @@ test "output slices, header bytes and reported memory stay within their bounds" 
       check=(d, room) => check_bounds(d, room, dictionary=dictionary.length()),
     )
     assert_eq(@fixtures.sha256(got), v.sha256, msg=v.name)
-    assert_eq(decoder.memory_usage(), INNER)
+    assert_eq(decoder.memory_usage(), decoder_memory_bound().to_int())
   }
 }
 
@@ -82,18 +78,7 @@ test "one inflater, given the dictionary when the header names it" {
   decoder.reset()
   run(named)
   assert_true(physical_equal(decoder.inner, inner))
-  assert_eq(decoder.memory_usage(), INNER)
-}
-
-///|
-/// What the raw DEFLATE encoder reports at `level` (RESOURCE_BOUNDS.md).
-fn raw_encoder_bound(level : Int32) -> Int32 {
-  match level {
-    0 => 131077
-    1 => 361948
-    2 | 3 | 4 => 542172
-    _ => 542516
-  }
+  assert_eq(decoder.memory_usage(), decoder_memory_bound().to_int())
 }
 
 ///|
@@ -101,7 +86,7 @@ test "the encoder reports the raw encoder's bound after every step" {
   let input = @fixtures.sample(10, 150000)
   let dictionary = @fixtures.sample(11, 40000)
   for level in 0..<=9 {
-    let bound = raw_encoder_bound(level)
+    let bound = @deflater.memory_bound(level).to_int()
     for encoder in [Encoder(level~), Encoder(level~, dictionary~)] {
       assert_eq(encoder.memory_usage(), bound)
       let rng = @fixtures.Rng::new(level.reinterpret_as_uint())

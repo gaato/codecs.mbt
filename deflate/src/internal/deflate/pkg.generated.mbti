@@ -8,6 +8,10 @@ import {
 // Values
 pub fn effective_level(Int32) -> Int32
 
+pub fn memory_bound(Int32) -> Int64
+
+pub fn stored_bound(Int64) -> Int64
+
 // Errors
 
 // Types and methods

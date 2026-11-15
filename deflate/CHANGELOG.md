@@ -9,6 +9,7 @@ never does. Every breaking change is listed with a migration note.
 
 ### Added
 
+- **Bounds before encoding or decoding**, in `@deflate`, `@zlib` and `@gzip`: `compress_bound(n)` (for gzip, `compress_bound(n, header?)`), the most `compress` writes for `n` bytes; `encoder_memory_bound(level~)` (gzip's with `header?`) and `decoder_memory_bound()` (gzip's with `keep_header~` and `max_header_bytes~`), what an encoder and a decoder hold.
 - **`window_bits` (8 to 15) for the raw DEFLATE and zlib encoders.** Every match then reaches fewer than `1 << window_bits` bytes back, so a decoder that keeps only that much history reads the stream, as WebSocket's permessage-deflate (RFC 7692) negotiates with `server_max_window_bits` and `client_max_window_bits`; zlib's header says the window in CINFO. The default, 15, gives the same bytes as before, and the encoder's memory does not change with the window.
 
 ### Changed

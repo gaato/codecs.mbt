@@ -1,30 +1,13 @@
 ///|
-/// The most bytes of prefix code tables a brotli decoder holds, as
-/// brotli/RESOURCE_BOUNDS.md gives them.
-const BROTLI_TABLE_BYTES : Int32 = 1343596
-
-///|
-/// The bound brotli/RESOURCE_BOUNDS.md gives for a decoder's
-/// `memory_usage`: the window `max_window_bits` allows, the tables, and the
-/// 27,793 bytes allocated with the decoder.
+/// The bound gaato/brotli gives for a decoder's `memory_usage`.
 fn brotli_decoder_limit(max_window_bits : Int32) -> Int32? {
-  Some((1 << max_window_bits) + BROTLI_TABLE_BYTES + 27793)
+  Some(@brotli.decoder_memory_bound(max_window_bits~).to_int())
 }
 
 ///|
-/// The bound brotli/RESOURCE_BOUNDS.md gives for an encoder's
-/// `memory_usage`: the input buffer at its largest, its waiting output, and
-/// what is allocated with the encoder (the hash table and 351,628 bytes).
+/// The bound gaato/brotli gives for an encoder's `memory_usage`.
 fn brotli_encoder_limit(window_bits : Int32) -> Int32? {
-  Some(
-    (1 << window_bits) -
-    16 +
-    (1 << (window_bits - 2)).max(1 << 16) +
-    (1 << 16) +
-    2 * ((1 << 16) + 64) +
-    (16 << window_bits.min(15)) +
-    351628,
-  )
+  Some(@brotli.encoder_memory_bound(window_bits~).to_int())
 }
 
 ///|

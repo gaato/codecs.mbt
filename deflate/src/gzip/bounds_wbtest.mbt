@@ -34,7 +34,10 @@ fn check_bounds(d : Decoder, room : Int32) -> Unit raise {
   assert_true(held <= d.held && kept <= d.held)
   assert_true(d.held <= d.max_header_bytes)
   assert_true(d.inner.kept_bytes() <= 5)
-  assert_eq(d.inner.memory_usage(), 46592)
+  assert_eq(
+    d.inner.memory_usage(),
+    decoder_memory_bound(keep_header=false).to_int(),
+  )
   let gathering = d.extra is Some(_) ||
     d.name is Some(_) ||
     d.comment is Some(_)
@@ -42,7 +45,10 @@ fn check_bounds(d : Decoder, room : Int32) -> Unit raise {
     d.memory_usage(),
     d.inner.memory_usage() + (if gathering { allocated } else { d.held }),
   )
-  assert_true(d.memory_usage() <= 46592 + d.max_header_bytes)
+  assert_true(
+    d.memory_usage() <=
+    decoder_memory_bound(max_header_bytes=d.max_header_bytes).to_int(),
+  )
 }
 
 ///|
@@ -75,17 +81,6 @@ test "output slices, header fields and reported memory stay within their bounds"
 }
 
 ///|
-/// What the raw DEFLATE encoder reports at `level` (RESOURCE_BOUNDS.md).
-fn raw_encoder_bound(level : Int32) -> Int32 {
-  match level {
-    0 => 131077
-    1 => 361948
-    2 | 3 | 4 => 542172
-    _ => 542516
-  }
-}
-
-///|
 test "the encoder reports the raw encoder's bound and its header after every step" {
   let input = @fixtures.sample(10, 150000)
   let named : Header = {
@@ -98,7 +93,7 @@ test "the encoder reports the raw encoder's bound and its header after every ste
     comment: Some(b"comment"),
   }
   for level in 0..<=9 {
-    let bound = raw_encoder_bound(level)
+    let bound = @deflater.memory_bound(level).to_int()
     for header in [None, Some(named)] {
       let encoder = Encoder(level~, header?)
       // The fixed part, and the extra field with its length, the name and
@@ -150,6 +145,35 @@ test "a name that grows to the limit is counted with the room allocated for it" 
     guard d.name is Some(name) else { fail("no name") }
     assert_eq(name.len, limit)
     assert_eq(d.memory_usage(), d.inner.memory_usage() + name.data.length())
-    assert_true(d.memory_usage() <= 46592 + limit)
+    assert_true(
+      d.memory_usage() <= decoder_memory_bound(max_header_bytes=limit).to_int(),
+    )
+  }
+}
+
+///|
+test "the header's size counts the fields it has" {
+  let bare : Header = {
+    text: true,
+    mtime: 0,
+    xfl: b'\x00',
+    os: b'\x03',
+    extra: None,
+    name: None,
+    comment: None,
+  }
+  assert_eq(header_size(None), 10)
+  assert_eq(header_size(Some(bare)), 10)
+  assert_eq(header_size(Some({ ..bare, name: Some(b"a.txt"), })), 16)
+  for
+    header in [
+      bare,
+      { ..bare, extra: Some(b"xy"), },
+      { ..bare, comment: Some(b"c"), },
+    ] {
+    assert_eq(
+      Encoder(header~).memory_usage().to_int64(),
+      encoder_memory_bound(header~),
+    )
   }
 }

@@ -9,7 +9,13 @@ import {
 // Values
 pub fn compress(BytesView, level? : Int32, dictionary? : BytesView, window_bits? : Int32) -> Bytes
 
+pub fn compress_bound(Int64) -> Int64
+
+pub fn decoder_memory_bound() -> Int64
+
 pub fn decompress(BytesView, max_output? : Int32) -> Bytes raise @codec.CodecError
+
+pub fn encoder_memory_bound(level? : Int32) -> Int64
 
 // Errors
 

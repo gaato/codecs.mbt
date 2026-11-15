@@ -9,6 +9,7 @@ never does. Every breaking change is listed with a migration note.
 
 ### Added
 
+- **Bounds before encoding or decoding.** `compress_bound(n)`, the most `compress` or an `Encoder` writes for `n` bytes (3 bytes for each block of at least 1 KiB, the longest frame header and the checksum; 3 more for each `Flush`); `decoder_memory_bound(max_window_bits~)` and `encoder_memory_bound(level~, content_size?, dictionary_len~)`, the most `memory_usage` reports for a decoder or an encoder with those options. The tests check every encoder and decoder they drive against them.
 - **Formatted dictionaries**, as `zstd --train` writes them (RFC 8878 section 5). `Dictionary::parse(bytes)` reads one, with its id, its Huffman and FSE tables and its repeat offsets, and takes anything without the magic number as raw content, as `zstd -D` does; it raises `Corrupt` for tables that do not parse or repeat offsets outside the content. The decoder starts each frame that uses it from its tables and offsets, as zstd's does; the encoder writes its id in the frame header and starts from them too, so a first block can code its literals treeless and repeat the dictionary's sequence tables. Frames both ways agree with `zstd -D` and Node's zstd.
 - **Raw-content dictionaries in the encoder.** `Encoder(dictionary=d)` and `compress(dictionary=d)` put the dictionary before the frame as `zstd -D` does (zstd's dictionary copied into the window): matches reach into it until a block ends a window past it, and the parameters are chosen for the input and the dictionary together, as zstd chooses them. The frames decode with `zstd -d -D` and Node's zstd, and on records of 100 bytes to 100 KB come out 0.4 % larger to 11 % smaller than `zstd -D`'s at the same level. The encoder copies the dictionary's content into its history at the start of every frame, so its memory grows by about twice the dictionary's length; without a dictionary, nothing changes.
 - **Raw-content dictionaries in the decoder.** `Dictionary::raw(content)`, given to `Decoder(dictionary=d)` or `decompress(dictionary=d)`, comes as if just before every frame's output, as RFC 8878 section 5 has it: frames made with `zstd -D` decode, and so do those of RFC 9842's `dcz` coding. As in zstd's decoder, a match may reach into the dictionary however long the frame is. A frame that names another dictionary raises `DictionaryMismatch`; without one it raises `DictionaryRequired(Some(id))`, as before. The dictionary is held by reference, not copied, and `memory_usage` does not count it.
@@ -21,6 +22,10 @@ never does. Every breaking change is listed with a migration note.
 - **Level 0 is the default level, 3, as in zstd.** It acted as 1. Migration: a caller that wants what level 0 gave passes `level=1`.
 - **Building a literals' Huffman code sorts its most frequent symbols by heapsort, as libdeflate does.** They were sorted by insertion, which takes time quadratic in their number; encoding the benchmarks' inputs takes up to 19 % less time on Native at the higher levels. The output does not change.
 - **Error messages.** The messages of `Truncated` and `TrailingData` read the same way as in the other modules: "the input holds no ..." or "the input ends inside ...", and "data after ..." the last unit. `Truncated` says "the input holds no frame" or "the input ends inside a frame" (it said "the stream ..."); `TrailingData` says "data after the last frame". The kinds are unchanged.
+### Fixed
+
+- **RESOURCE_BOUNDS.md's bound for the encoder's waiting output counts the magic number and a 14-byte frame header,** with a dictionary id: it said 131,093 bytes and is 131,097, which puts the largest encoder at 52,460,456 bytes, not 52,460,448.
+
 ## [0.4.1] - 2026-11-15
 
 ### Changed

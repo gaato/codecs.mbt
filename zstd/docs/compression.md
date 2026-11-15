@@ -74,7 +74,7 @@ an accepted block. Raw/RLE blocks preserve it; reset invalidates it.
 Four Huffman streams now compute their jump-table sizes first and write
 directly to the block output, removing the private stream buffer and copy.
 Only the small Huffman weight scratch remains. The total conservative
-encoder bound, including match and sequence storage, is 52,460,448 bytes;
+encoder bound, including match and sequence storage, is 52,460,456 bytes;
 the accounting and limit tests are in RESOURCE_BOUNDS.md.
 
 ## Double-fast matching
@@ -225,9 +225,9 @@ Large-input levels 5..12 keep the reference's full logs: window 21..22
 and hash 19..23; with rows, chainLog allocates nothing. At level twelve
 the tables occupy `4*2^23 + 2^23 = 41,943,040` bytes (40 MiB). Adding the
 4 MiB window, its 4 MiB of slack and one 128 KiB block gives matcher
-capacity 50,462,720 bytes; the full encoder bound is **52,460,448 bytes
+capacity 50,462,720 bytes; the full encoder bound is **52,460,456 bytes
 (about 50.03 MiB)**. No parameter was capped below the selected reference
-row. RESOURCE_BOUNDS.md derives the remaining 1,997,728 bytes and names
+row. RESOURCE_BOUNDS.md derives the remaining 1,997,736 bytes and names
 tests reaching the matcher maximum.
 
 ## Compression sizes

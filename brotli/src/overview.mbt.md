@@ -129,9 +129,9 @@ The encoder uses greedy LZ77 (lazy by one byte) and one prefix code per meta-blo
 
 ## Memory
 
-The decoder's memory is the window (at most 16 MiB, and no more than the output so far) plus tables of at most 1.3 MiB; `memory_usage()` reports it. `Decoder(max_window_bits=n)` refuses streams that need a window over `2^n - 16` bytes with `LimitExceeded`, saying how much the stream needs.
+The decoder's memory is the window (at most 16 MiB, and no more than the output so far) plus tables of at most 1.3 MiB; `memory_usage()` reports it, and `decoder_memory_bound(max_window_bits~)` gives its most before you make a decoder. `Decoder(max_window_bits=n)` refuses streams that need a window over `2^n - 16` bytes with `LimitExceeded`, saying how much the stream needs.
 
-The encoder's memory is its window (`Encoder(window_bits=n)`, 22 by default: 4 MiB, growing with the input to at most twice what it has taken, and up to a quarter more before it slides) plus a 64 KiB meta-block, its output and 855 KiB of fixed tables (the hash table and the meta-block's commands); `memory_usage()` reports all of it.
+The encoder's memory is its window (`Encoder(window_bits=n)`, 22 by default: 4 MiB, growing with the input to at most twice what it has taken, and up to a quarter more before it slides) plus a 64 KiB meta-block, its output and 855 KiB of fixed tables (the hash table and the meta-block's commands); `memory_usage()` reports all of it, within `encoder_memory_bound(window_bits~)`. `compress_bound(n)` is the most `compress` writes for `n` bytes.
 
 ## Errors
 

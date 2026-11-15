@@ -10,7 +10,13 @@ import {
 // Values
 pub fn compress(BytesView, level? : Int32, checksum? : Bool, dictionary? : Dictionary) -> Bytes
 
+pub fn compress_bound(Int64) -> Int64
+
+pub fn decoder_memory_bound(max_window_bits? : Int32) -> Int64
+
 pub fn decompress(BytesView, max_output? : Int32, max_window_bits? : Int32, dictionary? : Dictionary) -> Bytes raise @codec.CodecError
+
+pub fn encoder_memory_bound(level? : Int32, content_size? : Int64, dictionary_len? : Int32) -> Int64
 
 pub fn frame_size(BytesView) -> Int64 raise @codec.CodecError
 

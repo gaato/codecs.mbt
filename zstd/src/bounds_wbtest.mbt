@@ -1,13 +1,7 @@
 ///|
-/// The Huffman and FSE tables and their scratch space, allocated with the
-/// decoder, as RESOURCE_BOUNDS.md gives them.
-const DECODER_TABLES : Int32 = 13156
-
-///|
-/// The most `memory_usage` may report: the window limit, one compressed
-/// block and its literals, and the tables.
+/// `decoder_memory_bound` as an Int, for the checks below.
 fn memory_bound(max_window_bits : Int32) -> Int32 {
-  (1 << max_window_bits) + 2 * MAX_BLOCK_SIZE + DECODER_TABLES
+  decoder_memory_bound(max_window_bits~).to_int()
 }
 
 ///|
@@ -29,7 +23,10 @@ fn check_bounds(d : Decoder, room : Int32) -> Unit raise {
   // tables.
   assert_eq(
     d.memory_usage(),
-    d.ring.length() + d.block.length() + d.literals.length() + DECODER_TABLES,
+    d.ring.length() +
+    d.block.length() +
+    d.literals.length() +
+    DECODER_TABLE_BYTES,
   )
   assert_true(d.memory_usage() <= memory_bound(d.max_window_bits))
   // Fixed tables.
@@ -147,55 +144,16 @@ test "memory_usage drops when a frame needs a smaller window" {
   let decoder = Decoder()
   let out = FixedArray::make(1 << 16, b'\x00')
   // The tables, 13,156 bytes, are allocated with the decoder.
-  inspect(decoder.memory_usage() - DECODER_TABLES, content="0")
+  inspect(decoder.memory_usage() - DECODER_TABLE_BYTES, content="0")
   debug_inspect(
     decoder.step_into(large, out, end=false),
     content="NeedMoreInput",
   )
-  inspect(decoder.memory_usage() - DECODER_TABLES, content="8192")
+  inspect(decoder.memory_usage() - DECODER_TABLE_BYTES, content="8192")
   debug_inspect(decoder.step_into(small, out, end=true), content="Done")
-  inspect(decoder.memory_usage() - DECODER_TABLES, content="1024")
+  inspect(decoder.memory_usage() - DECODER_TABLE_BYTES, content="1024")
   decoder.reset()
   inspect(decoder.memory_usage(), content="13156")
-}
-
-///|
-/// The most bytes the encoder's output writer holds at once: the magic
-/// number and the longest frame header (4 + 10), one block (3 + 128 KiB)
-/// and the checksum (4).
-const ENCODER_PENDING_MAX : Int32 = 4 + 10 + 3 + MAX_BLOCK_SIZE + 4
-
-///|
-/// What RESOURCE_BOUNDS.md gives for `Encoder::memory_usage`: the input
-/// buffer, waiting output, match window/hash, sequence arrays and scratch,
-/// and both entropy coders. Packer capacities include doubling and 5 bytes
-/// past the bytes written: a write reserves at most the bytes it moves.
-fn encoder_memory_bound(
-  params~ : Params = encoder_params(12, None),
-  dictionary_len~ : Int32 = 0,
-) -> Int32 {
-  // The history holds a dictionary of D bytes as part of its window, as
-  // RESOURCE_BOUNDS.md's History row has it.
-  let reach = (1 << params.window_log) + dictionary_len
-  2 * (ENCODER_PENDING_MAX + 5) +
-  LiteralsWriter::new(compress=true).memory_usage() +
-  2 * 2 * (512 + 5) +
-  2 * reach +
-  reach.min(MAX_BLOCK_SIZE) +
-  4 * (1 << params.hash_log) +
-  (if params.strategy is Fast {
-    12
-  } else if params.row_finder {
-    1 << params.hash_log
-  } else {
-    4 * (1 << params.chain_log)
-  }) +
-  MAX_BLOCK_SIZE +
-  12 * (MAX_BLOCK_SIZE / 3) +
-  12 +
-  @seqenc.Writer().memory_usage() +
-  3 * 2 * (512 + 5) +
-  2 * ((1 << 19) + 5)
 }
 
 ///|
@@ -226,7 +184,7 @@ fn check_encoder_bounds(e : Encoder, _room : Int32) -> Unit raise {
   assert_true(e.sequences.ll.length() <= MAX_BLOCK_SIZE / 3)
   assert_true(e.sequences.literal_count <= MAX_BLOCK_SIZE)
   assert_true(
-    e.memory_usage() <= encoder_memory_bound(params=e.params, dictionary_len~),
+    e.memory_usage() <= memory_bound_of(e.params, dictionary_len).to_int(),
   )
 }
 
@@ -239,11 +197,13 @@ test "the encoder's fixed tables and its memory bound" {
     ),
   )
   inspect(
-    encoder_memory_bound(),
+    largest_encoder_bound(),
     content=(
-      #|52460448
+      #|52460456
     ),
   )
+  // The public bound at level 12 for input of unknown size is the largest.
+  assert_eq(encoder_memory_bound(level=12), largest_encoder_bound())
   // A new encoder holds fixed tables and its level's hash table.
   inspect(
     Encoder().memory_usage(),
@@ -369,7 +329,7 @@ test "the encoder's memory_usage stays within its bound after every step" {
   }
   // Each backend's packer may double at different points; the common
   // upper bound includes its retained capacity, not only pending bytes.
-  assert_true(most > 600000 && most <= encoder_memory_bound())
+  assert_true(most > 600000 && most.to_int64() <= largest_encoder_bound())
 }
 
 ///|
@@ -419,7 +379,7 @@ test "double-fast memory reaches both tables and the full window slack and a blo
   for size in [None, Some(1000L), Some(100000L), Some(200000L), Some(400000L)] {
     for level in 1..<=12 {
       let params = encoder_params(level, size)
-      assert_true(encoder_memory_bound(params~) <= encoder_memory_bound())
+      assert_true(memory_bound_of(params, 0) <= largest_encoder_bound())
       let requested = params_for(level, size)
       match requested.strategy {
         Fast => assert_true(params.strategy is Fast)
@@ -464,5 +424,72 @@ test "lazy memory reaches the maximum row tables and full window slack and a blo
     // chain table.
     2 * (1 << 22) + MAX_BLOCK_SIZE + 4 * (1 << 23) + (1 << 23),
   )
-  assert_eq(encoder_memory_bound(), 52460448)
+  assert_eq(largest_encoder_bound(), 52460456)
+}
+
+///|
+/// The largest bound of any level's parameters: level 12's for input of
+/// unknown size (RESOURCE_BOUNDS.md).
+fn largest_encoder_bound() -> Int64 {
+  memory_bound_of(encoder_params(12, None), 0)
+}
+
+///|
+test "the public bounds: compress output, and the memory of decoders and encoders" {
+  let rng = Rng::new(9)
+  for n in [0, 1, 1000, 131072, 131073, 400000] {
+    let input = sample_random(rng, n)
+    for level in [-5, 1, 3, 12] {
+      let frame = compress(input, level~)
+      assert_true(frame.length().to_int64() <= compress_bound(n.to_int64()))
+    }
+  }
+  assert_eq(compress_bound(-1L), compress_bound(0L))
+  // Decoders: the window, two blocks and the tables, whatever was asked.
+  assert_eq(decoder_memory_bound(), (1L << 27) + 262144L + 13156L)
+  assert_eq(
+    decoder_memory_bound(max_window_bits=5),
+    decoder_memory_bound(max_window_bits=10),
+  )
+  // Encoders: within the bound after every step, at every level, with a
+  // known size or not, and with a dictionary.
+  let dict = Dictionary::raw(sample_text(rng, 50000))
+  let input = sample_text(rng, 300000)
+  for level in [-3, 1, 3, 7, 12] {
+    for content_size in [None, Some(input.length().to_int64())] {
+      for dictionary in [None, Some(dict)] {
+        let bound = encoder_memory_bound(
+          level~,
+          content_size?,
+          dictionary_len=match dictionary {
+            Some(d) => d.content.length()
+            None => 0
+          },
+        )
+        let _ = encode_drive(
+          Encoder(level~, content_size?, dictionary?),
+          input,
+          next_in=() => 1 + rng.below(70000),
+          next_out=() => 1 + rng.below(70000),
+          check=(e, _) => assert_true(e.memory_usage().to_int64() <= bound),
+        )
+      }
+    }
+  }
+}
+
+///|
+test "compress_bound holds for a stream whose dictionary chooses a small window" {
+  // A one-byte dictionary and no content size: the parameters choose a
+  // window, and so blocks, of 16 KiB; at the fastest level nothing matches.
+  let input = Bytes::makei(131072, i => (i % 2).to_byte())
+  let encoder = Encoder(level=-131072, dictionary=Dictionary::raw(b"x"))
+  let stream = encode_drive(encoder, input, next_in=() => 1 << 20, next_out=() => {
+    1 << 20
+  })
+  assert_true(stream.length().to_int64() <= compress_bound(131072L))
+  // More than a 128 KiB block's 3 bytes: what the bound allowed before.
+  assert_true(stream.length() > 131072 + 3 * 2 + 22)
+  let most = 0x7FFFFFFFFFFFFFFFL
+  assert_eq(compress_bound(most), most)
 }

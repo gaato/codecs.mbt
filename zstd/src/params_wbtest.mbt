@@ -59,8 +59,8 @@ test "known sizes adjust tables before the minimum frame window" {
       assert_true(p.hash_log <= before.hash_log)
       assert_true(p.chain_log <= before.chain_log)
       assert_true(
-        encoder_memory_bound(params=encoder_params(level, Some(size))) <=
-        encoder_memory_bound(),
+        memory_bound_of(encoder_params(level, Some(size)), 0) <=
+        memory_bound_of(encoder_params(12, None), 0),
       )
     }
   }

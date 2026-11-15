@@ -207,6 +207,37 @@ pub fn effective_level(level : Int32) -> Int32 {
 }
 
 ///|
+/// The bytes a `Deflater` of `level` holds, the same from the first step
+/// to the last, with a dictionary or without (RESOURCE_BOUNDS.md): its
+/// input buffer, its output buffer, the match finder's tables and the
+/// block's sequences, counts and codes. "a Deflater holds what memory_bound
+/// says" checks it at every level.
+pub fn memory_bound(level : Int32) -> Int64 {
+  match effective_level(level) {
+    0 => 131077L
+    1 => 361948L
+    2 | 3 | 4 => 542172L
+    _ => 542516L
+  }
+}
+
+///|
+/// The most bytes a raw DEFLATE stream of `n` bytes of input takes, as
+/// libdeflate's `deflate_compress_bound` counts it: a block never costs
+/// more than storing it, its bytes and 5 for each stored block of 65,535 or
+/// fewer, and every block but the last is at least `MIN_BLOCK_LENGTH`
+/// (block splitting ends none shorter, and a full sequence store ends none
+/// shorter either), so the stored blocks are at most `n / 5,000 + 1`, even
+/// for a parser block that a last match carries past 65,535 bytes into two;
+/// and a byte of padding. Past 2^62 it is the largest Int64.
+pub fn stored_bound(n : Int64) -> Int64 {
+  let n = n.max(0L)
+  // Past 2^62 the bound saturates at the largest Int64 rather than wrap.
+  guard n <= 0x3FFFFFFFFFFFFFFFL else { return 0x7FFFFFFFFFFFFFFFL }
+  n + 5L * (n / MIN_BLOCK_LENGTH.to_int64() + 1L) + 1L
+}
+
+///|
 /// An encoder at the start of a stream. `level` is as `effective_level`
 /// makes it and chooses libdeflate's strategy and search settings for that
 /// level. Matches
