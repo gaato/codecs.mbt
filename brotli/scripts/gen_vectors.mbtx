@@ -7,6 +7,7 @@ import {
   "moonbitlang/core/encoding/hex",
   "moonbitlang/core/encoding/utf8",
   "moonbitlang/core/env",
+  "moonbitlang/core/string",
   "moonbitlang/x@0.5.6/crypto",
 }
 ----
@@ -27,10 +28,15 @@ import {
 //
 // Usage, from the repository root (needs the brotli command, and curl unless
 // a directory is given):
-//   moon run brotli/scripts/gen_vectors.mbtx [-- GOOGLE_TESTDATA_DIR]
+//   moon run brotli/scripts/gen_vectors.mbtx [-- GOOGLE_TESTDATA_DIR | --check]
 // Without an argument the google files are downloaded from the pinned commit;
 // the dictionary and the RFC (for the transforms) are always downloaded. The
 // file is left as `moon fmt` leaves it.
+//
+// --check, which the gates run, needs no network: every stream in the file
+// must decode, with `brotli -d`, to the length and SHA-256 the file records
+// for it, and the file must name the pinned commit. Regenerating the inputs
+// needs the downloads, so it does not compress again.
 
 ///|
 let target : String = "brotli/src/vectors_wbtest.mbt"
@@ -398,9 +404,63 @@ fn literal(text : String) -> String {
 }
 
 ///|
+/// The vectors of the generated file: name, stream, size and SHA-256.
+fn stored(file : String) -> Array[(String, Bytes, Int, String)] raise {
+  let out = []
+  let mut name = ""
+  let mut stream = b""
+  let mut size = -1
+  let b64 = StringBuilder()
+  let mut in_stream = false
+  for raw in file.split("\n") {
+    let line = raw.trim()
+    if line.strip_prefix("name: \"") is Some(rest) {
+      name = rest.strip_suffix("\",").unwrap_or(rest).to_owned()
+      b64.reset()
+    } else if line.has_prefix("compressed: (") {
+      in_stream = true
+    } else if in_stream && line.strip_prefix("#|") is Some(rest) {
+      b64.write_view(rest)
+    } else if in_stream && line == ")," {
+      stream = @base64.decode(b64.to_string())
+      in_stream = false
+    } else if line.strip_prefix("size: ") is Some(rest) {
+      size = @string.parse_int(rest.strip_suffix(",").unwrap_or(rest))
+    } else if line.strip_prefix("sha256: \"") is Some(rest) {
+      out.push((name, stream, size, rest.strip_suffix("\",").unwrap_or(rest).to_owned()))
+    }
+  }
+  out
+}
+
+///|
+/// The `--check` mode: the stored streams against the reference decoder.
+async fn check() -> Unit {
+  let file = @fs.read_text(target)
+  guard file.contains(brotli_commit) else {
+    fail("\{target} does not name the pinned commit \{brotli_commit}")
+  }
+  let vectors = stored(file)
+  guard vectors.length() > 0 else { fail("\{target} holds no vectors") }
+  for vector in vectors {
+    let (name, compressed, size, digest) = vector
+    let decoded = run("brotli", ["-d", "-c"], input=compressed)
+    let got = @hex.encode(Bytes::from_array(@crypto.sha256(decoded)))
+    if decoded.length() != size || got != digest {
+      fail("\{name}: brotli -d decodes it to other bytes than the file records")
+    }
+  }
+  println("\{target}: \{vectors.length()} vectors decode with brotli -d")
+}
+
+///|
 async fn main {
   guard @fs.exists("brotli/moon.mod") else {
     fail("run from the repository root")
+  }
+  if @env.args()[1:] is ["--check"] {
+    check()
+    return
   }
   let source = match @env.args()[1:] {
     [] => None

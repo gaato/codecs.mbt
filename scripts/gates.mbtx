@@ -116,6 +116,7 @@ async fn main {
   // format's vectors).
   run("moon", ["run", "zstd/scripts/gen_vectors.mbtx", "--", "--check"])
   run("moon", ["run", "zstd/scripts/gen_dict_vectors.mbtx", "--", "--check"])
+  run("moon", ["run", "brotli/scripts/gen_vectors.mbtx", "--", "--check"])
   run("moon", ["run", "brotli/scripts/gen_dict_vectors.mbtx", "--", "--check"])
   run("moon", ["run", "scripts/gen_deflate_vectors.mbtx", "--", "--check"])
   run("moon", ["run", "scripts/gen_conformance_vectors.mbtx", "--", "--check"])
