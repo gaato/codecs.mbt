@@ -33,7 +33,9 @@ test "zstd keeps the byte-stream contract" {
 
 ///|
 test "corrupted zstd streams never break the contract" {
-  for v in zstd_vectors[:4] {
+  // Streams that hold data: corrupting an empty one tries little.
+  let holding = zstd_vectors.filter(v => v.size > 0)
+  for v in holding[:holding.length().min(8)] {
     let codec = () => @codec_harness.ByteDecoder::new(zstd(v.window_bits))
     let _ = @codec_harness.fuzz(
       codec,

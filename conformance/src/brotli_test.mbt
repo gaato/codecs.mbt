@@ -38,7 +38,9 @@ test "brotli keeps the byte-stream contract" {
 
 ///|
 test "corrupted brotli streams never break the contract" {
-  for v in brotli_vectors[:8] {
+  // Streams that hold data: corrupting an empty one tries little.
+  let holding = brotli_vectors.filter(v => v.size > 0)
+  for v in holding[:holding.length().min(8)] {
     let codec = () => @codec_harness.ByteDecoder::new(@brotli.Decoder())
     let _ = @codec_harness.fuzz(
       codec,
