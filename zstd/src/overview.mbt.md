@@ -123,7 +123,7 @@ Every RFC 8878 frame without a dictionary: raw, RLE and compressed blocks, Huffm
 
 Input comes in chunks of any size, down to one byte, and output goes into slices of any size, under the rules of `gaato/codec_bytes`. The header decisions and the Huffman decoding tables are proved against RFC 8878; [PROOFS.md](https://github.com/gaato/codecs.mbt/blob/main/zstd/PROOFS.md) lists what is proved and what is trusted.
 
-Not included: dictionaries (RFC 8878 says the `zstd` content coding should not use one; a frame that names one raises `DictionaryRequired(Some(id))`).
+A dictionary of raw content (`Dictionary::raw`), given to `Decoder(dictionary=d)` or `decompress(dictionary=d)`, comes as if just before every frame's output, so a frame made with `zstd -D` decodes, and so does RFC 9842's `dcz` coding, whose frames use one. A frame that names another dictionary raises `DictionaryMismatch`, and one that names a dictionary when none is given `DictionaryRequired(Some(id))`.
 
 ## Reading frames without decoding them
 

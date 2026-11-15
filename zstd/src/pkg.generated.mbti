@@ -10,7 +10,7 @@ import {
 // Values
 pub fn compress(BytesView, level? : Int32, checksum? : Bool) -> Bytes
 
-pub fn decompress(BytesView, max_output? : Int32, max_window_bits? : Int32) -> Bytes raise @codec.CodecError
+pub fn decompress(BytesView, max_output? : Int32, max_window_bits? : Int32, dictionary? : Dictionary) -> Bytes raise @codec.CodecError
 
 pub fn frame_size(BytesView) -> Int64 raise @codec.CodecError
 
@@ -26,7 +26,7 @@ pub fn skippable_frame(Int32, BytesView) -> Bytes
 pub struct Decoder {
   // private fields
 }
-pub fn Decoder::Decoder(max_window_bits? : Int32, until? : @codec_bytes.Until) -> Self
+pub fn Decoder::Decoder(max_window_bits? : Int32, until? : @codec_bytes.Until, dictionary? : Dictionary) -> Self
 pub fn Decoder::is_finished(Self) -> Bool
 pub fn Decoder::last_consumed(Self) -> Int32
 pub fn Decoder::last_produced(Self) -> Int32
@@ -35,6 +35,13 @@ pub fn Decoder::reset(Self) -> Unit
 pub fn Decoder::step(Self, BytesView, MutArrayView[Byte], end~ : Bool) -> @codec_bytes.Status raise @codec.CodecError
 pub fn Decoder::step_into(Self, BytesView, FixedArray[Byte], end~ : Bool) -> @codec_bytes.Status raise @codec.CodecError
 pub impl @codec_bytes.Decode for Decoder
+
+pub struct Dictionary {
+  // private fields
+}
+pub fn Dictionary::content(Self) -> BytesView
+pub fn Dictionary::id(Self) -> UInt32
+pub fn Dictionary::raw(BytesView) -> Self
 
 pub struct Encoder {
   // private fields

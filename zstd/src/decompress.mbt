@@ -1,14 +1,15 @@
 ///|
 /// Decodes a whole Zstandard stream held in memory: one or more frames.
 /// `max_output` caps the decoded size (unlimited by default) and raises
-/// `LimitExceeded({ resource: Output, .. })` past it; `max_window_bits` is as
-/// for `Decoder`.
+/// `LimitExceeded({ resource: Output, .. })` past it; `max_window_bits` and
+/// `dictionary` are as for `Decoder`.
 pub fn decompress(
   input : BytesView,
   max_output? : Int32,
   max_window_bits~ : Int32 = 27,
+  dictionary? : Dictionary,
 ) -> Bytes raise @codec.CodecError {
-  let decoder = Decoder(max_window_bits~)
+  let decoder = Decoder(max_window_bits~, dictionary?)
   let chunk = FixedArray::make(1 << 16, b'\x00')
   let out = Buffer()
   let mut rest = input

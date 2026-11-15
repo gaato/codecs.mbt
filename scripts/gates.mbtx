@@ -107,6 +107,7 @@ async fn main {
   // the corruptions), and the conformance suite's vectors (an extract of each
   // format's vectors).
   run("moon", ["run", "zstd/scripts/gen_vectors.mbtx", "--", "--check"])
+  run("moon", ["run", "zstd/scripts/gen_dict_vectors.mbtx", "--", "--check"])
   run("moon", ["run", "scripts/gen_deflate_vectors.mbtx", "--", "--check"])
   run("moon", ["run", "scripts/gen_conformance_vectors.mbtx", "--", "--check"])
   run("moon", ["run", "scripts/gen_bench_data.mbtx", "--", "--check"])

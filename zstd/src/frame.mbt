@@ -49,7 +49,19 @@ fn Decoder::frame_header(self : Decoder) -> Unit raise Stop {
   let header = checked(@header.parse_frame_header(self.hdr[0:len]))
   if header.dictionary_id != 0 {
     let id = header.dictionary_id
-    raise Fail(DictionaryRequired(Some(id)), "the frame needs dictionary \{id}")
+    match self.dictionary {
+      None =>
+        raise Fail(
+          DictionaryRequired(Some(id)),
+          "the frame needs dictionary \{id}",
+        )
+      Some(dict) if dict.id != id =>
+        raise Fail(
+          DictionaryMismatch,
+          "the frame needs dictionary \{id}, not \{dict.id}",
+        )
+      Some(_) => ()
+    }
   }
   self.content_size = header.content_size
   // Computed in 64 bits: a descriptor may ask for up to 2^41 + 7 * 2^38.

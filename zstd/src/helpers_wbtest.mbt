@@ -79,3 +79,35 @@ fn Rng::below(self : Rng, bound : Int32) -> Int32 {
   self.state = self.state * 1664525 + 1013904223
   (self.state >> 8).reinterpret_as_int() % bound
 }
+
+///|
+/// A frame that uses a dictionary, made by `zstd -D`
+/// (zstd/scripts/gen_dict_vectors.mbtx).
+priv struct DictVector {
+  name : String
+  /// The name of its dictionary in `dict_dictionaries`.
+  dictionary : String
+  compressed : String
+  size : Int32
+  sha256 : String
+}
+
+///|
+fn DictVector::input(self : DictVector) -> Bytes {
+  @base64.decode(self.compressed, ignore_whitespace=true) catch {
+    _ => abort("bad base64 in vector \{self.name}")
+  }
+}
+
+///|
+/// The content of the dictionary named `name` in `dict_dictionaries`.
+fn dict_bytes(name : String) -> Bytes {
+  for named in dict_dictionaries {
+    if named.0 == name {
+      return @base64.decode(named.1, ignore_whitespace=true) catch {
+        _ => abort("bad base64 in dictionary \{name}")
+      }
+    }
+  }
+  abort("no dictionary \{name}")
+}

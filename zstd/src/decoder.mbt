@@ -108,6 +108,8 @@ pub struct Decoder {
   priv mut ml_table : Fse?
   priv scratch : FseScratch
   priv rep : @seqenc.Repeats
+  // The dictionary frames may use, kept by reference.
+  priv dictionary : Dictionary?
 }
 
 ///|
@@ -121,9 +123,19 @@ pub struct Decoder {
 /// every frame up to the end of the input. `EndOfMember` stops right after
 /// the first frame, a skippable frame included, and consumes nothing past
 /// it, so that `input[last_consumed():]` is what follows.
+///
+/// `dictionary` is used by every frame that names it, or names none (RFC
+/// 8878 section 5): its content comes as if just before the frame's
+/// output, and a match may reach into it however long the frame is, as
+/// zstd's decoder lets it. A frame that names another dictionary raises
+/// `DictionaryMismatch`; without `dictionary`, a frame that names one
+/// raises `DictionaryRequired(Some(id))`. The decoder keeps the dictionary
+/// by reference, so the bytes it is a view of stay alive as long as the
+/// decoder, and `memory_usage` does not count them.
 pub fn Decoder::Decoder(
   max_window_bits~ : Int32 = 27,
   until~ : @codec_bytes.Until = EndOfInput,
+  dictionary? : Dictionary,
 ) -> Decoder {
   let empty_out = FixedArray::make(0, b'\x00')
   {
@@ -173,6 +185,7 @@ pub fn Decoder::Decoder(
     ml_table: None,
     scratch: FseScratch::new(),
     rep: @seqenc.Repeats(),
+    dictionary,
   }
 }
 

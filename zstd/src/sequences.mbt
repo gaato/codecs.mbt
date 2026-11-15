@@ -270,13 +270,13 @@ fn Decoder::execute(
       self.put_literals(lit, lit_len)
     }
     lit += lit_len
-    if offset == 0 || offset > self.filled {
-      raise corrupt("an offset beyond the decoded data")
-    }
     if self.block_out + match_len > self.block_max {
       raise corrupt("a block that decodes past the block limit")
     }
-    if !self.copy_back_fast(offset, match_len) {
+    if offset == 0 || offset > self.filled {
+      // Before the frame's output: only a dictionary has bytes there.
+      self.copy_from_dictionary(offset, match_len)
+    } else if !self.copy_back_fast(offset, match_len) {
       self.reserve_window(match_len)
       self.copy_back(offset, match_len)
     }

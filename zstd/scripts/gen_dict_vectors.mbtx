@@ -1,0 +1,401 @@
+----
+import {
+  "moonbitlang/core/async",
+  "moonbitlang/core/async/fs",
+  "moonbitlang/core/async/shell",
+  "moonbitlang/core/encoding/base64",
+  "moonbitlang/core/env",
+  "moonbitlang/x@0.5.6/crypto",
+}
+----
+
+// Generates zstd/src/dict_vectors_wbtest.mbt: frames that use a dictionary,
+// made with the `zstd` command's -D, for the decoder's tests.
+//
+// Two dictionaries: one of raw content (text made here, the same every run),
+// and one trained by `zstd --train` on samples made here, with a fixed id.
+// Training depends on zstd's version, so the trained dictionary is stored in
+// the file with the streams. The inputs share words and phrases with the
+// dictionaries, so that frames reach into them: small records, where a
+// dictionary matters most, and longer texts, at negative, low and high
+// levels, with and without a content size and a checksum, in a window
+// smaller than the dictionary (so offsets reach past the window into it),
+// and several frames in a row.
+//
+// Usage, from the repository root (needs the zstd command):
+//   moon run zstd/scripts/gen_dict_vectors.mbtx [--check]
+// --check regenerates the inputs and the raw dictionary and fails unless the
+// file holds them: every stored stream must decompress, with `zstd -d -D`, to
+// its regenerated input, and the rest of the file must be what this script
+// writes for those streams. It does not compress or train again, because
+// another version of zstd may produce other, equally valid, bytes.
+
+///|
+let target : String = "zstd/src/dict_vectors_wbtest.mbt"
+
+///|
+/// The trained dictionary's id: fixed, not the random one zstd picks.
+let trained_id : Int = 1234567
+
+///|
+let words : Array[String] = [
+  "the", "moonbit", "zstd", "frame", "block", "window", "dictionary", "record",
+  "name", "version", "deps", "readme", "repository", "license", "keywords",
+  "description", "source", "checksum", "created", "gaato", "codec", "stream",
+  "match", "offset", "literal", "sequence", "huffman", "table", "entropy",
+]
+
+///|
+/// A 64-bit LCG, the same on every platform and version.
+struct Rng {
+  mut state : UInt64
+}
+
+///|
+fn Rng::below(self : Rng, bound : Int) -> Int {
+  self.state = self.state * 6364136223846793005UL + 1442695040888963407UL
+  ((self.state >> 33).to_int()) % bound
+}
+
+///|
+/// A JSON-like record of about `n` bytes, as a registry index holds them.
+fn record(rng : Rng, n : Int) -> Bytes {
+  let out = Buffer()
+  out.write_string_utf8("{\"name\":\"gaato/")
+  while out.length() < n {
+    let key = words[rng.below(words.length())]
+    let value = words[rng.below(words.length())]
+    out.write_string_utf8("\",\"\{key}\":\"\{value}-\{rng.below(1000)}")
+  }
+  out.write_string_utf8("\"}\n")
+  out.to_bytes()
+}
+
+///|
+/// Records, one after another, to `n` bytes.
+fn records(rng : Rng, n : Int) -> Bytes {
+  let out = Buffer()
+  while out.length() < n {
+    out.write_bytes(record(rng, 80 + rng.below(600)))
+  }
+  out.to_bytes()[:n].to_owned()
+}
+
+///|
+/// The raw dictionary: 60,000 bytes of records.
+fn raw_dictionary() -> Bytes {
+  records({ state: 9842 }, 60000)
+}
+
+///|
+/// The inputs, by name: records and texts from other seeds than the
+/// dictionary's.
+fn inputs() -> Array[(String, Bytes)] {
+  let rng = { state: 8878 }
+  [
+    ("empty", b""),
+    ("record", record(rng, 300)),
+    ("record_small", record(rng, 90)),
+    ("records_4k", records(rng, 4000)),
+    ("records_100k", records(rng, 100000)),
+  ]
+}
+
+///|
+/// One vector: its name, its dictionary's name, the arguments for the zstd
+/// command, the input's name, and whether the input comes through a pipe
+/// (no content size) and how many frames of it there are.
+struct Spec {
+  name : String
+  dictionary : String
+  args : Array[String]
+  input : String
+  piped : Bool
+  frames : Int
+}
+
+///|
+fn specs() -> Array[Spec] {
+  let out = []
+  let levels = [
+    ("fast5", ["--fast=5"]),
+    ("level1", ["-1"]),
+    ("level3", ["-3"]),
+    ("level9", ["-9"]),
+    ("level19", ["-19"]),
+  ]
+  for d in ["raw", "trained"] {
+    for named in inputs() {
+      let (input, _) = named
+      for level in levels {
+        let (lname, args) = level
+        // The long input at three levels only, to keep the file small.
+        if input == "records_100k" && !(lname is ("fast5" | "level3" | "level19")) {
+          continue
+        }
+        out.push({
+          name: "\{d}/\{input}_\{lname}",
+          dictionary: d,
+          args,
+          input,
+          piped: false,
+          frames: 1,
+        })
+      }
+    }
+    out.push({
+      name: "\{d}/records_4k_piped",
+      dictionary: d,
+      args: ["-3"],
+      input: "records_4k",
+      piped: true,
+      frames: 1,
+    })
+    out.push({
+      name: "\{d}/records_4k_no_checksum",
+      dictionary: d,
+      args: ["-3", "--no-check"],
+      input: "records_4k",
+      piped: false,
+      frames: 1,
+    })
+    out.push({
+      name: "\{d}/records_4k_two_frames",
+      dictionary: d,
+      args: ["-3"],
+      input: "records_4k",
+      piped: false,
+      frames: 2,
+    })
+    // A 1 KiB window, smaller than the dictionary: offsets into the
+    // dictionary reach past the window.
+    out.push({
+      name: "\{d}/records_4k_window10",
+      dictionary: d,
+      args: ["-3", "--zstd=wlog=10"],
+      input: "records_4k",
+      piped: true,
+      frames: 1,
+    })
+  }
+  out
+}
+
+///|
+async fn zstd(args : Array[String], input : Bytes) -> Bytes {
+  let output = @shell.Cmd(
+    "zstd",
+    ["-q", "-c", "--no-progress", "--single-thread", ..args],
+    stdin=Binary(input),
+  ).output(max_output_bytes=1 << 26)
+  output.check()
+  output.stdout_bytes()
+}
+
+///|
+/// A dictionary trained by `zstd --train` on records, with `trained_id`.
+async fn train(work : String) -> Bytes {
+  let rng = { state: 9659 }
+  @fs.mkdir("\{work}/samples", recursive=true)
+  for i in 0..<2000 {
+    @fs.write_binary("\{work}/samples/\{i}", record(rng, 80 + rng.below(600)))
+  }
+  @shell.Cmd("zstd", [
+    "-q", "--train", "-r", "\{work}/samples", "--maxdict=16384", "--dictID=\{trained_id}",
+    "-o", "\{work}/trained.dict",
+  ]).output().check()
+  @fs.read_binary("\{work}/trained.dict")
+}
+
+///|
+/// The stream of `spec` as the zstd command makes it, with the dictionary in
+/// the file `dict_path`. A content size comes from a file, not a pipe.
+async fn build(
+  work : String,
+  spec : Spec,
+  input : Bytes,
+  dict_path : String,
+) -> Bytes {
+  let out = Buffer()
+  for _ in 0..<spec.frames {
+    if spec.piped {
+      out.write_bytes(zstd(["-D", dict_path, ..spec.args], input))
+    } else {
+      let path = "\{work}/input"
+      @fs.write_binary(path, input)
+      let output = @shell.Cmd("zstd", [
+        "-q", "-c", "--no-progress", "--single-thread", "-D", dict_path, ..spec.args,
+        path,
+      ]).output(max_output_bytes=1 << 26)
+      output.check()
+      out.write_bytes(output.stdout_bytes())
+    }
+  }
+  out.to_bytes()
+}
+
+///|
+fn literal(data : Bytes) -> String {
+  let b64 = @base64.encode(data)
+  let out = StringBuilder()
+  out.write_string("(\n")
+  for i = 0; i < b64.length().max(1); i = i + 76 {
+    let line = b64.clamped_view(start=i, end=(i + 76).min(b64.length()))
+    out.write_string("      #|\{line}\n")
+  }
+  out.write_string("    )")
+  out.to_string()
+}
+
+///|
+/// Renders the file. `stream(spec)` gives a vector's stream; every stream
+/// must decode with `zstd -d -D` to its input.
+async fn render(
+  version : String,
+  work : String,
+  trained : Bytes,
+  stream : async (Spec) -> Bytes,
+) -> String {
+  let dictionaries = [("raw", raw_dictionary()), ("trained", trained)]
+  for named in dictionaries {
+    let (name, data) = named
+    @fs.write_binary("\{work}/\{name}.dict", data)
+  }
+  let inputs = Map(inputs())
+  let out = StringBuilder()
+  out.write_string(
+    (
+      $|// Generated by zstd/scripts/gen_dict_vectors.mbtx, DON'T EDIT IT.
+      $|// streams made with the zstd command \{version}.
+      $|
+      $|///|
+      $|let dict_dictionaries : Array[(String, String)] = [
+      $|
+    ),
+  )
+  for named in dictionaries {
+    let (name, data) = named
+    out.write_string("  (\n    \"\{name}\",\n    \{literal(data)},\n  ),\n")
+  }
+  out.write_string(
+    (
+      $|]
+      $|
+      $|///|
+      $|let dict_vectors : Array[DictVector] = [
+      $|
+    ),
+  )
+  for spec in specs() {
+    let input = inputs.get(spec.input).unwrap()
+    let compressed = stream(spec)
+    let decoded = zstd(
+      ["-d", "-D", "\{work}/\{spec.dictionary}.dict"],
+      compressed,
+    ) catch {
+      _ => fail("\{spec.name}: zstd -d refuses it")
+    }
+    let original = Buffer()
+    for _ in 0..<spec.frames {
+      original.write_bytes(input)
+    }
+    let original = original.to_bytes()
+    if decoded != original {
+      fail("\{spec.name}: does not decode to its input")
+    }
+    let sha256 = @crypto.bytes_to_hex_string(@crypto.sha256(original))
+    out.write_string(
+      (
+        $|  {
+        $|    name: "\{spec.name}",
+        $|    dictionary: "\{spec.dictionary}",
+        $|    compressed: \{literal(compressed)},
+        $|    size: \{original.length()},
+        $|    sha256: "\{sha256}",
+        $|  },
+        $|
+      ),
+    )
+  }
+  out.write_string("]\n")
+  out.to_string()
+}
+
+///|
+/// The base64 blocks of the generated file: each dictionary's and each
+/// vector's stream, by name.
+fn stored(file : String) -> Map[String, Bytes] raise {
+  let blocks = Map([])
+  let mut name = ""
+  let b64 = StringBuilder()
+  for raw in file.split("\n") {
+    let line = raw.trim()
+    if line.strip_prefix("name: \"") is Some(rest) {
+      name = rest.strip_suffix("\",").unwrap_or(rest).to_owned()
+      b64.reset()
+    } else if line.has_prefix("\"") &&
+      line.has_suffix("\",") &&
+      !line.contains(":") {
+      name = "dictionary " + line[1:line.length() - 2].to_owned()
+      b64.reset()
+    } else if line.strip_prefix("#|") is Some(rest) {
+      b64.write_view(rest)
+    } else if line == ")," && name != "" {
+      blocks[name] = @base64.decode(b64.to_string())
+      name = ""
+    }
+  }
+  blocks
+}
+
+///|
+fn stored_version(file : String) -> String? {
+  let lead = "// streams made with the zstd command "
+  for line in file.split("\n") {
+    if line.strip_prefix(lead) is Some(rest) {
+      return rest.strip_suffix(".").map(v => v.to_owned())
+    }
+  }
+  None
+}
+
+///|
+async fn main {
+  let stale = "\{target} is stale: run moon run zstd/scripts/gen_dict_vectors.mbtx"
+  let work = "_build/gen_dict_vectors"
+  if @fs.exists(work) {
+    @fs.rmdir(work, recursive=true)
+  }
+  @fs.mkdir(work, recursive=true)
+  if @env.args().contains("--check") {
+    guard @fs.exists(target) else { fail(stale) }
+    let file = @fs.read_text(target)
+    guard stored_version(file) is Some(version) else { fail(stale) }
+    let blocks = stored(file)
+    guard blocks.get("dictionary trained") is Some(trained) else { fail(stale) }
+    let text = render(version, work, trained, spec => {
+      guard blocks.get(spec.name) is Some(data) else { fail(stale) }
+      data
+    })
+    if file != text {
+      fail(stale)
+    }
+  } else {
+    let version = @shell.Cmd("zstd", ["-q", "-V"]).output()
+    version.check()
+    let version = version.stdout().trim().to_owned()
+    let trained = train(work)
+    let inputs = Map(inputs())
+    let text = render(version, work, trained, async fn(spec) {
+      build(
+        work,
+        spec,
+        inputs.get(spec.input).unwrap(),
+        "\{work}/\{spec.dictionary}.dict",
+      )
+    })
+    @fs.write_text(target, text)
+    println("\{target}: \{text.length()} characters")
+  }
+  @fs.rmdir(work, recursive=true)
+}
