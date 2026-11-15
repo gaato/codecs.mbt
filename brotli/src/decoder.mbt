@@ -33,6 +33,7 @@ priv enum State {
   Literals
   Distance
   Copy
+  DictionaryCopy
   MetaDone
   Done
 }
@@ -55,6 +56,10 @@ const INITIAL_WINDOW : Int32 = 1024
 pub struct Decoder {
   priv max_window_bits : Int32
   priv until : @codec_bytes.Until
+  // The LZ77 dictionary distances past the window address, and where the
+  // copy from it goes on.
+  priv dictionary : Dictionary?
+  priv mut dict_at : Int32
   // Bit reader. `acc` holds `nbits` unread bits, least significant first;
   // they come from `stash` and then from `view`.
   priv mut acc : Int32
@@ -141,14 +146,28 @@ pub struct Decoder {
 /// `EndOfMember`, `step` answers `Done` right after the stream's last
 /// meta-block and consumes nothing past it, so `input[last_consumed():]`
 /// is what follows the stream.
+///
+/// With `dictionary`, the stream may copy from it as RFC 9841 section 3.2
+/// has it, as RFC 9842's `dcb` coding does: distances just past the
+/// window's reach (the output so far, or the window once it is full)
+/// address the dictionary from its end, and the static dictionary's words
+/// come after them. A copy that would run past the dictionary's end raises
+/// `Corrupt`, as the reference decoder (google/brotli) refuses it: RFC 9841
+/// has it go on into the window, which a full window no longer holds. The
+/// decoder keeps the dictionary by reference, so the bytes it is a view of
+/// stay alive as long as the decoder, and `memory_usage` does not count
+/// them.
 pub fn Decoder::Decoder(
   max_window_bits~ : Int32 = 24,
   until~ : @codec_bytes.Until = EndOfInput,
+  dictionary? : Dictionary,
 ) -> Decoder {
   let empty_out = FixedArray::make(0, b'\x00')
   {
     max_window_bits: max_window_bits.clamp(min=10, max=24),
     until,
+    dictionary,
+    dict_at: 0,
     acc: 0,
     nbits: 0,
     stash: [],
@@ -802,6 +821,7 @@ fn Decoder::unit(self : Decoder) -> Status? raise Stop {
     Literals => return self.literals()
     Distance => return self.distance()
     Copy => return self.copy()
+    DictionaryCopy => return self.dictionary_copy()
     MetaDone =>
       if self.is_last {
         self.skip_padding()

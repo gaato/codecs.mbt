@@ -117,7 +117,9 @@ test "stop at the end of the stream" {
 
 Every RFC 7932 stream, including the static dictionary and its 121 transforms. Input comes in chunks of any size, down to one byte, and output goes into slices of any size, under the rules of [`gaato/codec_bytes`](https://mooncakes.io/docs/gaato/codec_bytes). The rules the decoder applies to what it reads and the canonical codes the encoder writes are proved against RFC 7932; [PROOFS.md](https://github.com/gaato/codecs.mbt/blob/main/brotli/PROOFS.md) lists what is proved and what is trusted.
 
-Not included: Shared Brotli (RFC 9841), with its shared dictionaries, its large window and its framing format. A large-window stream raises `Corrupt`.
+An LZ77 dictionary (RFC 9841 section 3.2), given to `Decoder(dictionary=d)` or `decompress(dictionary=d)` as a `Dictionary` of raw bytes, lets a stream copy from it, as `brotli -D` writes them and RFC 9842's `dcb` coding uses one: distances just past the window's reach address the dictionary from its end, and the static dictionary's words come after them. A copy that would run past the dictionary's end raises `Corrupt`, as google/brotli's decoder refuses it (RFC 9841 has it go on into the window, which a full window no longer holds).
+
+Not included: the rest of Shared Brotli (RFC 9841): serialized shared dictionaries, with their own words and transforms, its large window and its framing format. A large-window stream raises `Corrupt`.
 
 ## Encoding
 

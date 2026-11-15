@@ -7,6 +7,10 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+### Added
+
+- **LZ77 dictionaries in the decoder** (RFC 9841 section 3.2), as `brotli -D` writes them and RFC 9842's `dcb` coding uses one. `Dictionary(bytes)`, given to `Decoder(dictionary=d)` or `decompress(dictionary=d)`, takes the distances just past the window's reach, before the static dictionary's words, whose ids move up by the dictionary's length. A copy that would run past the dictionary's end raises `Corrupt`, as google/brotli's decoder refuses it; RFC 9841 has it go on into the window, which a full window no longer holds. The dictionary is held by reference, not copied, and `memory_usage` does not count it.
+
 ## [0.4.3] - 2026-11-15
 
 ### Changed

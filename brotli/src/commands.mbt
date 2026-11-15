@@ -462,9 +462,54 @@ fn Decoder::distance(self : Decoder) -> Status? raise Stop {
     self.state = Copy
     return None
   }
-  self.dictionary_word(dist)
+  let dict_len = match self.dictionary {
+    Some(d) => d.content.length()
+    None => 0
+  }
+  let address = lz77_address(dist, self.filled, dict_len, self.copy_len)
+  if address >= 0 {
+    if code != 0 {
+      self.dist_ring[self.dist_ring_index & 3] = dist
+      self.dist_ring_index += 1
+    }
+    if self.copy_len > self.meta_remaining {
+      raise corrupt("copy past the end of the meta-block")
+    }
+    self.meta_remaining -= self.copy_len
+    self.copy_remaining = self.copy_len
+    self.dict_at = address
+    self.state = DictionaryCopy
+    return None
+  }
+  self.dictionary_word(dist - dict_len)
   self.state = if self.meta_remaining == 0 { MetaDone } else { CommandStart }
   None
+}
+
+///|
+/// Where a copy of `copy_len` bytes from `dist` back starts in an LZ77
+/// dictionary of `dict_len` bytes (RFC 9841 section 3.2), when `dist` is
+/// past the window's reach, `filled`: the dictionary's address, counted
+/// from its start, for a distance at most `dict_len` past the reach, or -1
+/// for one further, which names a static dictionary word. A copy that would
+/// run past the dictionary's end is refused, as the reference decoder
+/// refuses it: RFC 9841 has it go on from the window's beginning, which a
+/// full window no longer holds.
+fn lz77_address(
+  dist : Int32,
+  filled : Int32,
+  dict_len : Int32,
+  copy_len : Int32,
+) -> Int32 raise Stop {
+  let past = dist - filled
+  if past > dict_len {
+    return -1
+  }
+  let address = dict_len - past
+  if copy_len > past {
+    raise corrupt("a copy past the end of the LZ77 dictionary")
+  }
+  address
 }
 
 ///|
@@ -474,7 +519,8 @@ fn Decoder::last_distance(self : Decoder, k : Int32) -> Int32 {
 }
 
 ///|
-/// Writes the static dictionary word distance `dist` names (section 8).
+/// Writes the static dictionary word distance `dist` names (section 8), past
+/// any LZ77 dictionary.
 fn Decoder::dictionary_word(self : Decoder, dist : Int32) -> Unit raise Stop {
   let length = self.copy_len
   if length < 4 || length > 24 {

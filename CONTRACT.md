@@ -228,7 +228,7 @@ here, so that adding one later does not require changing it.
 | RFC 8878, Zstandard | Informational, updated by RFC 9659 | The zstd format. |
 | RFC 9659, Window Sizing for Zstandard Content Encoding | Informational | HTTP's `zstd` coding is limited to an 8 MB window. |
 | RFC 7932, Brotli | Informational, updated by RFC 9841 | The brotli format. |
-| RFC 9841, Shared Brotli | Informational | Extends brotli with shared dictionaries, a large window (up to 62 bits) and a framing format. Not implemented. |
+| RFC 9841, Shared Brotli | Informational | Extends brotli with shared dictionaries, a large window (up to 62 bits) and a framing format. Its LZ77 dictionary (section 3.2), which RFC 9842's `dcb` coding uses, is implemented; the rest is not. |
 | RFC 9842, Compression Dictionary Transport | Proposed Standard | The `dcb` and `dcz` HTTP codings: a hash of the dictionary in a fixed header, then Shared Brotli or Zstandard. |
 | RFC 1950, 1951, 1952 | Informational, neither updated nor obsoleted | zlib, DEFLATE and gzip, in gaato/deflate. Its errata (7764, 8429, 7517) clarify wording and change no decoder's behaviour. |
 | LZ4 Frame Format, .xz File Format 1.2.1 | not RFCs | Used only for the paper check above. |
@@ -248,6 +248,7 @@ google/brotli):
 | RFC 8878 9223, reserved dictionary ids | Reported | Any non-zero dictionary id is refused unless that dictionary is available. |
 | RFC 8878 9227, reserved bits of the sequences header | Reported | Non-zero reserved bits raise `Corrupt`, as zstd 1.5.7 does. |
 | RFC 8878 9228, content checksum | Reported | The checksum is always verified. |
+| RFC 9841 section 3.2, a copy past the LZ77 dictionary's end (not an erratum) | — | RFC 9841 has such a copy go on "from the regular LZ77 window starting at the beginning"; a full window no longer holds those bytes once more than 16 have come from the dictionary. google/brotli's decoder refuses the copy and its encoder never writes one, and so does gaato/brotli: `Corrupt`. |
 | RFC 7932 6977, implicit zero distance | Reported | The distance block count is not decremented for an implicit distance, as in the reference decoder; streams from google/brotli at quality 5, 9 and 11 that reach this case decode. |
 
 # Images

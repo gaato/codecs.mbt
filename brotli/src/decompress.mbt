@@ -2,13 +2,14 @@
 /// Decodes a whole Brotli stream held in memory. `max_output` caps the
 /// decoded size (unlimited by default): past it, `decompress` raises
 /// `LimitExceeded` with the `Output` resource and `max_output` as the limit.
-/// `max_window_bits` is as for `Decoder`.
+/// `max_window_bits` and `dictionary` are as for `Decoder`.
 pub fn decompress(
   input : BytesView,
   max_output? : Int32,
   max_window_bits~ : Int32 = 24,
+  dictionary? : Dictionary,
 ) -> Bytes raise @codec.CodecError {
-  let decoder = Decoder(max_window_bits~)
+  let decoder = Decoder(max_window_bits~, dictionary?)
   let chunk = FixedArray::make(1 << 16, b'\x00')
   let out = Buffer()
   let mut rest = input
