@@ -185,3 +185,36 @@ test "a trained dictionary: its id in the header, its tables from the first bloc
   // The dictionary's tables and repeat offsets pay on small records.
   assert_true(with_tables < without, msg="\{with_tables} \{without}")
 }
+
+///|
+test "tables for a dictionary the window does not hold with the input" {
+  // A 4 MiB input and a 2 MiB dictionary at level 1 (a 512 KiB window):
+  // the tables hold the dictionary and the window, 2^22 bytes, so hashLog
+  // is capped at 23, above the row's 14, and nothing changes.
+  let p = params_for(1, Some(4L << 20), dict_size=2 << 20)
+  assert_eq(p.window_log, 19)
+  assert_eq(p.hash_log, 14)
+  // A dictionary of 2^31 - 1 bytes: zstd's largest window log, 31.
+  let p = params_for(3, Some(1L << 20), dict_size=0x7fffffff)
+  assert_eq(p.window_log, 21)
+  assert_eq(p.hash_log, 17)
+}
+
+///|
+test "formatted dictionaries with ids of one and two bytes" {
+  let good = dict_bytes("trained")
+  for id in [200U, 40000U] {
+    let bytes = good.to_fixedarray()
+    for i in 0..<4 {
+      bytes[4 + i] = (id >> (8 * i)).to_byte()
+    }
+    let dict = Dictionary::parse(Bytes::from_array(bytes))
+    assert_eq(dict.id(), id)
+    let input = Bytes::makei(2000, i => (b'a'.to_int() + i % 26).to_byte())
+    let frame = compress(input, dictionary=dict)
+    guard inspect_frame(frame) is Zstd(info) else { fail("not a frame") }
+    assert_eq(info.dictionary_id, id)
+    assert_eq(info.header_len, 4 + 1 + (if id < 256 { 1 } else { 2 }) + 2)
+    assert_eq(decompress(frame, dictionary=dict), input)
+  }
+}

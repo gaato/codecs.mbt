@@ -109,4 +109,9 @@ test "skippable frames: written, read back, skipped by the decoder" {
     Corrupt,
   )
   assert_eq(kind_of(() => ignore(read_skippable_frame(header[:39]))), Truncated)
+  // Cut inside a skippable frame's header, and inside its data.
+  for cut in [4, 7] {
+    assert_eq(kind_of(() => ignore(inspect_frame(header[:cut]))), Truncated)
+  }
+  assert_eq(kind_of(() => ignore(frame_size(header[:39]))), Truncated)
 }

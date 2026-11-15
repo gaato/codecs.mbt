@@ -97,3 +97,23 @@ test "every finder reaches into a preloaded dictionary until a window past it" {
     assert_eq((finder.window, finder.dict_end), (1024, 0))
   }
 }
+
+///|
+test "an empty dictionary changes nothing" {
+  let fast = Fast(hash_log=12, min_match=5, target_length=0, window_log=10)
+  fast.preload(b""[:])
+  assert_eq((fast.window, fast.dict_end), (1024, 0))
+  let dfast = Dfast(hash_log=12, chain_log=11, min_match=5, window_log=10)
+  dfast.preload(b""[:])
+  assert_eq((dfast.window, dfast.dict_end), (1024, 0))
+  let finder = Lazy(
+    hash_log=12,
+    chain_log=11,
+    min_match=5,
+    search_log=4,
+    depth=1,
+    window_log=10,
+  )
+  finder.preload(b""[:])
+  assert_eq((finder.window, finder.dict_end), (1024, 0))
+}

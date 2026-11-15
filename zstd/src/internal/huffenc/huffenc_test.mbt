@@ -22,3 +22,24 @@ test "HuffmanEncoder: memory, and what a build leaves" {
   encoder.write_literals(out, data, 0, 64, four_streams=true)
   assert_true(encoder.memory_usage() > before)
 }
+
+///|
+test "HuffmanEncoder::set_weights takes a dictionary's code, forgetting the last" {
+  let encoder = @huffenc.HuffmanEncoder()
+  let counts = FixedArray::make(256, 0)
+  for s in 0..<200 {
+    counts[s] = s + 1
+  }
+  assert_true(encoder.build(counts))
+  // Two symbols of weight 1: one bit each, and nothing for the others the
+  // last build coded.
+  encoder.set_weights([1, 1], 2)
+  assert_eq(encoder.max_bits(), 1)
+  let two = FixedArray::make(256, 0)
+  two[0] = 3
+  two[1] = 5
+  assert_true(encoder.accepts(two))
+  assert_eq(encoder.cost(two), 8)
+  two[2] = 1
+  assert_false(encoder.accepts(two))
+}

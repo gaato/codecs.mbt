@@ -224,4 +224,6 @@ test "formatted dictionaries that do not parse are Corrupt" {
   let far = good.to_fixedarray()
   far[at + 7] = b'\x7f'
   assert_eq(kind(Bytes::from_array(far)), Some(Corrupt))
+  // The tables, then fewer than 12 bytes of repeat offsets.
+  assert_eq(kind(good[:at + 11].to_owned()), Some(Corrupt))
 }
