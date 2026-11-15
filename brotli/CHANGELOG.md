@@ -7,6 +7,8 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-15
+
 ### Added
 
 - **Bounds before encoding or decoding.** `compress_bound(n)`, the most `compress` writes for `n` bytes (5 bytes a meta-block of 64 KiB and the stream header; 7 more for each `Flush` of an `Encoder`), and `decoder_memory_bound(max_window_bits~)` and `encoder_memory_bound(window_bits~)`, the most `memory_usage` reports for a decoder or an encoder with those options.

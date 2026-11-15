@@ -7,6 +7,8 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-15
+
 ### Added
 
 - **Bounds before encoding or decoding.** `compress_bound(n)`, the most `compress` or an `Encoder` writes for `n` bytes (3 bytes for each block of at least 1 KiB, the longest frame header and the checksum; 3 more for each `Flush`); `decoder_memory_bound(max_window_bits~)` and `encoder_memory_bound(level~, content_size?, dictionary_len~)`, the most `memory_usage` reports for a decoder or an encoder with those options. The tests check every encoder and decoder they drive against them.

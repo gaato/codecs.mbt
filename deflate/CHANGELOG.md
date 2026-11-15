@@ -7,6 +7,8 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-15
+
 ### Added
 
 - **Bounds before encoding or decoding**, in `@deflate`, `@zlib` and `@gzip`: `compress_bound(n)` (for gzip, `compress_bound(n, header?)`), the most `compress` writes for `n` bytes; `encoder_memory_bound(level~)` (gzip's with `header?`) and `decoder_memory_bound()` (gzip's with `keep_header~` and `max_header_bytes~`), what an encoder and a decoder hold.
