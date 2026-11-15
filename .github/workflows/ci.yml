@@ -52,17 +52,6 @@ jobs:
         run: moon run scripts/docs_audit.mbtx --self-test
 
       - name: Gates
-        run: moon run scripts/gates.mbtx
-
-      - name: Coverage ledgers
-        # Every ledgered module of scripts/modules.json.
-        run: moon run scripts/coverage_report.mbtx
-
-      - name: Cross-check the brotli encoder with the reference decoder
-        run: moon run brotli/scripts/crosscheck.mbtx
-
-      - name: Cross-check the DEFLATE, zlib and gzip encoders with the reference decoders
-        run: moon run deflate/scripts/crosscheck.mbtx
-
-      - name: Cross-check the zstd encoder with the reference decoders
-        run: moon run zstd/scripts/crosscheck.mbtx
+        # With the coverage ledgers, and with --full the crosschecks of the
+        # encoders against the reference decoders, as one local run does.
+        run: moon run scripts/gates.mbtx -- --full

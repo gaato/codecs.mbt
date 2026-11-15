@@ -11,7 +11,13 @@ import {
 // Runs the repository validation suite.
 //
 // Usage, from the repository root:
-//   moon run scripts/gates.mbtx -- [--no-js] [--no-wasm] [--no-prove] [--second-solver]
+//   moon run scripts/gates.mbtx -- [--no-js] [--no-wasm] [--no-prove] [--second-solver] [--full]
+//
+// The coverage ledgers are checked every time (scripts/coverage_report.mbtx):
+// a gap a test should close fails here as it fails in CI. --full also runs
+// the crosschecks of the encoders against the reference decoders (zstd,
+// brotli and deflate's scripts/crosscheck.mbtx), as CI does on every push;
+// they take some minutes, so a quick local run leaves them out.
 //
 // --no-prove skips `moon prove` (for a machine without Z3 4.16.0); the proof
 // ledgers are still checked against the code. --second-solver proves again
@@ -62,8 +68,10 @@ async fn main {
   let mut skip_wasm = false
   let mut skip_prove = false
   let mut second_solver = false
+  let mut full = false
   for arg in @env.args()[1:] {
     match arg {
+      "--full" => full = true
       "--no-js" => skip_js = true
       "--no-wasm" => skip_wasm = true
       "--no-prove" => skip_prove = true
@@ -124,6 +132,15 @@ async fn main {
   for t in targets {
     run("moon", ["check", "--deny-warn", "--target", t])
     run("timeout", ["600", "moon", "test", "--target", t], env={ "MOON_CC": cc })
+  }
+  // Every uncovered line of every ledgered module is in its TEST_COVERAGE.md
+  // ledger, within budget.
+  run("moon", ["run", "scripts/coverage_report.mbtx"], env={ "MOON_CC": cc })
+  // The encoders' streams decode with the reference decoders.
+  if full {
+    for dir in ["zstd", "brotli", "deflate"] {
+      run("moon", ["run", "\{dir}/scripts/crosscheck.mbtx"], env={ "MOON_CC": cc })
+    }
   }
   // The proofs, with Z3, then (on request) CVC5.
   if !skip_prove {

@@ -25,8 +25,9 @@ repository is laid out.
 ## Development
 
 ```sh
-moon run scripts/gates.mbtx                     # check, test on every target, format, interfaces
-moon run scripts/coverage_report.mbtx -- zstd   # coverage against the module's ledger
+moon run scripts/gates.mbtx                     # check, test on every target, coverage ledgers, proofs, format, interfaces
+moon run scripts/gates.mbtx -- --full           # the same and the encoders' crosschecks, as CI runs
+moon run scripts/coverage_report.mbtx -- zstd   # one module's coverage against its ledger
 ```
 
 ## License
