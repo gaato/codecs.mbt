@@ -214,7 +214,7 @@ fn Decoder::step_with(
           if self.state is Header && self.hdr_len == 0 {
             "the input holds no stream"
           } else {
-            "the stream ends inside its header or trailer"
+            "the input ends inside the header or the trailer"
           },
         ),
       )

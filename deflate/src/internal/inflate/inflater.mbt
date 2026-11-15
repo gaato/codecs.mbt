@@ -319,7 +319,7 @@ fn Inflater::step_with(
       self.in_pos = self.view.length()
       if end {
         return self.fail(
-          @codec.CodecError(Truncated, "the DEFLATE data ends early"),
+          @codec.CodecError(Truncated, "the input ends inside the DEFLATE data"),
         )
       }
       self.drain()

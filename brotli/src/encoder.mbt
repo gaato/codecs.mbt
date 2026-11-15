@@ -135,13 +135,22 @@ pub fn Encoder::last_produced(self : Encoder) -> Int32 {
 }
 
 ///|
-/// Bytes the encoder holds in buffers that grow with the stream: the input
-/// buffer (the window and at most a meta-block not encoded yet) and the
-/// output waiting for the caller. At most `(1 << window_bits) - 16`, plus
-/// `max(1 << (window_bits - 2), 64 KiB)`, plus 64 KiB, plus 131,200 bytes
-/// (see RESOURCE_BOUNDS.md). `reset` releases the input buffer.
+/// Bytes the encoder holds: the input buffer (the window and at most a
+/// meta-block not encoded yet) and the output waiting for the caller, which
+/// grow with the stream, and what is allocated with the encoder: the hash
+/// table, `16 << min(window_bits, 15)` bytes (512 KiB from 15 up), and a
+/// meta-block's commands with their histograms, codes and scratch space
+/// and the distance ring, 351,628 bytes. At most `(1 << window_bits) - 16`, plus
+/// `max(1 << (window_bits - 2), 64 KiB)`, plus 64 KiB, plus 131,200 bytes,
+/// plus those (see RESOURCE_BOUNDS.md). `reset` releases the input buffer.
+/// A dictionary's index is shared by the encoders given it and counted by
+/// `Dictionary::memory_usage`, not here.
 pub fn Encoder::memory_usage(self : Encoder) -> Int32 {
-  self.data.length() + self.writer.capacity()
+  self.data.length() +
+  self.writer.capacity() +
+  self.matcher.memory_usage() +
+  self.meta_block.memory_usage() +
+  4 * self.dist_ring.length()
 }
 
 ///|
@@ -215,6 +224,12 @@ fn Encoder::step_with(
     }
     let buffered = self.data_len - self.block_start
     if buffered == BLOCK_SIZE {
+      // A full meta-block is the last only if `Finish` follows it: when this
+      // step's input ends here, keep it until the next step says, so that
+      // the stream does not depend on where the input was split.
+      if consumed == input.length() {
+        return self.finish_step(NeedMoreInput, consumed, produced)
+      }
       self.write_header()
       self.encode_block(self.block_start, self.data_len, false)
       self.block_start = self.data_len

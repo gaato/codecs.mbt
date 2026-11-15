@@ -79,7 +79,7 @@ test "stop after the first frame" {
 }
 ```
 
-Encoding works the same way. `Flush` makes the output so far decode to the input so far, say to send one part of an HTTP response; `Finish` ends the frame.
+Encoding works the same way. `Flush` makes the output so far decode to the input so far, say to send one part of an HTTP response; `Finish` ends the frame. A flush ends the block in progress, 3 bytes of block header besides what it holds; a flush with nothing new since the last writes nothing, and so does one before any input, since the frame header comes with the first block.
 
 ```mbt check
 ///|
@@ -156,7 +156,7 @@ Not included: levels 13 to 22 (they act as 12), long-distance matching, multithr
 
 ## Memory
 
-Memory is the window (at most the frame's `Window_Size`, and no more than its output so far), one compressed block of at most 128 KiB and its literals, plus about 11 KiB of tables. `Decoder(max_window_bits=n)` refuses frames that need a window over `2^n` bytes, before allocating anything; the default 27 (128 MiB) is the reference decoder's. For HTTP, RFC 9659 asks for 23 (8 MiB). `memory_usage()` reports the window and the block buffers: at most `2^n` bytes plus 256 KiB.
+Memory is the window (at most the frame's `Window_Size`, and no more than its output so far), one compressed block of at most 128 KiB and its literals, plus 13 KiB of tables. `Decoder(max_window_bits=n)` refuses frames that need a window over `2^n` bytes, before allocating anything; the default 27 (128 MiB) is the reference decoder's. For HTTP, RFC 9659 asks for 23 (8 MiB). `memory_usage()` reports all of it: at most `2^n` bytes plus 256 KiB plus 13,156 bytes of tables.
 
 The encoder's memory is set by its level: for input of unknown size, about 3.1 MiB at level 1, 6.8 MiB at level 3 and 50 MiB at level 12 (its 4 MiB window, as much again before it slides, and 40 MiB of match tables). A known `content_size` shrinks the window and the tables to fit. `memory_usage()` reports it, and stays within that bound whatever the steps.
 

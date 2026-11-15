@@ -213,12 +213,22 @@ pub fn Decoder::reset(self : Decoder) -> Unit {
 }
 
 ///|
-/// Bytes held in buffers sized by the stream: the window, the compressed
-/// block and its literals. The fixed-size tables are not counted. At most
-/// `(1 << max_window_bits) + 2 * 128 KiB`; the window is released when a
-/// frame needs a smaller one, so it may drop between frames.
+/// Bytes the decoder holds: the window, the compressed block and its
+/// literals, which grow with the stream, and the Huffman and FSE tables and
+/// their scratch space, 13,156 bytes allocated with the decoder. At most
+/// `(1 << max_window_bits) + 2 * 128 KiB` plus those; the window is released
+/// when a frame needs a smaller one, so it may drop between frames. A
+/// dictionary is the caller's, kept by reference, and not counted; nor are
+/// the frame header being read and the checksum's state, under 100 bytes.
 pub fn Decoder::memory_usage(self : Decoder) -> Int32 {
-  self.ring.length() + self.block.length() + self.literals.length()
+  self.ring.length() +
+  self.block.length() +
+  self.literals.length() +
+  self.huffman.memory_usage() +
+  self.ll_store.memory_usage() +
+  self.of_store.memory_usage() +
+  self.ml_store.memory_usage() +
+  self.scratch.memory_usage()
 }
 
 ///|
@@ -303,11 +313,9 @@ fn Decoder::step_with(
   let status = match status {
     NeedMoreInput if end =>
       if !(self.state is Magic && self.hdr_len == 0) {
-        return self.fail(
-          CodecError(Truncated, "the stream ends inside a frame"),
-        )
+        return self.fail(CodecError(Truncated, "the input ends inside a frame"))
       } else if self.frames == 0 {
-        return self.fail(CodecError(Truncated, "the stream holds no frame"))
+        return self.fail(CodecError(Truncated, "the input holds no frame"))
       } else {
         self.state = Done
         Status::Done
@@ -595,7 +603,7 @@ fn Decoder::unit(self : Decoder) -> Status? raise Stop {
     Checksum => self.checksum()
     Done => {
       if self.until is EndOfInput && self.in_pos < self.view.length() {
-        raise Fail(TrailingData, "data after the end of the stream")
+        raise Fail(TrailingData, "data after the last frame")
       }
       return Some(Done)
     }

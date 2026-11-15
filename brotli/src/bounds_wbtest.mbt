@@ -20,9 +20,23 @@ fn max_decoder_table_bytes() -> Int32 {
 }
 
 ///|
+/// What a decoder allocates when it is made, as RESOURCE_BOUNDS.md gives it.
+const DECODER_FIXED_MEMORY : Int32 = 27729
+
+///|
 /// The bound RESOURCE_BOUNDS.md gives for `Decoder::memory_usage`.
 fn decoder_memory_bound(max_window_bits : Int32) -> Int32 {
-  (1 << max_window_bits) + max_decoder_table_bytes()
+  (1 << max_window_bits) + max_decoder_table_bytes() + DECODER_FIXED_MEMORY
+}
+
+///|
+test "a new decoder holds exactly its fixed memory" {
+  for bits in [10, 16, 24] {
+    assert_eq(
+      Decoder(max_window_bits=bits).memory_usage(),
+      DECODER_FIXED_MEMORY,
+    )
+  }
 }
 
 ///|
@@ -141,14 +155,30 @@ fn check_encoder_bounds(e : Encoder, room : Int32) -> Unit raise {
 }
 
 ///|
+/// What an encoder allocates when it is made, as RESOURCE_BOUNDS.md gives
+/// it: the hash table, and the meta-block's buffers with the distance ring.
+fn encoder_fixed_memory(window_bits : Int32) -> Int32 {
+  (16 << window_bits.min(15)) + 351628
+}
+
+///|
 /// The bound RESOURCE_BOUNDS.md gives for `Encoder::memory_usage`: the
-/// input buffer at its largest, and twice the most output that waits.
+/// input buffer at its largest, twice the most output that waits, and what
+/// the encoder allocates when it is made.
 fn encoder_memory_bound(window_bits : Int32) -> Int32 {
   (1 << window_bits) -
   16 +
   (1 << (window_bits - 2)).max(BLOCK_SIZE) +
   BLOCK_SIZE +
-  2 * MAX_ENCODER_PENDING
+  2 * MAX_ENCODER_PENDING +
+  encoder_fixed_memory(window_bits)
+}
+
+///|
+test "a new encoder holds exactly its fixed memory" {
+  for w in 10..<=24 {
+    assert_eq(Encoder(window_bits=w).memory_usage(), encoder_fixed_memory(w))
+  }
 }
 
 ///|
@@ -171,8 +201,8 @@ fn stream_wbits(stream : BytesView) -> Int32 {
 test "memory_usage stays within its bound after every step" {
   // The figures RESOURCE_BOUNDS.md gives.
   inspect(max_decoder_table_bytes(), content="1343596")
-  inspect(encoder_memory_bound(22), content="5439600")
-  inspect(encoder_memory_bound(24), content="21168240")
+  inspect(encoder_memory_bound(22), content="6315516")
+  inspect(encoder_memory_bound(24), content="22044156")
   let rng = Rng::new(2026)
   let mut largest = 0
   for v in vectors {
@@ -211,7 +241,10 @@ test "memory_usage stays within its bound after every step" {
     assert_true(decompress(stream) == input)
     // `reset` releases the input buffer.
     encoder.reset()
-    assert_true(encoder.memory_usage() <= 2 * MAX_ENCODER_PENDING)
+    assert_true(
+      encoder.memory_usage() <=
+      2 * MAX_ENCODER_PENDING + encoder_fixed_memory(encoder.window_bits),
+    )
   }
 }
 

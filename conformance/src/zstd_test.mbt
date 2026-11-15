@@ -5,10 +5,10 @@ fn zstd(window_bits : Int32) -> @zstd.Decoder {
 }
 
 ///|
-/// The most memory gaato/zstd documents for a window limit: the window and
-/// two 128 KiB block buffers.
+/// The most memory gaato/zstd documents for a window limit: the window, two
+/// 128 KiB block buffers and 13,156 bytes of tables.
 fn zstd_memory(window_bits : Int32) -> Int32 {
-  (1 << window_bits) + 2 * (1 << 17)
+  (1 << window_bits) + 2 * (1 << 17) + 13156
 }
 
 ///|

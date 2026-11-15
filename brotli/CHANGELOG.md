@@ -14,7 +14,15 @@ never does. Every breaking change is listed with a migration note.
 
 ### Changed
 
+- **`memory_usage` counts everything the codec allocated,** as the other modules' do and as CONTRACT.md now says in one way. The encoder's adds the hash table (`16 << min(window_bits, 15)` bytes, 512 KiB from 15 up) and a meta-block's commands, histograms and codes (351,628 bytes); the decoder's adds the context maps and scratch space it is made with (27,729 bytes). RESOURCE_BOUNDS.md gives the new bounds: 6,315,516 bytes for an encoder at `window_bits` 22. Migration: a caller that compares `memory_usage` with a limit of its own allows for the larger figure.
 - **The encoder builds its prefix codes as gaato/deflate and gaato/zstd do,** with libdeflate's method (`CodeMaker`, from the repository's shared parts) instead of flooring the frequencies until the optimal code fits, which allocated and sorted for every code. The streams change, and decode as before: the Canterbury corpus comes to 645,891 bytes against 645,860, and each of the benchmarks' text and binary inputs to 1 byte more.
+- **Error messages.** The messages of `Truncated` and `TrailingData` read the same way as in the other modules: "the input holds no ..." or "the input ends inside ...", and "data after ..." the last unit. `Truncated` says "the input holds no stream" for empty input and "the input ends inside the stream" otherwise (it said "the stream ends early"); `TrailingData` says "data after the last meta-block". The kinds are unchanged.
+
+### Fixed
+
+- **A stream whose input ends on a meta-block's boundary before `Finish` no longer depends on the split.** When a step's input filled a 64 KiB meta-block exactly and `Finish` came in a later step, the encoder wrote that meta-block as not the last and then an empty last one, a byte more than for the same input in one step; it now keeps a full meta-block until the next step says whether more follows.
+- **`decompress(max_output=)` cannot overflow and reports a negative limit as 0,** as gaato/zstd's and gaato/deflate's do.
+- **The last meta-block's choice between compressed and uncompressed counts the empty last meta-block an uncompressed one needs after it,** 1 byte, so a last meta-block that compresses to within that byte of its size is no longer written uncompressed.
 
 ## [0.4.3] - 2026-11-15
 

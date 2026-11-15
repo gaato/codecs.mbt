@@ -45,7 +45,13 @@ test "errors carry a kind and a message" {
   } noraise {
     _ => "decoded"
   }
-  inspect(result, content="Truncated: the stream ends early")
+  inspect(result, content="Truncated: the input ends inside the stream")
+  let empty = try @brotli.decompress(b""[:]) catch {
+    @codec.CodecError(kind, message) => "\{Repr(kind)}: \{message}"
+  } noraise {
+    _ => "decoded"
+  }
+  inspect(empty, content="Truncated: the input holds no stream")
 }
 
 ///|

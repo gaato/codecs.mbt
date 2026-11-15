@@ -60,7 +60,7 @@ test "decode a stream chunk by chunk" {
 }
 ```
 
-Encoding works the same way. `Flush` makes the output so far decode to the input so far, say to send one part of an HTTP response; `Finish` ends the stream.
+Encoding works the same way. `Flush` makes the output so far decode to the input so far, say to send one part of an HTTP response; `Finish` ends the stream. A flush ends the meta-block in progress and pads to a byte with an empty metadata block, as the reference encoder's does; a flush with nothing new since the last writes nothing, and one before any input writes the stream header and that padding, 2 bytes.
 
 ```mbt check
 ///|
@@ -131,7 +131,7 @@ The encoder uses greedy LZ77 (lazy by one byte) and one prefix code per meta-blo
 
 The decoder's memory is the window (at most 16 MiB, and no more than the output so far) plus tables of at most 1.3 MiB; `memory_usage()` reports it. `Decoder(max_window_bits=n)` refuses streams that need a window over `2^n - 16` bytes with `LimitExceeded`, saying how much the stream needs.
 
-The encoder's memory is its window (`Encoder(window_bits=n)`, 22 by default: 4 MiB, growing with the input to at most twice what it has taken, and up to a quarter more before it slides) plus a 64 KiB meta-block, its output and about 1 MiB of fixed tables.
+The encoder's memory is its window (`Encoder(window_bits=n)`, 22 by default: 4 MiB, growing with the input to at most twice what it has taken, and up to a quarter more before it slides) plus a 64 KiB meta-block, its output and 855 KiB of fixed tables (the hash table and the meta-block's commands); `memory_usage()` reports all of it.
 
 ## Errors
 

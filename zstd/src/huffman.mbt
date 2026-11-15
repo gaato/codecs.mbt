@@ -38,6 +38,20 @@ fn Huffman::new() -> Huffman {
 }
 
 ///|
+/// The table's and its scratch space's bytes.
+fn Huffman::memory_usage(self : Huffman) -> Int32 {
+  self.symbol.length() +
+  self.nbits.length() +
+  4 *
+  (
+    self.weights.length() +
+    self.weight_count.length() +
+    self.entry_start.length()
+  ) +
+  self.weight_table.memory_usage()
+}
+
+///|
 /// Takes `other`'s table: its entries and code length.
 fn Huffman::copy_from(self : Huffman, other : Huffman) -> Unit {
   FixedArray::unsafe_blit(self.symbol, 0, other.symbol, 0, self.symbol.length())

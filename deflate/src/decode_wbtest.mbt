@@ -127,6 +127,27 @@ test "until=EndOfMember leaves what follows the final block, under every split" 
 }
 
 ///|
+test "is_finished stays false while output from the final block waits" {
+  let stream = vector("small_level9").input()
+  let out = FixedArray::make(1, b'\x00')
+  let decoder = Decoder()
+  let mut rest = stream[:]
+  let mut produced = 0
+  for ;; {
+    let status = decoder.step_into(rest, out, end=false)
+    rest = rest[decoder.last_consumed():]
+    produced += decoder.last_produced()
+    if status is NeedMoreOutput {
+      assert_false(decoder.is_finished())
+    } else {
+      break
+    }
+  }
+  assert_true(produced > 1)
+  assert_true(decoder.is_finished())
+}
+
+///|
 test "until=EndOfInput: Done waits for end, and bytes after the stream are trailing" {
   let stream = vector("small_level9").input()
   let out = FixedArray::make(1 << 16, b'\x00')
@@ -202,7 +223,10 @@ test "messages say what is wrong" {
       _ => "decoded"
     }
   }
-  inspect(message(b""), content="Truncated: the DEFLATE data ends early")
+  inspect(
+    message(b""),
+    content="Truncated: the input ends inside the DEFLATE data",
+  )
   inspect(
     message(b"\x01\x05\x00\xfb\xff"),
     content="Corrupt: a stored block's LEN and NLEN disagree",

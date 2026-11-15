@@ -17,6 +17,12 @@ fn Fse::new(max_log : Int32) -> Fse {
 }
 
 ///|
+/// The table's bytes.
+fn Fse::memory_usage(self : Fse) -> Int32 {
+  4 * self.entry.length()
+}
+
+///|
 /// The table that always gives `symbol` and reads no bits (`RLE_Mode`).
 fn Fse::set_rle(self : Fse, symbol : Byte) -> Unit {
   self.log = 0
@@ -80,6 +86,12 @@ fn FseScratch::new() -> FseScratch {
     next: FixedArray::make(256, 0),
     symbols: FixedArray::make(1 << 9, b'\x00'),
   }
+}
+
+///|
+/// The scratch space's bytes.
+fn FseScratch::memory_usage(self : FseScratch) -> Int32 {
+  4 * (self.probs.length() + self.next.length()) + self.symbols.length()
 }
 
 ///|

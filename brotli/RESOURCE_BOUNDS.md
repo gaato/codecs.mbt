@@ -24,26 +24,32 @@ reaches the bound is checked in review. The other tables are prose.
 | One-shot output (`decompress`, `max_output`) | `max_output` bytes when given; unlimited by default | `LimitExceeded` with resource `Output`, no `needed`, and `max_output` as `limit` | `src/decode_wbtest.mbt`: "decompress honours max_output" |
 | Encoder input buffer (`src/encoder.mbt`, `data`) | The window (`(1 << window_bits) - 16` bytes, at most 16 MiB) plus `max(1 << (window_bits - 2), 64 KiB)` of slack plus one 64 KiB meta-block not encoded yet: 5.06 MiB at the default `window_bits` 22, 20.06 MiB at 24. Allocated from 1 KiB, doubling only as input arrives; once full, it slides down by at least the slack, keeping the window | Cannot overflow: a step takes no more input than fills one meta-block, and encodes it before taking more | `src/bounds_wbtest.mbt`: "the encoder's input buffer grows only with input, then slides" |
 | Encoder output waiting (`src/encoder.mbt`, `writer`, a `BitPacker` of `src/internal/bits`) | One meta-block's output: at most its 64 KiB of input and 64 bytes. A compressed meta-block that grows past the size of an uncompressed one is stopped and written uncompressed | `NeedMoreOutput`; no input is taken until the caller has taken it all | `src/bounds_wbtest.mbt`: "the encoder's waiting output is at most a meta-block" |
-| Decoder memory (`Decoder::memory_usage`) | The window and the prefix code tables above, the buffers sized by the stream: at most `(1 << max_window_bits) + 1,343,596` bytes. The tables are 256 trees of each category plus the block type, block count, context map and code length codes, at 2 bytes an entry; `reset` releases the window and keeps the tables | Cannot overflow: the window and the tables are bounded above | `src/bounds_wbtest.mbt`: "memory_usage stays within its bound after every step", "output slices, the stash and the tables stay within their bounds"; `src/fuzz_wbtest.mbt`: "corrupted streams raise errors or decode, within bounds, never abort" |
-| Encoder memory (`Encoder::memory_usage`) | The input buffer and the waiting output above, the buffers that grow with the stream: at most `(1 << window_bits) - 16 + max(1 << (window_bits - 2), 64 KiB) + 64 KiB + 131,200` bytes (the output buffer doubles, so it holds up to twice one meta-block's output): 5,439,600 bytes at the default `window_bits` 22, 21,168,240 at 24. The hash table and the commands are fixed per encoder and not counted; `reset` releases the input buffer | Cannot overflow: the input buffer and the waiting output are bounded above | `src/bounds_wbtest.mbt`: "memory_usage stays within its bound after every step", "the encoder's input buffer grows only with input, then slides" |
+| Decoder memory (`Decoder::memory_usage`) | The window and the prefix code tables above, which grow with the stream, and what is allocated with the decoder (below): at most `(1 << max_window_bits) + 1,343,596 + 27,729` bytes. The tables are 256 trees of each category plus the block type, block count, context map and code length codes, at 2 bytes an entry; `reset` releases the window and keeps the tables. The static dictionary is shared and an LZ77 dictionary is the caller's, so neither is counted | Cannot overflow: the window and the tables are bounded above | `src/bounds_wbtest.mbt`: "memory_usage stays within its bound after every step", "output slices, the stash and the tables stay within their bounds"; `src/fuzz_wbtest.mbt`: "corrupted streams raise errors or decode, within bounds, never abort" |
+| Encoder memory (`Encoder::memory_usage`) | The input buffer and the waiting output above, which grow with the stream, and what is allocated with the encoder (below): at most `(1 << window_bits) - 16 + max(1 << (window_bits - 2), 64 KiB) + 64 KiB + 131,200` bytes (the output buffer doubles, so it holds up to twice one meta-block's output) plus `(16 << min(window_bits, 15)) + 351,628`: 6,315,516 bytes at the default `window_bits` 22, 22,044,156 at 24. `reset` releases the input buffer. A dictionary's index is counted by `Dictionary::memory_usage` | Cannot overflow: the input buffer and the waiting output are bounded above | `src/bounds_wbtest.mbt`: "memory_usage stays within its bound after every step", "the encoder's input buffer grows only with input, then slides" |
 | Encoder commands (`src/meta_block_writer.mbt`, `MetaBlock`) | 16,385 per meta-block: one per 4-byte match in 64 KiB, and one for the literals at the end. Five arrays of that, allocated once | Cannot overflow: matches are at least 4 bytes | `src/bounds_wbtest.mbt`: "the encoder's input buffer grows only with input, then slides", "the encoder's waiting output is at most a meta-block" |
 
 ## Fixed per decoder
 
+Allocated when the decoder is made and counted by `Decoder::memory_usage`,
+27,729 bytes in all (`src/bounds_wbtest.mbt`: "a new decoder holds exactly
+its fixed memory"), apart from the static dictionary, which is shared:
+
 | Structure | Size |
 |---|---|
 | Context maps | 16 KiB (literals) + 1 KiB (distances) |
-| Code length scratch, table builder scratch, block type state | About 8 KiB |
+| Code length scratch, table builder scratch, trees' offsets, block type state | About 10 KiB |
 | Transformed dictionary word | 37 bytes |
-| The static dictionary and transform tables | 122,784 + about 1 KiB, shared by all decoders |
+| The static dictionary and transform tables | 122,784 + about 1 KiB, shared by all decoders and not counted |
 
 ## Fixed per encoder
 
+Allocated when the encoder is made and counted by `Encoder::memory_usage`
+(`src/bounds_wbtest.mbt`: "a new encoder holds exactly its fixed memory"):
+
 | Structure | Size |
 |---|---|
-| LZ77 hash table (`src/internal/lz77`) | `4 << min(window_bits, 15)` positions: 128 Ki entries, 512 KiB at 4 bytes each |
-| Meta-block commands and their codes | Five arrays of 16,385 (320 KiB), plus histograms and codes of the 256-, 704- and 64-symbol alphabets |
-| Distance ring, code length scratch | A few KiB |
+| LZ77 hash table (`src/internal/lz77`) | `4 << min(window_bits, 15)` positions, 4 bytes each: `16 << min(window_bits, 15)` bytes, 512 KiB from `window_bits` 15 up |
+| Meta-block commands, their histograms, codes and the code writer's scratch, and the distance ring | 351,628 bytes: five arrays of 16,385 (320 KiB), the histograms, lengths and codes of the 256-, 704- and 64-symbol alphabets, `CodeMaker`'s 5,760 bytes and the run-length coded lengths |
 
 ## Left to the caller
 

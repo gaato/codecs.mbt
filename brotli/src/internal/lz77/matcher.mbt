@@ -57,6 +57,12 @@ pub fn Matcher::capacity(self : Matcher) -> Int32 {
 }
 
 ///|
+/// The table's bytes: 4 per position.
+pub fn Matcher::memory_usage(self : Matcher) -> Int32 {
+  4 * self.table.length()
+}
+
+///|
 fn Matcher::hash(self : Matcher, data : FixedArray[Byte], pos : Int32) -> Int32 {
   hash4(data, pos, self.hash_bits)
 }

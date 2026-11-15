@@ -200,7 +200,7 @@ test "errors stick until reset, with a kind and a message" {
   inspect(message(b""), content="Truncated: the input holds no stream")
   inspect(
     message(b"\x78"),
-    content="Truncated: the stream ends inside its header or trailer",
+    content="Truncated: the input ends inside the header or the trailer",
   )
   inspect(
     message(b"\x78\x9d"),

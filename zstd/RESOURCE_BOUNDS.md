@@ -28,7 +28,7 @@ checked against the limits before anything is allocated from them.
 | Frame output against its content size | `Frame_Content_Size` when the header declares one, checked after every block | `Corrupt` | `src/crafted_wbtest.mbt`: "content sizes: every field size, and frames that disagree with theirs" |
 | Dictionary (`src/decoder.mbt`, `dictionary`) | The caller's bytes, held by reference and not copied (see "Left to the caller"); a match that reaches before the frame's output reads them there. The window is the frame's, with a dictionary or without | An offset more than the dictionary's length before the output is `Corrupt` | `src/dictionary_wbtest.mbt`: "copy_from_dictionary: the dictionary's end, its last byte, and past it", "a dictionary is not counted in memory_usage" |
 | Skippable frames | Skipped by a counter (up to 2^32 - 1 bytes); nothing is kept | Cannot overflow | `src/crafted_wbtest.mbt`: "skippable frames are skipped without being kept" |
-| Reported memory (`Decoder::memory_usage`) | The window, the compressed block and the literals buffer: at most `(1 << max_window_bits) + 2 * 128 KiB`. The fixed tables below are not counted. It drops when the window is released for a frame that needs a smaller one, and to 0 at `reset` | Cannot overflow: each part is bounded by its own row | `src/bounds_wbtest.mbt`: "memory_usage stays within the window limit and two blocks", "memory_usage drops when a frame needs a smaller window" |
+| Reported memory (`Decoder::memory_usage`) | The window, the compressed block and the literals buffer, and the fixed tables below (13,156 bytes): at most `(1 << max_window_bits) + 2 * 128 KiB + 13,156`. It drops when the window is released for a frame that needs a smaller one, and to the tables at `reset`. A dictionary, the frame header being read (14 bytes) and the XXH64 state are not counted | Cannot overflow: each part is bounded by its own row | `src/bounds_wbtest.mbt`: "memory_usage stays within the window limit and two blocks", "memory_usage drops when a frame needs a smaller window" |
 | Huffman weights (`src/huffman.mbt`, `weights`) | 255 decoded weights, as RFC 8878 allows | `Corrupt` | `src/crafted_wbtest.mbt`: "Huffman tree descriptions" |
 | One-shot output (`decompress`, `max_output`) | `max_output` bytes when given; unlimited by default | `LimitExceeded({ resource: Output, needed: None, limit: max_output })` | `src/decode_wbtest.mbt`: "decompress honours max_output" |
 | Unfinished encoder input (`src/encoder.mbt`, `data_len`) | At most Block_Maximum_Size, min(window, 128 KiB), and no more than a single-segment frame's content size. Stored directly in shared match history; no separate input allocation | Cannot overflow: only the cutter ends a block, before any more input is taken | `src/bounds_wbtest.mbt`: "unfinished encoder input lives only in bounded shared history", "the encoder's memory_usage stays within its bound after every step" |
@@ -43,12 +43,15 @@ checked against the limits before anything is allocated from them.
 
 ## Fixed per decoder
 
+Allocated when the decoder is made and counted by `Decoder::memory_usage`, 13,156
+bytes in all, apart from the predefined tables, which are shared:
+
 | Structure | Size |
 |---|---|
 | FSE tables for literals lengths, match lengths and offsets | 512 + 512 + 256 states of 4 bytes (symbol, bits and base in one entry): 5 KiB |
 | Huffman table | 2,048 entries of 2 bytes: 4 KiB, and a 64-state weight table |
 | Table scratch (a distribution, next states and a 512-byte spread), XXH64 state, repeat offsets | About 2.5 KiB |
-| The predefined tables | 160 states, shared by all decoders |
+| The predefined tables | 160 states, shared by all decoders and not counted |
 
 ## Fixed per encoder
 

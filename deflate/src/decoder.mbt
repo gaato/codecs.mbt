@@ -190,11 +190,7 @@ fn Decoder::step_with(
     Ended => self.ended(input, 0, 0, end~)
     Done => {
       if self.until is EndOfInput && input.length() > 0 {
-        self.fail(
-          CodecError(TrailingData, "data after the end of the stream"),
-          0,
-          0,
-        )
+        self.fail(CodecError(TrailingData, "data after the final block"), 0, 0)
       }
       self.finish(Done, 0, 0)
     }

@@ -1,8 +1,13 @@
 ///|
+/// The Huffman and FSE tables and their scratch space, allocated with the
+/// decoder, as RESOURCE_BOUNDS.md gives them.
+const DECODER_TABLES : Int32 = 13156
+
+///|
 /// The most `memory_usage` may report: the window limit, one compressed
-/// block and its literals.
+/// block and its literals, and the tables.
 fn memory_bound(max_window_bits : Int32) -> Int32 {
-  (1 << max_window_bits) + 2 * MAX_BLOCK_SIZE
+  (1 << max_window_bits) + 2 * MAX_BLOCK_SIZE + DECODER_TABLES
 }
 
 ///|
@@ -20,10 +25,11 @@ fn check_bounds(d : Decoder, room : Int32) -> Unit raise {
   // One compressed block and its literals.
   assert_true(d.block.length() <= MAX_BLOCK_SIZE)
   assert_true(d.literals.length() <= MAX_BLOCK_SIZE)
-  // What `memory_usage` reports, within the window and two blocks.
+  // What `memory_usage` reports, within the window, two blocks and the
+  // tables.
   assert_eq(
     d.memory_usage(),
-    d.ring.length() + d.block.length() + d.literals.length(),
+    d.ring.length() + d.block.length() + d.literals.length() + DECODER_TABLES,
   )
   assert_true(d.memory_usage() <= memory_bound(d.max_window_bits))
   // Fixed tables.
@@ -129,8 +135,8 @@ test "memory_usage stays within the window limit and two blocks" {
     next_out=() => 1 << 20,
     check=(d, _) => peak = peak.max(d.memory_usage()),
   )
-  inspect(peak, content="8395131")
-  inspect(memory_bound(v.window_bits), content="8650752")
+  inspect(peak, content="8408287")
+  inspect(memory_bound(v.window_bits), content="8663908")
 }
 
 ///|
@@ -140,16 +146,17 @@ test "memory_usage drops when a frame needs a smaller window" {
   let small = frame(plain(b'\x00'), block(0, [b'b']))
   let decoder = Decoder()
   let out = FixedArray::make(1 << 16, b'\x00')
-  inspect(decoder.memory_usage(), content="0")
+  // The tables, 13,156 bytes, are allocated with the decoder.
+  inspect(decoder.memory_usage() - DECODER_TABLES, content="0")
   debug_inspect(
     decoder.step_into(large, out, end=false),
     content="NeedMoreInput",
   )
-  inspect(decoder.memory_usage(), content="8192")
+  inspect(decoder.memory_usage() - DECODER_TABLES, content="8192")
   debug_inspect(decoder.step_into(small, out, end=true), content="Done")
-  inspect(decoder.memory_usage(), content="1024")
+  inspect(decoder.memory_usage() - DECODER_TABLES, content="1024")
   decoder.reset()
-  inspect(decoder.memory_usage(), content="0")
+  inspect(decoder.memory_usage(), content="13156")
 }
 
 ///|

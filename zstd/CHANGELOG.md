@@ -17,9 +17,10 @@ never does. Every breaking change is listed with a migration note.
 
 ### Changed
 
+- **The decoder's `memory_usage` counts its Huffman and FSE tables too,** 13,156 bytes allocated with the decoder, as the encoder's and the other modules' count everything they allocate; it was the window and the block buffers only. A dictionary, held by reference, is still not counted. Migration: a caller that compares `memory_usage` with a limit of its own allows 13,156 bytes more.
 - **Level 0 is the default level, 3, as in zstd.** It acted as 1. Migration: a caller that wants what level 0 gave passes `level=1`.
 - **Building a literals' Huffman code sorts its most frequent symbols by heapsort, as libdeflate does.** They were sorted by insertion, which takes time quadratic in their number; encoding the benchmarks' inputs takes up to 19 % less time on Native at the higher levels. The output does not change.
-
+- **Error messages.** The messages of `Truncated` and `TrailingData` read the same way as in the other modules: "the input holds no ..." or "the input ends inside ...", and "data after ..." the last unit. `Truncated` says "the input holds no frame" or "the input ends inside a frame" (it said "the stream ..."); `TrailingData` says "data after the last frame". The kinds are unchanged.
 ## [0.4.1] - 2026-11-15
 
 ### Changed

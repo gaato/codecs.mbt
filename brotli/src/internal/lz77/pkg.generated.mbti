@@ -18,6 +18,7 @@ pub fn Matcher::Matcher(hash_bits? : Int32) -> Self
 pub fn Matcher::capacity(Self) -> Int32
 pub fn Matcher::distance(Self) -> Int32
 pub fn Matcher::find(Self, FixedArray[Byte], Int32, Int32, Int32, Int32) -> Int32
+pub fn Matcher::memory_usage(Self) -> Int32
 pub fn Matcher::reset(Self) -> Unit
 pub fn Matcher::slide(Self, Int32) -> Unit
 

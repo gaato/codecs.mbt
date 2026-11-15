@@ -64,6 +64,30 @@ fn MetaBlock::new() -> MetaBlock {
 }
 
 ///|
+/// The commands', the histograms' and the codes' bytes, and the code
+/// writer's scratch space: all of it fixed, allocated with the encoder.
+fn MetaBlock::memory_usage(self : MetaBlock) -> Int32 {
+  4 *
+  (
+    self.inserts.length() +
+    self.copies.length() +
+    self.symbols.length() +
+    self.dist_symbols.length() +
+    self.dist_extras.length() +
+    self.lit_freqs.length() +
+    self.cmd_freqs.length() +
+    self.dist_freqs.length() +
+    self.lit_lengths.length() +
+    self.lit_codes.length() +
+    self.cmd_lengths.length() +
+    self.cmd_codes.length() +
+    self.dist_lengths.length() +
+    self.dist_codes.length()
+  ) +
+  self.code_writer.memory_usage()
+}
+
+///|
 fn MetaBlock::clear(self : MetaBlock) -> Unit {
   self.count = 0
   self.lit_freqs.fill(0)
@@ -294,8 +318,10 @@ fn Encoder::write_compressed(
 ) -> Bool {
   let w = self.writer
   let mb = self.meta_block
-  // An uncompressed meta-block takes the bytes and at most 4 header bytes.
-  let budget = self.writer.position() + (end - start + 4) * 8
+  // An uncompressed meta-block takes the bytes and at most 4 header bytes,
+  // and the last one an empty last meta-block after it, 1 byte more.
+  let budget = self.writer.position() +
+    (end - start + 4 + (if is_last { 1 } else { 0 })) * 8
   w.write(1, if is_last { 1 } else { 0 })
   if is_last {
     w.write(1, 0)

@@ -16,7 +16,7 @@ fn Decoder::magic(self : Decoder) -> Unit raise Stop {
   } else {
     // The stream ends where these four bytes begin, if in this step's input.
     self.in_pos = (self.in_pos - self.hdr_len).max(0)
-    raise Fail(TrailingData, "data after the last frame that starts no frame")
+    raise Fail(TrailingData, "data after the last frame")
   }
 }
 

@@ -33,6 +33,22 @@ fn CodeWriter::new() -> CodeWriter {
 }
 
 ///|
+/// The scratch space's bytes: CodeMaker's, and the run-length coded
+/// lengths and the code length code.
+fn CodeWriter::memory_usage(self : CodeWriter) -> Int32 {
+  self.maker.memory_usage() +
+  4 *
+  (
+    self.used.length() +
+    self.rle_symbols.length() +
+    self.rle_extra.length() +
+    self.cl_freqs.length() +
+    self.cl_lengths.length() +
+    self.cl_codes.length()
+  )
+}
+
+///|
 /// Builds the prefix code of the frequencies `freqs[0..alphabet)` into
 /// `lengths` and `codes` (bit-reversed, ready to write) and writes it. A
 /// code with no used symbol is written as the one-symbol code of symbol 0.

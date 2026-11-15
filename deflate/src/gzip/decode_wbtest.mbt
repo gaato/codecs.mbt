@@ -436,12 +436,12 @@ test "errors stick until reset, with a kind and a message" {
   inspect(message(b""), content="Truncated: the input holds no member")
   inspect(
     message(b"\x1f\x8b\x08"),
-    content="Truncated: the stream ends inside a member's header",
+    content="Truncated: the input ends inside a member's header",
   )
   let stream = vector("small_level6").input()
   inspect(
     message(stream[:stream.length() - 3].to_owned()),
-    content="Truncated: the stream ends inside a member's trailer",
+    content="Truncated: the input ends inside a member's trailer",
   )
   inspect(
     message(b"PK\x03\x04\x00\x00\x00\x00\x00\x00"),

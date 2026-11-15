@@ -281,10 +281,14 @@ pub fn Decoder::last_produced(self : Decoder) -> Int32 {
 }
 
 ///|
-/// Bytes the decoder holds in buffers sized by the stream: the window, and
-/// the prefix code tables of the largest meta-block so far. At most
-/// `1 << max_window_bits` plus 1,343,596 bytes of tables (see
-/// RESOURCE_BOUNDS.md). `reset` releases the window and keeps the tables.
+/// Bytes the decoder holds: the window and the prefix code tables of the
+/// largest meta-block so far, which grow with the stream, and what is
+/// allocated with the decoder (the context maps, the trees' offsets, the
+/// code reader's and the table builder's scratch space), 27,729 bytes. At
+/// most `1 << max_window_bits` plus 1,343,596 bytes of tables plus those
+/// (see RESOURCE_BOUNDS.md). `reset` releases the window and keeps the
+/// tables. The static dictionary, shared by every decoder, and an LZ77
+/// dictionary, the caller's bytes kept by reference, are not counted.
 pub fn Decoder::memory_usage(self : Decoder) -> Int32 {
   let mut entries = self.lit_trees.pool.length() +
     self.cmd_trees.pool.length() +
@@ -295,7 +299,37 @@ pub fn Decoder::memory_usage(self : Decoder) -> Int32 {
     entries += self.type_codes[c].pool.length() +
       self.count_codes[c].pool.length()
   }
-  self.ring.length() + 2 * entries
+  self.ring.length() + 2 * entries + self.fixed_memory()
+}
+
+///|
+/// The bytes of what is allocated with the decoder, whatever the stream.
+fn Decoder::fixed_memory(self : Decoder) -> Int32 {
+  let mut offsets = self.map_code.offsets.length() +
+    self.lit_trees.offsets.length() +
+    self.cmd_trees.offsets.length() +
+    self.dist_trees.offsets.length() +
+    self.code.cl_code.offsets.length()
+  for c in 0..<3 {
+    offsets += self.type_codes[c].offsets.length() +
+      self.count_codes[c].offsets.length()
+  }
+  self.lit_context_map.length() +
+  self.dist_context_map.length() +
+  self.word.length() +
+  4 *
+  (
+    offsets +
+    self.context_modes.length() +
+    self.num_types.length() +
+    self.block_type.length() +
+    self.prev_block_type.length() +
+    self.block_len.length() +
+    self.dist_ring.length() +
+    self.code.cl_lengths.length() +
+    self.code.lengths.length()
+  ) +
+  self.builder.memory_usage()
 }
 
 ///|
@@ -362,7 +396,12 @@ fn Decoder::step_with(
       self.stash_pos = 0
       self.in_pos = self.view.length()
       if end {
-        return self.fail(@codec.CodecError(Truncated, "the stream ends early"))
+        let message = if self.state is StreamHeader && kept.length() == 0 {
+          "the input holds no stream"
+        } else {
+          "the input ends inside the stream"
+        }
+        return self.fail(@codec.CodecError(Truncated, message))
       }
       self.drain()
       self.finish_step(if self.pending > 0 { NeedMoreOutput } else { status })
@@ -379,7 +418,7 @@ fn Decoder::step_with(
         // begin, if in this step's input.
         self.in_pos = (self.in_pos - self.nbits / 8).max(0)
         return self.fail(
-          @codec.CodecError(TrailingData, "data after the end of the stream"),
+          @codec.CodecError(TrailingData, "data after the last meta-block"),
         )
       }
       self.drain()

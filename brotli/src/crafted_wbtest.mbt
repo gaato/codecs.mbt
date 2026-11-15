@@ -392,7 +392,7 @@ test "malformed streams raise the error the RFC calls for" {
       #|  "dictionary reference of length 2 -> Corrupt: distance beyond the window with no dictionary word",
       #|  "dictionary transform 127 -> Corrupt: distance beyond the window and the dictionary",
       #|  "dictionary word past the end of the meta-block -> Corrupt: dictionary word past the end of the meta-block",
-      #|  "data after the end -> TrailingData: data after the end of the stream",
+      #|  "data after the end -> TrailingData: data after the last meta-block",
       #|]
     ),
   )

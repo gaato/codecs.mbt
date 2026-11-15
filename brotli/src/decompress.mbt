@@ -1,8 +1,9 @@
 ///|
 /// Decodes a whole Brotli stream held in memory. `max_output` caps the
-/// decoded size (unlimited by default): past it, `decompress` raises
-/// `LimitExceeded` with the `Output` resource and `max_output` as the limit.
-/// `max_window_bits` and `dictionary` are as for `Decoder`.
+/// decoded size (unlimited by default) and raises
+/// `LimitExceeded({ resource: Output, .. })` past it, with `max_output` (0
+/// for a negative one) as the limit; `max_window_bits` and `dictionary` are
+/// as for `Decoder`.
 pub fn decompress(
   input : BytesView,
   max_output? : Int32,
@@ -17,12 +18,13 @@ pub fn decompress(
     let status = decoder.step_into(rest, chunk, end=true)
     rest = rest[decoder.last_consumed():]
     let produced = decoder.last_produced()
-    if max_output is Some(limit) && out.length() + produced > limit {
+    // `out` holds at most `limit` bytes, so this cannot overflow.
+    if max_output is Some(limit) && produced > limit - out.length() {
       raise @codec.CodecError(
         LimitExceeded({
           resource: Output,
           needed: None,
-          limit: limit.to_uint64(),
+          limit: limit.max(0).to_uint64(),
         }),
         "the output exceeds \{limit} bytes",
       )

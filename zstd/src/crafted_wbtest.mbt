@@ -338,7 +338,7 @@ test "block headers: the reserved type and the block limit" {
 ///|
 test "skippable frames are skipped without being kept" {
   let skip = Bytes::from_array([..le(0x184D2A5F, 4), ..le(0xFFFFFFFF, 4), b'x'])
-  inspect(outcome(skip), content="Truncated: the stream ends inside a frame")
+  inspect(outcome(skip), content="Truncated: the input ends inside a frame")
   let decoder = Decoder()
   let out = FixedArray::make(16, b'\x00')
   debug_inspect(

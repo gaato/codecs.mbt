@@ -44,7 +44,7 @@ test "errors carry a kind and a message" {
   } noraise {
     _ => "decoded"
   }
-  inspect(result, content="Truncated: the stream ends inside a frame")
+  inspect(result, content="Truncated: the input ends inside a frame")
 }
 
 ///|

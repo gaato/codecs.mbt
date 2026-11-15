@@ -132,6 +132,16 @@ test "decompress honours max_output" {
     refused,
     content="LimitExceeded({ resource: Output, needed: None, limit: 152088 }): the output exceeds 152088 bytes",
   )
+  // The largest limit takes it all without overflowing; a negative one is
+  // reported as 0.
+  inspect(decompress(input, max_output=0x7fffffff).length(), content="152089")
+  let negative = try decompress(input, max_output=-5) catch {
+    @codec.CodecError(LimitExceeded(limit), _) => limit.limit
+    _ => fail("not LimitExceeded")
+  } noraise {
+    _ => fail("limit ignored")
+  }
+  inspect(negative, content="0")
 }
 
 ///|

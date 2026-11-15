@@ -136,10 +136,15 @@ complete would otherwise get a silently truncated result.
 `reset` returns the codec to the state of a new one with the same options. A
 codec reused after `reset` behaves exactly as a fresh one.
 
-`memory_usage` is the number of bytes the codec holds for the current stream
-in buffers whose size depends on the stream (windows, blocks, tables sized by
-a header). It never exceeds what the codec's limits allow, and it may drop
-between members, when a codec releases what the next member does not need.
+`memory_usage` is the number of bytes the codec holds: everything it
+allocated, the buffers that grow with the stream (windows, blocks, tables
+sized by a header) and those its options fix (hash tables, decoding tables,
+scratch space). Two things are left out, and each codec's documentation says
+which it leaves out: the caller's bytes it keeps by reference (a dictionary),
+and fixed state of a few hundred bytes at most (a header being read, a
+checksum's state). It never exceeds what the codec's limits and options
+allow, and it may drop between members, when a codec releases what the next
+member does not need.
 
 ## Streams that do not end
 
@@ -180,7 +185,7 @@ and `Resource`, so a consumer of byte-stream codecs names them with that one
 import. In a `catch` on a codec's step, where the error's type is known,
 `CodecError(kind, message)` and the kinds match unqualified and need no
 import at all; elsewhere, qualify a constructor by its type, as in
-`@codec_bytes.CodecError::CodecError(kind, _)`. What is particular to a format goes in the message. A kind of
+`@codec_bytes.CodecError::CodecError(kind, _)`. What is particular to a format goes in the message. The messages of the end-of-input kinds read the same way in every format: `Truncated` says "the input holds no ..." when no stream (frame, member, image) began, and "the input ends inside ..." when one did; `TrailingData` says "data after ..." the format's last unit (the last frame, meta-block or member, the final block, IEND, the end of a zlib stream). A kind of
 failure that no existing kind describes is added to `gaato/codec`; the enum
 is `#non_exhaustive`, so adding one breaks no one.
 
@@ -194,8 +199,8 @@ concrete codec types:
   size). Exceeding it raises `LimitExceeded` with the size the stream needs
   and the size allowed, in bytes, for the structure the limit governs (the
   window, the block), so that callers can compare across formats. These are
-  not totals: `memory_usage` counts everything the codec holds for the
-  stream, which can be more.
+  not totals: `memory_usage` counts everything the codec holds, which is
+  more.
 - **Dictionaries**, given to the constructor.
 - **Metadata** (a gzip header, a frame's declared size, the check type of an
   xz stream), read from the concrete type.

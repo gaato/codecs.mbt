@@ -464,3 +464,44 @@ test "every target writes the same bytes" {
     ),
   )
 }
+
+///|
+/// The stream of `input` given in `pieces` with `Continue`, then an empty
+/// step with `Finish`.
+fn finish_after(input : Bytes, pieces : Array[Int32]) -> Bytes raise {
+  let encoder = Encoder()
+  let out = Buffer()
+  let buffer = FixedArray::make(1 << 18, b'\x00')
+  let mut pos = 0
+  for n in pieces {
+    let status = encoder.step_into(input[pos:pos + n], buffer, action=Continue)
+    assert_true(status is NeedMoreInput)
+    assert_eq(encoder.last_consumed(), n)
+    out.write_bytesview(Bytes::from_array(buffer[:encoder.last_produced()])[:])
+    pos += n
+  }
+  assert_eq(pos, input.length())
+  let status = encoder.step_into(b""[:], buffer, action=Finish)
+  assert_true(status is Done)
+  out.write_bytesview(Bytes::from_array(buffer[:encoder.last_produced()])[:])
+  out.to_bytes()
+}
+
+///|
+test "input that ends on a meta-block's boundary before Finish gives the same stream" {
+  let rng = Rng::new(64)
+  let text = Bytes::makei(3 * BLOCK_SIZE, i => {
+    (b'a'.to_int() + rng.below(4) + i % 7).to_byte()
+  })
+  for blocks in 1..<=3 {
+    let input = text[:blocks * BLOCK_SIZE].to_bytes()
+    // The same encoder given everything with `Finish` in one step.
+    let whole = encode_drive(Encoder(), input, next_in=() => input.length(), next_out=() => {
+      1 << 18
+    })
+    assert_eq(finish_after(input, [blocks * BLOCK_SIZE]), whole)
+    assert_eq(finish_after(input, Array::make(blocks, BLOCK_SIZE)), whole)
+    assert_eq(finish_after(input, [1, blocks * BLOCK_SIZE - 1]), whole)
+    assert_true(decompress(whole) == input)
+  }
+}

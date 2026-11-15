@@ -283,8 +283,8 @@ fn Decoder::step_with(
             Fixed if self.members == 0 && self.hdr_len == 0 =>
               "the input holds no member"
             TrailerCrc | TrailerSize =>
-              "the stream ends inside a member's trailer"
-            _ => "the stream ends inside a member's header"
+              "the input ends inside a member's trailer"
+            _ => "the input ends inside a member's header"
           },
         ),
       )

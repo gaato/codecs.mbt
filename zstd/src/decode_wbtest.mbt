@@ -141,7 +141,7 @@ test "an empty stream or a few stray bytes are truncated" {
   debug_inspect(
     messages,
     content=(
-      #|["the stream holds no frame", "the stream ends inside a frame"]
+      #|["the input holds no frame", "the input ends inside a frame"]
     ),
   )
 }
