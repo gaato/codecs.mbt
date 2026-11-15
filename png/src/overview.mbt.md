@@ -117,6 +117,18 @@ test "report the text chunks" {
 }
 ```
 
+`parse_text(metadata_type(), block)` reads a text chunk's block into a `Text`: its keyword, and for iTXt its language tag and translated keyword, and its text, decoded from Latin-1 (tEXt, zTXt) or UTF-8 (iTXt). Ask for tIME too and `parse_time(block)` gives its date and time. Both raise `Corrupt` for what the specification does not allow (a keyword that is not 1 to 79 printable Latin-1 characters with single spaces, a NUL in the text, a language tag that is not BCP 47's subtags, an iTXt field that is not UTF-8 or holds a NUL, a field of tIME out of its range), which the decoder, judging as libpng does, still hands out.
+
+```mbt check
+///|
+test {
+  let text = @png.parse_text("iTXt", b"Title\x00\x00\x00en\x00\x00Hello"[:])
+  inspect(text.keyword + ": " + text.text, content="Title: Hello")
+  let time = @png.parse_time(b"\x07\xea\x0b\x0f\x0c\x00\x00"[:])
+  inspect("\{time.year}-\{time.month}-\{time.day}", content="2026-11-15")
+}
+```
+
 ## APNG
 
 An animated image's frames come one after another, each a `Frame`, its rows, and `FrameEnd`. `frame_x()`, `frame_y()`, `frame_width()` and `frame_height()` place the frame on the canvas, and its rows are as wide as the frame; `delay_numerator()` and `delay_denominator()` say how long it is shown, `dispose()` what to do with its rectangle afterwards, `blend()` how its pixels go on the canvas. These are the values to apply: a delay's denominator of 0 comes as 100, and the first frame's dispose op of PREVIOUS as `Background`, as the specification says. Putting frames together is the caller's: the decoder holds no canvas.

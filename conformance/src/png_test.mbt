@@ -79,7 +79,7 @@ fn packed_bytes(pixels : Int32, bits : Int32) -> Int32 {
 
 ///|
 /// The chunk types the tests report.
-let reported : Array[String] = ["tEXt", "zTXt", "iTXt", "iCCP"]
+let reported : Array[String] = ["tEXt", "zTXt", "iTXt", "iCCP", "tIME"]
 
 ///|
 /// Decodes `input` whole with a fresh decoder that reports the text and
@@ -176,6 +176,7 @@ fn fields_of(decoder : @png.Decoder) -> Array[String] {
 /// bytes, one after another.
 fn text_digest(blocks : Array[(String, Bytes)]) -> String {
   let all = Buffer()
+  let blocks = blocks.filter(b => b.0 != "tIME")
   for block in blocks {
     let (kind, bytes) = block
     for c in kind {
@@ -189,6 +190,39 @@ fn text_digest(blocks : Array[(String, Bytes)]) -> String {
   }
   let digest = @codec_harness.sha256(all.to_bytes())
   "text \{blocks.length()} \{digest.clamped_view(end=16)}"
+}
+
+///|
+/// A text or tIME chunk's fields as `@png.parse_text` and `@png.parse_time`
+/// read them.
+fn chunk_fields(kind : String, bytes : Bytes) -> Array[String] raise {
+  if kind == "tIME" {
+    let t = @png.parse_time(bytes[:])
+    ["\{t.year}-\{t.month}-\{t.day} \{t.hour}:\{t.minute}:\{t.second}"]
+  } else {
+    let t = @png.parse_text(kind, bytes[:])
+    [t.keyword, t.language, t.translated_keyword, t.text]
+  }
+}
+
+///|
+/// `parsed <count> <digest>` of `blocks`, as the reference writes it: the
+/// text and tIME chunks' fields as `@png.parse_text` and `@png.parse_time`
+/// read them, joined by 0x1f, each chunk ended by 0x1e, "!" for one they
+/// refuse; the first 16 hex digits of the SHA-256 of all that in UTF-8.
+fn parsed_digest(blocks : Array[(String, Bytes)]) -> String {
+  let all = StringBuilder()
+  let mut count = 0
+  for block in blocks {
+    let (kind, bytes) = block
+    guard kind is ("tEXt" | "zTXt" | "iTXt" | "tIME") else { continue }
+    let fields = chunk_fields(kind, bytes) catch { _ => ["!"] }
+    all.write_string([kind, ..fields].join("\u{1f}"))
+    all.write_char('\u{1e}')
+    count += 1
+  }
+  let digest = @codec_harness.sha256(@utf8.encode(all.to_string()))
+  "parsed \{count} \{digest.clamped_view(end=16)}"
 }
 
 ///|
@@ -358,6 +392,7 @@ test "PngSuite: every valid image's samples, fixed-length chunks and text are wh
       "\{d.width}x\{d.height} \{@codec_harness.sha256(pypng_shape(d, samples(d)))}",
       ..d.fields,
       text_digest(d.blocks),
+      parsed_digest(d.blocks),
     ].join("; ")
     if got != expected.to_owned() {
       fail("\{v.name}: \{got}, pypng: \{expected}")

@@ -7,6 +7,14 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+### Added
+
+- **Text and time chunks read into values.** `parse_text(chunk_type, block)` reads the block of a reported tEXt, zTXt or iTXt into a `Text` (keyword, language tag, translated keyword and text, from Latin-1 or UTF-8), and `parse_time(block)` a tIME into a `Time`; both raise `Corrupt` for what the specification does not allow. On PngSuite they read every text and tIME chunk as Python does.
+
+### Fixed
+
+- **`last_produced` says it counts the block a `Metadata` step writes;** it said zero after every answer but `Rows`.
+
 ## [0.1.2] - 2026-11-15
 
 ### Changed

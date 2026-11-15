@@ -65,9 +65,10 @@ let pypng_pin : String = "pypng @ git+https://gitlab.com/drj11/pypng@pypng-0.202
 /// (a CRC that does not match, since 0.20231004.0) taken as errors, and prints
 /// `pypng <version>`, then one line an image: `<file> ok <w>x<h> <sha256>`,
 /// then, separated by `; `, the fixed-length chunks pypng reads (gAMA, tRNS
-/// with the palette's alpha, bKGD, pHYs, sBIT) and `text <count> <digest>`
-/// of the text and profile chunks, inflated by Python's zlib; or `<file>
-/// error <exception>`.
+/// with the palette's alpha, bKGD, pHYs, sBIT), `text <count> <digest>`
+/// of the text and profile chunks, inflated by Python's zlib, and `parsed
+/// <count> <digest>` of the text and tIME chunks' fields as Python decodes
+/// them; or `<file> error <exception>`.
 let reference : String =
   #|import sys, os, hashlib, array, struct, warnings, zlib, png
   #|warnings.simplefilter("error")
@@ -97,6 +98,40 @@ let reference : String =
   #|        digest.update(kind + struct.pack(">I", len(block)) + block)
   #|        count += 1
   #|    return "text %d %s" % (count, digest.hexdigest()[:16])
+  #|def parsed(data):
+  #|    # The text and tIME chunks as gaato/png's parse_text and parse_time
+  #|    # read them: fields joined by 0x1f, each chunk ended by 0x1e, Latin-1
+  #|    # or UTF-8 as the chunk has them; "!" for one Python cannot read.
+  #|    out, count, at = [], 0, 8
+  #|    while at + 8 <= len(data):
+  #|        n, kind = struct.unpack(">I4s", data[at:at + 8])
+  #|        body = data[at + 8:at + 8 + n]
+  #|        at += 12 + n
+  #|        if kind not in (b"tEXt", b"zTXt", b"iTXt", b"tIME"):
+  #|            continue
+  #|        name = kind.decode()
+  #|        try:
+  #|            if kind == b"tIME":
+  #|                fields = ["%d-%d-%d %d:%d:%d" % struct.unpack(">HBBBBB", body)]
+  #|            elif kind == b"iTXt":
+  #|                k = body.index(b"\0")
+  #|                l = body.index(b"\0", k + 3)
+  #|                t = body.index(b"\0", l + 1)
+  #|                text = body[t + 1:]
+  #|                if body[k + 1] == 1:
+  #|                    text = zlib.decompress(text)
+  #|                fields = [body[:k].decode("latin-1"), body[k + 3:l].decode("latin-1"),
+  #|                          body[l + 1:t].decode("utf-8"), text.decode("utf-8")]
+  #|            else:
+  #|                k = body.index(b"\0")
+  #|                text = body[k + 1:] if kind == b"tEXt" else zlib.decompress(body[k + 2:])
+  #|                fields = [body[:k].decode("latin-1"), "", "", text.decode("latin-1")]
+  #|        except Exception:
+  #|            fields = ["!"]
+  #|        out.append("\x1f".join([name] + fields) + "\x1e")
+  #|        count += 1
+  #|    digest = hashlib.sha256("".join(out).encode("utf-8")).hexdigest()[:16]
+  #|    return "parsed %d %s" % (count, digest)
   #|def fields(reader, info):
   #|    out = []
   #|    if "gamma" in info:
@@ -131,7 +166,7 @@ let reference : String =
   #|            else:
   #|                digest.update(bytes(row))
   #|        line = ["ok", "%dx%d" % (w, h), digest.hexdigest()]
-  #|        line += fields(reader, info) + [blocks(data)]
+  #|        line += fields(reader, info) + [blocks(data), parsed(data)]
   #|        print(name, "; ".join([" ".join(line[:3])] + line[3:]))
   #|    except Exception as e:
   #|        print(name, "error", type(e).__name__)

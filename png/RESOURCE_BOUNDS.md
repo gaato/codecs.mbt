@@ -57,3 +57,4 @@ Allocated when the decoder is made, whatever the image:
 | Input chunks | What the caller passes | `step` keeps no reference to them after it returns |
 | `decode` output | The image | It returns the whole image, checked against `max_output` before anything is allocated; use `Decoder` to stream |
 | Reported chunks' blocks after they are handed out | What the caller keeps | The decoder drops its block once handed out; a `Bytes` the caller keeps is the caller's |
+| `parse_text`'s and `parse_time`'s values | The block given | Strings of the block's characters, and a block is at most `max_chunk_bytes`; the caller keeps them |

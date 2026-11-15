@@ -24,6 +24,10 @@ pub fn decode(BytesView, max_output? : Int32) -> Image raise @codec.CodecError
 
 pub fn is_signature(BytesView) -> Bool
 
+pub fn parse_text(String, BytesView) -> Text raise @codec.CodecError
+
+pub fn parse_time(BytesView) -> Time raise @codec.CodecError
+
 pub fn scatter(ArrayView[Byte], Int32, Int32, Int32, Int32, MutArrayView[Byte]) -> Unit
 
 // Errors
@@ -204,6 +208,30 @@ pub struct PhysicalSize {
 pub fn PhysicalSize::equal(Self, Self) -> Bool
 pub fn PhysicalSize::not_equal(Self, Self) -> Bool
 pub fn PhysicalSize::to_repr(Self) -> @debug.Repr
+
+#derive(Eq, @debug.Debug)
+pub(all) struct Text {
+  keyword : String
+  language : String
+  translated_keyword : String
+  text : String
+}
+pub fn Text::equal(Self, Self) -> Bool
+pub fn Text::not_equal(Self, Self) -> Bool
+pub fn Text::to_repr(Self) -> @debug.Repr
+
+#derive(Eq, @debug.Debug)
+pub(all) struct Time {
+  year : Int32
+  month : Int32
+  day : Int32
+  hour : Int32
+  minute : Int32
+  second : Int32
+}
+pub fn Time::equal(Self, Self) -> Bool
+pub fn Time::not_equal(Self, Self) -> Bool
+pub fn Time::to_repr(Self) -> @debug.Repr
 
 #derive(Eq, @debug.Debug)
 pub(all) enum Transparency {

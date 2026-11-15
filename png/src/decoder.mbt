@@ -427,8 +427,9 @@ pub fn Decoder::last_consumed(self : Decoder) -> Int32 {
 }
 
 ///|
-/// Output bytes the latest `step` wrote: those of its rows after `Rows`, and
-/// zero after any other answer, an error included.
+/// Output bytes the latest `step` wrote: those of its rows after `Rows`, the
+/// reported chunk's block after `Metadata`, and zero after any other answer,
+/// an error included.
 pub fn Decoder::last_produced(self : Decoder) -> Int32 {
   self.produced
 }
