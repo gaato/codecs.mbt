@@ -221,7 +221,7 @@ here, so that adding one later does not require changing it.
 | zlib | implemented (Decode and Encode) | A preset dictionary in the header raises `DictionaryRequired` with its Adler-32. No concatenation. |
 | raw DEFLATE | implemented (Decode and Encode) | No header and no checksum. Trailing bytes after the final block raise `TrailingData`. |
 | Snappy | implemented (framing format: Decode and Encode) | Streams one after another under `EndOfInput`; `EndOfMember` stops before the identifier of a stream that follows data. Skippable chunks and padding are skipped. A chunk's output comes out as soon as it is decoded, and `ChecksumMismatch` after it when its CRC-32C fails (rule 6). No bytes at all are the empty stream, as the snap crate writes it; the encoder writes the identifier alone, as every stream begins with it. A compressed chunk is held whole, up to what 64 KiB compresses to; a longer one, which the format allows and no encoder writes, raises `LimitExceeded`. The raw format has its length first and copies that reach the start of the output, so it is whole only, outside the contract. |
-| LZ4 frame | fits | Concatenated frames and skippable frames. The legacy frame has no end marker and rejects `EndOfMember`. |
+| LZ4 frame | implemented (Decode and Encode) | Concatenated frames, skippable frames and legacy frames under `EndOfInput`; under `EndOfMember` a skippable frame is a member of its own, and the legacy frame, which has no end marker, raises `Unsupported`. A frame that names a dictionary raises `DictionaryRequired` without one. A content size the frame does not hold raises `ChecksumMismatch`, as gzip's ISIZE does. A block's output comes out as it is decoded, before the block and content checksums (rule 6). The block format has no framing and is whole only, outside the contract. |
 | xz | fits | Several streams with padding. The memory limit is resumable on the concrete type. Filter chains that cannot flush raise `Unsupported`. |
 | .lzma | fits | No magic and no checksum; trailing bytes are `TrailingData`. Cannot flush. |
 | bzip2 | fits | Output appears a block at a time, which is consistent with rule 1. Its CRC is the MSB-first variant. |
@@ -238,7 +238,8 @@ here, so that adding one later does not require changing it.
 | RFC 9842, Compression Dictionary Transport | Proposed Standard | The `dcb` and `dcz` HTTP codings: a hash of the dictionary in a fixed header, then Shared Brotli or Zstandard. |
 | RFC 1950, 1951, 1952 | Informational, neither updated nor obsoleted | zlib, DEFLATE and gzip, in gaato/deflate. Its errata (7764, 8429, 7517) clarify wording and change no decoder's behaviour. |
 | Snappy's format description and framing format (google/snappy) | not RFCs | gaato/snappy. |
-| LZ4 Frame Format, .xz File Format 1.2.1 | not RFCs | Used only for the paper check above. |
+| LZ4 Frame Format 1.6.4 and Block Format | not RFCs | gaato/lz4. |
+| .xz File Format 1.2.1 | not RFC | Used only for the paper check above. |
 
 ### Errata
 

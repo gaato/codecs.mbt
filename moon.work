@@ -4,6 +4,7 @@ members = [
   "codec_image",
   "crc",
   "snappy",
+  "lz4",
   "harness",
   "conformance",
   "bench",

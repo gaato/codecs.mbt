@@ -12,7 +12,9 @@ binary stream, compressed by the reference implementations (`zstd -3`,
 produce; the encoders compress what the decoders give back. The DEFLATE
 benchmarks decode the raw DEFLATE data inside the gzip members. The Snappy
 benchmarks decode what gaato/snappy writes for the same text and binary,
-which is what the snap crate writes, to the byte (`snappy/scripts/crosscheck.mbtx`).
+which is what the snap crate writes, to the byte (`snappy/scripts/crosscheck.mbtx`);
+the LZ4 benchmarks, what gaato/lz4 writes, which is lz4's, to the byte
+(`lz4/src/vectors_wbtest.mbt`).
 `moon run scripts/gen_bench_data.mbtx` regenerates them; it needs the `zstd`,
 `brotli` and `gzip` commands.
 

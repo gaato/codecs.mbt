@@ -1,0 +1,13 @@
+import {
+  "gaato/codec",
+  "gaato/codec_bytes",
+  "gaato/lz4/internal/blit",
+  "moonbitlang/core/debug",
+}
+
+import {
+  "gaato/lz4/internal/checksum",
+  "moonbitlang/core/encoding/base64",
+} for "wbtest"
+
+supported_targets = "js + native + wasm + wasm-gc"

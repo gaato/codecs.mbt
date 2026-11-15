@@ -16,7 +16,7 @@ import {
 // The coverage ledgers are checked every time (scripts/coverage_report.mbtx):
 // a gap a test should close fails here as it fails in CI. --full also runs
 // the crosschecks of the encoders against the reference decoders (zstd,
-// brotli, deflate and snappy's scripts/crosscheck.mbtx), as CI does on every push;
+// brotli, deflate, snappy and lz4's scripts/crosscheck.mbtx), as CI does on every push;
 // they take some minutes, so a quick local run leaves them out.
 //
 // --no-prove skips `moon prove` (for a machine without Z3 4.16.0); the proof
@@ -122,6 +122,9 @@ async fn main {
   // The streams the snap crate writes, which the decoder is held to and the
   // encoder matches.
   run("moon", ["run", "snappy/scripts/gen_vectors.mbtx", "--", "--check"])
+  // What lz4 1.10.0's library writes, which the decoder is held to and the
+  // encoder matches to the byte.
+  run("moon", ["run", "lz4/scripts/gen_vectors.mbtx", "--", "--check"])
   // Seeded corruptions of the zstd and brotli vectors, with the zstd and
   // brotli commands' verdicts, which the decoders are held to.
   run("moon", ["run", "scripts/gen_oracle_vectors.mbtx", "--", "--check"])
@@ -145,7 +148,7 @@ async fn main {
   run("moon", ["run", "scripts/coverage_report.mbtx"], env={ "MOON_CC": cc })
   // The encoders' streams decode with the reference decoders.
   if full {
-    for dir in ["zstd", "brotli", "deflate", "snappy"] {
+    for dir in ["zstd", "brotli", "deflate", "snappy", "lz4"] {
       run("moon", ["run", "\{dir}/scripts/crosscheck.mbtx"], env={ "MOON_CC": cc })
     }
   }

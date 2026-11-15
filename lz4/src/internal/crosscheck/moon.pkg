@@ -1,0 +1,13 @@
+// Prints the inputs, the dictionary and the streams the encoders make of
+// them, for scripts/crosscheck.mbtx and scripts/gen_vectors.mbtx to hand to
+// the references. Not part of the library.
+
+import {
+  "gaato/codec_bytes",
+  "gaato/lz4",
+  "moonbitlang/core/encoding/base64",
+}
+
+pkgtype(kind: "executable")
+
+supported_targets = "js + native + wasm + wasm-gc"

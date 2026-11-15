@@ -1,0 +1,85 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/lz4"
+
+import {
+  "gaato/codec",
+  "gaato/codec_bytes",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn block_compress_bound(Int64) -> Int64
+
+pub fn compress(BytesView, acceleration? : Int32, block_size? : BlockSize, linked? : Bool, checksum? : Bool, block_checksum? : Bool, dictionary? : BytesView, dictionary_id? : UInt32) -> Bytes
+
+pub fn compress_block(BytesView, acceleration? : Int32, dictionary? : BytesView) -> Bytes
+
+pub fn compress_bound(Int64, block_size? : BlockSize) -> Int64
+
+pub fn decoder_memory_bound() -> Int64
+
+pub fn decompress(BytesView, max_output? : Int32, dictionary? : BytesView) -> Bytes raise @codec.CodecError
+
+pub fn decompress_block(BytesView, max_output~ : Int32, dictionary? : BytesView) -> Bytes raise @codec.CodecError
+
+pub fn encoder_memory_bound(block_size? : BlockSize) -> Int64
+
+pub fn skippable_frame(Int32, BytesView) -> Bytes
+
+// Errors
+
+// Types and methods
+#derive(Eq, @debug.Debug)
+pub(all) enum BlockSize {
+  Max64KiB
+  Max256KiB
+  Max1MiB
+  Max4MiB
+}
+pub fn BlockSize::bytes(Self) -> Int32
+pub fn BlockSize::equal(Self, Self) -> Bool
+pub fn BlockSize::not_equal(Self, Self) -> Bool
+pub fn BlockSize::to_repr(Self) -> @debug.Repr
+
+pub struct Decoder {
+  // private fields
+}
+pub fn Decoder::Decoder(until? : @codec_bytes.Until, dictionary? : BytesView) -> Self
+pub fn Decoder::frame_info(Self) -> FrameInfo?
+pub fn Decoder::is_finished(Self) -> Bool
+pub fn Decoder::last_consumed(Self) -> Int32
+pub fn Decoder::last_produced(Self) -> Int32
+pub fn Decoder::memory_usage(Self) -> Int32
+pub fn Decoder::reset(Self) -> Unit
+pub fn Decoder::step(Self, BytesView, MutArrayView[Byte], end~ : Bool) -> @codec_bytes.Status raise @codec.CodecError
+pub impl @codec_bytes.Decode for Decoder
+
+pub struct Encoder {
+  // private fields
+}
+pub fn Encoder::Encoder(acceleration? : Int32, block_size? : BlockSize, linked? : Bool, checksum? : Bool, block_checksum? : Bool, content_size? : Int64, dictionary? : BytesView, dictionary_id? : UInt32) -> Self
+pub fn Encoder::is_finished(Self) -> Bool
+pub fn Encoder::last_consumed(Self) -> Int32
+pub fn Encoder::last_produced(Self) -> Int32
+pub fn Encoder::memory_usage(Self) -> Int32
+pub fn Encoder::reset(Self) -> Unit
+pub fn Encoder::step(Self, BytesView, MutArrayView[Byte], action~ : @codec_bytes.EncodeAction) -> @codec_bytes.Status raise @codec.CodecError
+pub impl @codec_bytes.Encode for Encoder
+
+#derive(Eq, @debug.Debug)
+pub struct FrameInfo {
+  block_size : BlockSize?
+  linked : Bool
+  block_checksum : Bool
+  content_checksum : Bool
+  content_size : UInt64?
+  dictionary_id : UInt32?
+  legacy : Bool
+}
+pub fn FrameInfo::equal(Self, Self) -> Bool
+pub fn FrameInfo::not_equal(Self, Self) -> Bool
+pub fn FrameInfo::to_repr(Self) -> @debug.Repr
+
+// Type aliases
+
+// Traits

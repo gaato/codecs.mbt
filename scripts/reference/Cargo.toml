@@ -1,7 +1,10 @@
 # Reference codecs written apart from this repository's, for the
 # crosschecks: miniz_oxide (a Rust port of miniz) for raw DEFLATE and zlib,
 # run by deflate/scripts/crosscheck.mbtx; snap (BurntSushi's Snappy) for
-# Snappy's raw and framing formats, run by snappy/scripts/crosscheck.mbtx.
+# Snappy's raw and framing formats, run by snappy/scripts/crosscheck.mbtx;
+# lz4-sys (lz4 1.10.0's C library, vendored) for the LZ4 vectors that
+# lz4/scripts/gen_vectors.mbtx writes, and lz4_flex (a Rust LZ4 that shares
+# no code with lz4's) for lz4/scripts/crosscheck.mbtx.
 # Not part of any MoonBit module. The versions are pinned here and in
 # Cargo.lock.
 
@@ -16,3 +19,5 @@ miniz_oxide = "=0.9.1"
 base64 = "=0.22.1"
 sha2 = "=0.10.9"
 snap = "=1.1.1"
+lz4-sys = "=1.11.1"
+lz4_flex = "=0.14.0"

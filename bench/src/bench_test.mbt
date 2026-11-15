@@ -235,6 +235,66 @@ test "snappy" (b : @bench.T) {
 }
 
 ///|
+/// Decodes an LZ4 frame whole into 64 KiB slices, as a consumer would, and
+/// returns how many bytes came out.
+fn lz4_decode(input : Bytes) -> Int32 {
+  let decoder = @lz4.Decoder()
+  let out = FixedArray::make(1 << 16, b'\x00')
+  let mut rest = input[:]
+  let mut total = 0
+  for ;; {
+    let status = decoder.step(rest, out.mut_view(), end=true) catch {
+      _ => abort("lz4: bad stream")
+    }
+    rest = rest[decoder.last_consumed():]
+    total += decoder.last_produced()
+    if status is Done {
+      return total
+    }
+  }
+}
+
+///|
+/// Compresses `input` into an LZ4 frame in 64 KiB slices with `Finish`,
+/// and returns how many bytes came out.
+fn lz4_encode(input : Bytes) -> Int32 {
+  let encoder = @lz4.Encoder()
+  let out = FixedArray::make(1 << 16, b'\x00')
+  let mut rest = input[:]
+  let mut total = 0
+  for ;; {
+    let status = encoder.step(rest, out.mut_view(), action=Finish) catch {
+      _ => abort("lz4: content size")
+    }
+    rest = rest[encoder.last_consumed():]
+    total += encoder.last_produced()
+    if status is Done {
+      return total
+    }
+  }
+}
+
+///|
+test "lz4" (b : @bench.T) {
+  // The inputs, as the reference decoders give them back; our frames are
+  // lz4's, to the byte (lz4/src/vectors_wbtest.mbt).
+  let text = @brotli.decompress(decode64(brotli_text)) catch {
+    _ => abort("brotli: bad stream")
+  }
+  let binary = @brotli.decompress(decode64(brotli_binary)) catch {
+    _ => abort("brotli: bad stream")
+  }
+  let lt = @lz4.compress(text)
+  let lb = @lz4.compress(binary)
+  assert_eq(lz4_decode(lt), text_size)
+  assert_eq(lz4_decode(lb), binary_size)
+  b.bench(name="lz4 text 512 KiB", () => b.keep(lz4_decode(lt)))
+  b.bench(name="lz4 binary 128 KiB", () => b.keep(lz4_decode(lb)))
+  b.bench(name="lz4 encode text 512 KiB", () => b.keep(lz4_encode(text)))
+  b.bench(name="lz4 encode binary 128 KiB", () => b.keep(lz4_encode(binary)))
+}
+
+///|
 /// Decodes a PNG image whole into 64 KiB slices of rows, as a consumer
 /// would, and returns how many bytes of rows came out.
 fn png_decode(input : Bytes) -> Int32 {

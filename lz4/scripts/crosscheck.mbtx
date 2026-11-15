@@ -1,0 +1,226 @@
+----
+import {
+  "moonbitlang/core/async",
+  "moonbitlang/core/async/fs",
+  "moonbitlang/core/async/shell",
+  "moonbitlang/core/encoding/base64",
+  "moonbitlang/core/encoding/hex",
+  "moonbitlang/core/env",
+  "moonbitlang/x@0.5.6/crypto",
+}
+----
+
+// Decodes the encoder's streams with two references and compares their
+// sizes with lz4's.
+//
+// Runs src/internal/crosscheck, which prints the dictionary, then one line
+// per stream: a name, the set (the options; see gen_vectors.mbtx), the
+// base64 of the input and of the stream. Every frame must decode to exactly
+// the input with the `lz4` command (`lz4 -d`, with `-D` for the dictionary
+// sets), and every frame without a dictionary and every block also with
+// lz4_flex (scripts/reference, a Rust LZ4 that shares no code with lz4's;
+// run with cargo, versions pinned by its Cargo.lock). The totals of each
+// set's streams must be within 1 % of what lz4 1.10.0's library writes for
+// the same inputs and options (the vectors' reference): where the options
+// are lz4's, they are the same bytes, which the tests check.
+//
+// Usage, from the repository root (needs cargo, a C compiler, and lz4):
+//   moon run lz4/scripts/crosscheck.mbtx
+
+///|
+let max_output : Int = 1 << 30
+
+///|
+fn[T] setup_failure(message : String) -> T {
+  eprintln(message)
+  @env.exit(2)
+}
+
+///|
+fn sha256_hex(data : Bytes) -> String {
+  @hex.encode(Bytes::from_array(@crypto.sha256(data)))
+}
+
+///|
+/// The reference's format for a set, as gen_vectors.mbtx has it.
+fn reference_format(set : String) -> (String, Bool)? {
+  let frame = (options : String) => "lz4f-encode:\{options},bc=0,level=1"
+  match set {
+    "b4i" => Some((frame("bs=4,indep=1,cc=1,cs=0,dictid=0"), false))
+    "b4d" => Some((frame("bs=4,indep=0,cc=1,cs=0,dictid=0"), false))
+    "b7i" => Some((frame("bs=7,indep=1,cc=1,cs=0,dictid=0"), false))
+    "b5ix" =>
+      Some(("lz4f-encode:bs=5,indep=1,cc=1,bc=1,cs=1,level=1,dictid=0", false))
+    "fast9" =>
+      Some(("lz4f-encode:bs=4,indep=1,cc=0,bc=0,cs=0,level=-8,dictid=0", false))
+    "b4i_dict" => Some((frame("bs=4,indep=1,cc=1,cs=0,dictid=7"), true))
+    "b4d_dict" => Some((frame("bs=4,indep=0,cc=1,cs=0,dictid=0"), true))
+    "block" => Some(("lz4-block-encode:1", false))
+    "block_dict" => Some(("lz4-block-encode:1", true))
+    _ => None
+  }
+}
+
+///|
+/// Runs the reference over `lines`, one answer a line.
+async fn reference(lines : Array[String]) -> Array[String] {
+  let input = StringBuilder()
+  for l in lines {
+    input.write_string(l + "\n")
+  }
+  let run = @shell.Cmd(
+    "cargo",
+    [
+      "run", "--quiet", "--release", "--locked", "--manifest-path", "scripts/reference/Cargo.toml",
+    ],
+    stdin=Text(input.to_string()),
+  ).output(max_output_bytes=max_output)
+  if run.exit_code() != 0 {
+    setup_failure("scripts/reference: \{run.stderr()}")
+  }
+  let answers = run.stdout().split("\n").map(l => l.to_owned()).collect()
+  if answers.length() != lines.length() + 1 {
+    setup_failure(
+      "scripts/reference answered \{answers.length() - 1} of \{lines.length()} lines",
+    )
+  }
+  answers
+}
+
+///|
+async fn main {
+  if !@fs.exists("lz4/moon.mod") {
+    setup_failure("run from the repository root")
+  }
+  let env = if @env.get_env_var("MOON_CC") is None {
+    { "MOON_CC": "cc" }
+  } else {
+    {}
+  }
+  let run = @shell.Cmd(
+    "moon",
+    ["run", "--release", "--target", "native", "src/internal/crosscheck"],
+    cwd="lz4",
+    env~,
+  ).output(max_output_bytes=max_output)
+  if run.exit_code() != 0 {
+    setup_failure(run.stderr())
+  }
+  let names = []
+  let sets = []
+  let inputs : Array[Bytes] = []
+  let streams : Array[Bytes] = []
+  let mut dict_b64 = ""
+  for line in run.stdout().split("\n") {
+    if line.is_empty() {
+      continue
+    }
+    guard line.split("\t").collect() is [name, set, input, stream] else {
+      setup_failure("unexpected line from the crosscheck tool: \{line}")
+    }
+    if name == "dictionary" {
+      dict_b64 = input.to_string()
+      continue
+    }
+    guard stream != "-" else { continue }
+    names.push(name.to_string())
+    sets.push(set.to_string())
+    inputs.push(@base64.decode(input))
+    streams.push(@base64.decode(stream))
+  }
+  // lz4 -D takes the dictionary from a file.
+  @fs.mkdir("_build", permission=0o755) catch {
+    _ => ()
+  }
+  let dict_path = "_build/lz4-crosscheck-dictionary"
+  @fs.write_binary(dict_path, @base64.decode(dict_b64))
+  // lz4_flex decodes the frames without a dictionary and the blocks; the
+  // reference writes what lz4's library makes of the same inputs.
+  let flex_lines = []
+  let flex_index = []
+  let encode_lines = []
+  let encode_index = []
+  for i, set in sets {
+    if !set.has_suffix("_dict") {
+      let format = if set.has_prefix("block") { "lz4-block" } else { "lz4-frame" }
+      flex_lines.push("\{format}\t\{@base64.encode(streams[i])}")
+      flex_index.push(i)
+    }
+    if reference_format(set) is Some((format, with_dict)) {
+      let data = @base64.encode(inputs[i])
+      encode_lines.push(
+        if with_dict {
+          "\{format}\t\{data}\t\{dict_b64}"
+        } else {
+          "\{format}\t\{data}"
+        },
+      )
+      encode_index.push(i)
+    }
+  }
+  let flex = reference(flex_lines)
+  let encoded = reference(encode_lines)
+  let flex_answer : Map[Int, String] = Map([])
+  for k, i in flex_index {
+    flex_answer[i] = flex[k]
+  }
+  let mut failures = 0
+  for i, name in names {
+    let set = sets[i]
+    let expected = "\{inputs[i].length()} \{sha256_hex(inputs[i])}"
+    if flex_answer.get(i) is Some(answer) && answer != expected {
+      println("FAIL \{name} \{set}: lz4_flex gives \{answer}")
+      failures += 1
+      continue
+    }
+    if !set.has_prefix("block") {
+      let args = if set.has_suffix("_dict") {
+        ["-d", "-c", "-D", dict_path]
+      } else {
+        ["-d", "-c"]
+      }
+      let output = @shell.Cmd("lz4", args, stdin=Binary(streams[i])).output(
+        max_output_bytes=max_output,
+      )
+      if output.exit_code() != 0 {
+        println("FAIL \{name} \{set}: lz4 -d: \{output.stderr().trim()}")
+        failures += 1
+        continue
+      }
+      let decoded = output.stdout_bytes()
+      if decoded != inputs[i] {
+        println(
+          "FAIL \{name} \{set}: lz4 -d decodes it to \{decoded.length()} different bytes",
+        )
+        failures += 1
+        continue
+      }
+    }
+    println("ok   \{name} \{set}: \{inputs[i].length()} -> \{streams[i].length()} bytes")
+  }
+  let ours : Map[String, Int] = Map([])
+  let theirs : Map[String, Int] = Map([])
+  for k, i in encode_index {
+    let set = sets[i]
+    ours[set] = ours.get(set).unwrap_or(0) + streams[i].length()
+    theirs[set] = theirs.get(set).unwrap_or(0) +
+      @base64.decode(encoded[k]).length()
+  }
+  for set in ours.keys() {
+    let a = ours.get(set).unwrap_or(0)
+    let b = theirs.get(set).unwrap_or(1)
+    let ratio = a.to_double() / b.to_double()
+    println("size \{set}: ours \{a}, lz4 \{b} (\{ratio})")
+    if ratio > 1.01 {
+      println("FAIL \{set}: more than 1 % larger than lz4's")
+      failures += 1
+    }
+  }
+  if failures > 0 {
+    println("crosscheck: \{failures} failures")
+    @env.exit(1)
+  }
+  println(
+    "crosscheck: \{names.length()} streams decode with lz4 and lz4_flex",
+  )
+}
