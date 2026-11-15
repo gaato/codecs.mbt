@@ -29,7 +29,9 @@ brotli, and DEFLATE with its two containers, zlib and gzip, in one module of
 three packages (`gaato/deflate`, `gaato/deflate/zlib`, `gaato/deflate/gzip`).
 So do the image contract, `gaato/codec_image`, and its first format, PNG with
 APNG (`gaato/png`). The audio row shows where such codecs would go; nothing in
-the layers below has to change for them.
+the layers below has to change for them. One building block is also a module
+of its own for callers that need it: `gaato/crc`, any CRC of up to 64 bits,
+with copies of the same CRC-32 and CRC-32C parts the formats take.
 
 **Vocabulary.** `gaato/codec` holds what every kind of codec reports in the
 same terms: the error kinds, and the limits a stream can exceed, in bytes. A

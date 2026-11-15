@@ -1,0 +1,46 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/crc"
+
+// Values
+pub let crc32 : Crc
+
+pub fn crc32_update(UInt32, BytesView) -> UInt32
+
+pub let crc32c : Crc
+
+pub fn crc32c_update(UInt32, BytesView) -> UInt32
+
+pub let crc64_xz : Crc
+
+pub fn crc64_xz_update(UInt64, BytesView) -> UInt64
+
+// Errors
+
+// Types and methods
+pub struct Crc {
+  width : Int32
+  poly : UInt64
+  init : UInt64
+  reflect_in : Bool
+  reflect_out : Bool
+  xor_out : UInt64
+  // private fields
+}
+pub fn Crc::checksum(Self, BytesView) -> UInt64
+pub fn Crc::combine(Self, UInt64, UInt64, Int64) -> UInt64
+pub fn Crc::digest(Self) -> Digest
+pub fn Crc::named(String) -> Self?
+pub fn Crc::new(width~ : Int32, poly~ : UInt64, init? : UInt64, reflect_in? : Bool, reflect_out? : Bool, xor_out? : UInt64) -> Self
+pub fn Crc::try_new(width~ : Int32, poly~ : UInt64, init? : UInt64, reflect_in? : Bool, reflect_out? : Bool, xor_out? : UInt64) -> Result[Self, String]
+pub fn Crc::update(Self, UInt64, BytesView) -> UInt64
+
+pub struct Digest {
+  // private fields
+}
+pub fn Digest::reset(Self) -> Unit
+pub fn Digest::value(Self) -> UInt64
+pub fn Digest::write(Self, BytesView) -> Unit
+
+// Type aliases
+
+// Traits

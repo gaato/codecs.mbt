@@ -60,6 +60,17 @@ async fn modules() -> Array[String] {
 }
 
 ///|
+/// The modules of scripts/modules.json's "unreleased" list: new modules
+/// before their first release, which `check` does not hold to a heading for
+/// their version and `publish` leaves alone. A first release takes a module
+/// off the list and bumps it.
+async fn held_back() -> Array[String] {
+  let config = @json.parse(@fs.read_text("scripts/modules.json"))
+  guard config is { "unreleased": Array(list), .. } else { return [] }
+  list.filter_map(m => if m is String(m) { Some(m) } else { None })
+}
+
+///|
 /// The lines of `text`: a final line break ends the last line instead of
 /// starting an empty one.
 fn lines(text : String) -> Array[String] {
@@ -308,6 +319,7 @@ fn lexical(a : String, b : String) -> Int {
 ///|
 async fn check() -> Unit {
   let mut status = 0
+  let held = held_back()
   for dir in modules() {
     let file = "\{dir}/CHANGELOG.md"
     let version = moon_mod(dir, "version")
@@ -324,7 +336,14 @@ async fn check() -> Unit {
       )
       status = 1
     }
-    if !text.contains("## [\{version}] - ") {
+    if held.contains(dir) &&
+      lines(text).iter().any(l => l.has_prefix("## [") && l != unreleased) {
+      @stdio.stderr.text.write(
+        "\{file}: listed as unreleased in scripts/modules.json, but it has released versions\n",
+      )
+      status = 1
+    }
+    if !held.contains(dir) && !text.contains("## [\{version}] - ") {
       @stdio.stderr.text.write(
         "\{file}: no '## [\{version}] - <date>' heading for the version in moon.mod (use 'moon run scripts/release.mbtx -- bump')\n",
       )
@@ -384,9 +403,14 @@ fn waits_for(out : String, pending : Array[String]) -> Bool {
 async fn publish(dry : Bool) -> Unit {
   moon_update()
   let pending = []
+  let held = held_back()
   for dir in modules() {
     let name = moon_mod(dir, "name")
     let version = moon_mod(dir, "version")
+    if held.contains(dir) {
+      println("hold    \{name} (unreleased in scripts/modules.json)")
+      continue
+    }
     if index_has(name, version) {
       println("skip    \{name}@\{version} (already published)")
       continue

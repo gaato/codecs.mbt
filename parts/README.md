@@ -7,7 +7,8 @@ share; each format's module carries copies of the files it uses.
 | --- | --- | --- |
 | `huffman` | Huffman code lengths and canonical codes for encoders, and `CodeMaker`, libdeflate's way of building length-limited codes; decoding tables (`Builder`) and their size bounds (`max_entries`) for decoders. `moon prove` checks its reversal of bits and its canonical codes | brotli, deflate, zstd (zstd's copy is `internal/huffman_code`, without the decoding tables) |
 | `blit` | Copying bytes from one array into another: a block move on native, Wasm and Wasm GC, and a forward loop without index checks on JS, where core's block copy checks every index | brotli, deflate, png, zstd |
-| `crc32` | CRC-32 (ISO 3309, the reflected polynomial 0xEDB88320), eight bytes at a time (slice-by-8) from tables computed at start-up, 9 KiB | deflate (gzip), png |
+| `crc32` | CRC-32 (ISO 3309, the reflected polynomial 0xEDB88320), eight bytes at a time (slice-by-8) from tables computed at start-up, 9 KiB | crc, deflate (gzip), png |
+| `crc32c` | CRC-32C (Castagnoli, RFC 3720, the reflected polynomial 0x82F63B78), as `crc32` computes CRC-32 | crc |
 | `bits` | `BitPacker`, an encoder's least-significant-bit-first bit writer and output buffer, with the end mark of a Zstandard stream read backward | brotli, zstd |
 | `lz77` | The hash and match length of LZ77 match finders; `Matcher`, a greedy one with bucketed hash chains; `HcMatchfinder` and `HtMatchfinder`, libdeflate's hash-chain and hash-table finders | brotli (`Matcher`), deflate (the other two) |
 | `proof_bits` | The trusted bridges of `moon prove`: shifts and masks behind contracts that state their arithmetic, with the tests that back them | zstd, brotli, deflate, png |

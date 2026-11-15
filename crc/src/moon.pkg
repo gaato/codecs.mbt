@@ -1,0 +1,6 @@
+import {
+  "gaato/crc/internal/crc32",
+  "gaato/crc/internal/crc32c",
+}
+
+supported_targets = "js + native + wasm + wasm-gc"

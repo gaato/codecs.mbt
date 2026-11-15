@@ -1,0 +1,5 @@
+// Generated from parts/crc32c/moon.pkg by scripts/gen_parts.mbtx: edit it there, not here.
+// CRC-32C (Castagnoli, RFC 3720 appendix B.4), the checksum of Snappy's
+// framing format and of iSCSI, SCTP, ext4 and Btrfs.
+
+supported_targets = "js + native + wasm + wasm-gc"

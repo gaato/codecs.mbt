@@ -2,13 +2,16 @@
   "$comment": [
     "The workspace's modules, read by the scripts in this directory.",
     "modules: the published modules, bottom-up: a module comes after everything it imports.",
+    "unreleased: modules not released yet; scripts/release.mbtx neither requires a heading for their version nor publishes them. A first release takes a module off the list and bumps it.",
     "ledgered: the modules that hold stream-sized state, with the ledgers that bound it (RESOURCE_BOUNDS.md, TEST_COVERAGE.md). The contract modules define types only.",
     "coverage_scope: the directories, module-relative, whose .mbt files each module's coverage ledger measures: the library and the internal packages it ships, not test-only packages.",
     "copies: for each module, the packages of parts/ it takes and which of their files, for scripts/gen_parts.mbtx to copy into <module>/src/internal/<package>. Files, not whole packages, so that a module carries (and its coverage ledger covers) only what it uses. An entry { \"from\": <package>, \"files\": [...] } copies a package under another name, where the module has a package of the source's name already."
   ],
-  "modules": ["codec", "codec_bytes", "codec_image", "zstd", "brotli", "deflate", "png"],
-  "ledgered": ["zstd", "brotli", "deflate", "png"],
+  "modules": ["codec", "codec_bytes", "codec_image", "crc", "zstd", "brotli", "deflate", "png"],
+  "unreleased": ["crc"],
+  "ledgered": ["crc", "zstd", "brotli", "deflate", "png"],
   "coverage_scope": {
+    "crc": ["src", "src/internal/crc32", "src/internal/crc32c"],
     "zstd": [
       "src",
       "src/internal/blit",
@@ -73,6 +76,10 @@
     ]
   },
   "copies": {
+    "crc": {
+      "crc32": ["crc32.mbt", "crc32_test.mbt"],
+      "crc32c": ["crc32c.mbt", "crc32c_test.mbt"]
+    },
     "brotli": {
       "blit": ["blit.mbt", "blit_test.mbt"],
       "match_length_fast": ["length.mbt", "length_test.mbt"],

@@ -2,6 +2,7 @@ members = [
   "codec",
   "codec_bytes",
   "codec_image",
+  "crc",
   "harness",
   "conformance",
   "bench",

@@ -1,0 +1,6 @@
+// Generated from parts/crc32/moon.pkg by scripts/gen_parts.mbtx: edit it there, not here.
+// CRC-32 (ISO 3309; RFC 1952 section 8, PNG section 5.5), the checksum of a
+// gzip member's data and, in its low 16 bits, of its header, and of every PNG
+// chunk.
+
+supported_targets = "js + native + wasm + wasm-gc"
