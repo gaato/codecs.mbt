@@ -374,7 +374,7 @@ fn Decoder::copy_fast(self : Decoder) -> Unit {
   if dist >= n {
     @blit.bytes(ring, dst, ring, src, n)
   } else {
-    copy_overlapping(ring, dst, src, n)
+    @blit.forward(ring, dst, src, n)
   }
   self.advance(n)
   self.copy_remaining = 0
@@ -566,45 +566,4 @@ fn Decoder::copy(self : Decoder) -> Status? {
   }
   self.state = if self.meta_remaining == 0 { MetaDone } else { CommandStart }
   None
-}
-
-///|
-/// Copies `n` bytes from `src` to `dst` in `ring`, `src < dst`, going
-/// forward so that a byte written may be read again: a match whose
-/// distance `dst - src` is shorter than it. The caller has checked that
-/// `dst + n` is within `ring`. Eight bytes at a time when the distance
-/// allows, on the targets that have eight-byte loads.
-#cfg(any(target="native", target="wasm"))
-fn copy_overlapping(
-  ring : FixedArray[Byte],
-  dst : Int32,
-  src : Int32,
-  n : Int32,
-) -> Unit {
-  let mut i = 0
-  if dst - src >= 8 {
-    let bytes = ring.unsafe_reinterpret_as_bytes()
-    // Each eight bytes read lie before the eight written, within the ring.
-    while i + 8 <= n {
-      ring.unsafe_write_uint64_le(dst + i, bytes.unsafe_read_uint64_le(src + i))
-      i += 8
-    }
-  }
-  while i < n {
-    ring.unsafe_set(dst + i, ring.unsafe_get(src + i))
-    i += 1
-  }
-}
-
-///|
-#cfg(not(any(target="native", target="wasm")))
-fn copy_overlapping(
-  ring : FixedArray[Byte],
-  dst : Int32,
-  src : Int32,
-  n : Int32,
-) -> Unit {
-  for i in 0..<n {
-    ring.unsafe_set(dst + i, ring.unsafe_get(src + i))
-  }
 }

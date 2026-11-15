@@ -25,3 +25,23 @@ test "bytes and into_view copy exactly the range" {
     }
   }
 }
+
+///|
+test "forward copies a match of every distance and length, and nothing past it" {
+  for dist in 1..<=20 {
+    for n in 0..<=40 {
+      let size = 8 + dist + n + 16
+      let ring = FixedArray::makei(size, i => (i * 7 + 3).to_byte())
+      let expected = FixedArray::makei(size, i => ring[i])
+      let to = 8 + dist
+      // The model: a byte at a time, so that a written byte is read again.
+      for i in 0..<n {
+        expected[to + i] = expected[to - dist + i]
+      }
+      @blit.forward(ring, to, to - dist, n)
+      for i in 0..<size {
+        assert_eq(ring[i], expected[i], msg="dist \{dist} n \{n} at \{i}")
+      }
+    }
+  }
+}

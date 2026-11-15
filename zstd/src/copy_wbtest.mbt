@@ -18,7 +18,7 @@ test "window copies match a byte-by-byte copy" {
       if dist >= n {
         copy_forward(exact, dst, exact, dst - dist, n)
       } else {
-        copy_overlapping(exact, dst, dst - dist, n)
+        @blit.forward(exact, dst, dst - dist, n)
       }
       for i in 0..<(dst + n) {
         assert_eq(wild[i], expected[i], msg="wild dist \{dist} n \{n} at \{i}")

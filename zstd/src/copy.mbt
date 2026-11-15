@@ -20,29 +20,6 @@ fn copy_forward(
 }
 
 ///|
-/// Copies `n` bytes from `src` to `dst` in `ring`, `src < dst`, going
-/// forward so that a byte written may be read again: a match whose
-/// distance `dst - src` is shorter than it. The caller has checked that
-/// `dst + n` is within `ring`.
-fn copy_overlapping(
-  ring : FixedArray[Byte],
-  dst : Int32,
-  src : Int32,
-  n : Int32,
-) -> Unit {
-  let dist = dst - src
-  if dist >= 8 {
-    // Each eight bytes read lie before the eight written.
-    copy_short(ring, dst, ring, src, n)
-  } else {
-    for i in 0..<n {
-      // src + i < dst + i < dst + n, within the ring.
-      ring.unsafe_set(dst + i, ring.unsafe_get(src + i))
-    }
-  }
-}
-
-///|
 /// Copies eight bytes at a time, front to back, then the rest byte by byte:
 /// nothing past `to + n` is written.
 #cfg(any(target="native", target="wasm"))
@@ -167,6 +144,6 @@ fn wild_match(
   if dist >= n {
     copy_forward(ring, dst, ring, dst - dist, n)
   } else {
-    copy_overlapping(ring, dst, dst - dist, n)
+    @blit.forward(ring, dst, dst - dist, n)
   }
 }

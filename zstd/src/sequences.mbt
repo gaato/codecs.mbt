@@ -344,7 +344,7 @@ fn Decoder::copy_back_fast(self : Decoder, dist : Int32, n : Int32) -> Bool {
   } else {
     // Overlapping: each byte may repeat one written in this copy, so the
     // copy goes forward in steps no longer than `dist`.
-    copy_overlapping(ring, dst, src, n)
+    @blit.forward(ring, dst, src, n)
   }
   self.advance(n)
   true

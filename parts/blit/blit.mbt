@@ -6,7 +6,8 @@
 
 ///|
 /// Copies `src[at:at + n]` to `dst[to:to + n]`. The caller has checked that
-/// both ranges are within their arrays, and `dst` is not `src`.
+/// both ranges are within their arrays and do not overlap; `dst` may be
+/// `src` (a match in a window whose distance is at least its length).
 #cfg(not(target="js"))
 pub fn bytes(
   dst : FixedArray[Byte],
@@ -20,7 +21,8 @@ pub fn bytes(
 
 ///|
 /// Copies `src[at:at + n]` to `dst[to:to + n]`. The caller has checked that
-/// both ranges are within their arrays, and `dst` is not `src`.
+/// both ranges are within their arrays and do not overlap; `dst` may be
+/// `src` (a match in a window whose distance is at least its length).
 #cfg(target="js")
 pub fn bytes(
   dst : FixedArray[Byte],
@@ -69,5 +71,48 @@ pub fn into_view(
 ) -> Unit {
   for i in 0..<n {
     dst.unsafe_set(to + i, src.unsafe_get(at + i))
+  }
+}
+
+///|
+/// Copies `n` bytes of `ring` from `from` to `to`, `from < to`, front to
+/// back, so that a byte written may be read again: an LZ77 match shorter
+/// than its distance repeats, as the decoders of zstd, Brotli and DEFLATE
+/// need. Eight bytes at a time when `to - from` is 8 or more (each eight
+/// read lie before the eight written), then byte by byte; nothing past
+/// `to + n` is written, where a window may hold history. The caller has
+/// checked that both ranges are within `ring`.
+#cfg(any(target="native", target="wasm"))
+pub fn forward(
+  ring : FixedArray[Byte],
+  to : Int32,
+  from : Int32,
+  n : Int32,
+) -> Unit {
+  let mut i = 0
+  if to - from >= 8 {
+    let bytes = ring.unsafe_reinterpret_as_bytes()
+    while i + 8 <= n {
+      ring.unsafe_write_uint64_le(to + i, bytes.unsafe_read_uint64_le(from + i))
+      i += 8
+    }
+  }
+  while i < n {
+    ring.unsafe_set(to + i, ring.unsafe_get(from + i))
+    i += 1
+  }
+}
+
+///|
+/// `forward` byte by byte: JS and Wasm GC have no eight-byte loads.
+#cfg(not(any(target="native", target="wasm")))
+pub fn forward(
+  ring : FixedArray[Byte],
+  to : Int32,
+  from : Int32,
+  n : Int32,
+) -> Unit {
+  for i in 0..<n {
+    ring.unsafe_set(to + i, ring.unsafe_get(from + i))
   }
 }

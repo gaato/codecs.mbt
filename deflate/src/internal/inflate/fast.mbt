@@ -159,7 +159,7 @@ fn Inflater::go_fast(self : Inflater) -> Unit raise Stop {
       FixedArray::unsafe_blit(ring, wpos, ring, from, length)
     } else {
       // Forward, so that an overlapping match repeats the bytes it wrote.
-      copy_forward(ring, wpos, from, length)
+      @blit.forward(ring, wpos, from, length)
     }
     wpos += length
   }
@@ -181,48 +181,5 @@ fn Inflater::go_fast(self : Inflater) -> Unit raise Stop {
   }
   if error != "" {
     raise Fail(Corrupt, error)
-  }
-}
-
-///|
-/// Copies `length` bytes in `ring` from `from` to `wpos`, `from < wpos`,
-/// front to back: eight at a time when the distance is 8 or more (each eight
-/// read lie before the eight written), then byte by byte. Nothing past
-/// `wpos + length` is written: past it the ring may hold history. The
-/// caller has checked that both ranges are within the ring.
-#cfg(any(target="native", target="wasm"))
-fn copy_forward(
-  ring : FixedArray[Byte],
-  wpos : Int32,
-  from : Int32,
-  length : Int32,
-) -> Unit {
-  let mut i = 0
-  if wpos - from >= 8 {
-    let bytes = ring.unsafe_reinterpret_as_bytes()
-    while i + 8 <= length {
-      ring.unsafe_write_uint64_le(
-        wpos + i,
-        bytes.unsafe_read_uint64_le(from + i),
-      )
-      i += 8
-    }
-  }
-  while i < length {
-    ring.unsafe_set(wpos + i, ring.unsafe_get(from + i))
-    i += 1
-  }
-}
-
-///|
-#cfg(not(any(target="native", target="wasm")))
-fn copy_forward(
-  ring : FixedArray[Byte],
-  wpos : Int32,
-  from : Int32,
-  length : Int32,
-) -> Unit {
-  for i in 0..<length {
-    ring.unsafe_set(wpos + i, ring.unsafe_get(from + i))
   }
 }
