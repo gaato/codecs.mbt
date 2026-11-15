@@ -351,3 +351,45 @@ test "the Encode trait reaches the encoder's own methods" {
   assert_eq(after, encoder.memory_usage())
   assert_false(encoder.is_finished())
 }
+
+///|
+/// `n` random bytes: input with no matches of its own.
+fn random_bytes(seed : UInt32, n : Int32) -> Bytes {
+  let rng = @fixtures.Rng::new(seed)
+  Bytes::makei(n, _ => (rng.below(1 << 16) >> 8).to_byte())
+}
+
+///|
+test "matches stay inside the window window_bits sets" {
+  for bits in 8..<=15 {
+    let window = 1 << bits
+    for level in [1, 6, 9] {
+      // A random block twice: the second copy is a match only if the first
+      // is near enough. The near block stays short enough for level 1's
+      // table, which keeps two positions for each hash.
+      let near = random_bytes(
+        bits.reinterpret_as_uint(),
+        (window / 2).min(4000),
+      )
+      let far = random_bytes(bits.reinterpret_as_uint() + 100, window)
+      let near_size = compress(near + near, level~, window_bits=bits).length()
+      let far_size = compress(far + far, level~, window_bits=bits).length()
+      // The second copy is one match: the first copy stored or coded, and a
+      // few bytes more. Storing both would take twice the bytes.
+      assert_true(
+        near_size < near.length() + near.length() / 8 + 40,
+        msg="\{bits} \{level}",
+      )
+      assert_true(far_size > 2 * far.length() - 50, msg="\{bits} \{level}")
+      assert_eq(
+        decompress(compress(far + far, level~, window_bits=bits)),
+        far + far,
+      )
+    }
+  }
+  // The default window is 32 KiB, and out-of-range values are clamped.
+  let input = @fixtures.sample(4, 70000)
+  assert_eq(compress(input, window_bits=15), compress(input))
+  assert_eq(compress(input, window_bits=99), compress(input))
+  assert_eq(compress(input, window_bits=0), compress(input, window_bits=8))
+}

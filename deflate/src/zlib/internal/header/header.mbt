@@ -107,14 +107,20 @@ pub fn flevel(level : Int32) -> Int32 {
 }
 
 ///|
-/// The header an encoder writes for `level`: CMF for DEFLATE with a 32 KiB
-/// window (CINFO 7), FLG with FLEVEL (`flevel`) and FDICT, and the header
-/// check computed as zlib computes it, then DICTID when the stream uses a
-/// preset dictionary. The bytes are zlib's: `78 01`, `78 5e`, `78 9c` and
-/// `78 da` for the four FLEVELs, `78 bb` and DICTID at the default level
-/// with a dictionary.
-pub fn build(level : Int32, dictionary_id : UInt32?) -> Bytes {
-  let mut header = (8 + (7 << 4)) << 8
+/// The header an encoder writes for `level`: CMF for DEFLATE with a window
+/// of `1 << window_bits` bytes (CINFO `window_bits - 8`, with `window_bits`
+/// clamped to 8 to 15; 7, a 32 KiB window, by default), FLG with FLEVEL
+/// (`flevel`) and FDICT, and the header check computed as zlib computes it,
+/// then DICTID when the stream uses a preset dictionary. The bytes are
+/// zlib's: `78 01`, `78 5e`, `78 9c` and `78 da` for the four FLEVELs, `78
+/// bb` and DICTID at the default level with a dictionary.
+pub fn build(
+  level : Int32,
+  dictionary_id : UInt32?,
+  window_bits~ : Int32 = 15,
+) -> Bytes {
+  let cinfo = window_bits.clamp(min=8, max=15) - 8
+  let mut header = (8 + (cinfo << 4)) << 8
   header = header | (flevel(level) << 6)
   if dictionary_id is Some(_) {
     header = header | 0x20

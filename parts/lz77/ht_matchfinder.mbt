@@ -22,12 +22,19 @@ pub struct HtMatchfinder {
   priv mut next_pos : Int32
   // How far back the latest match found is.
   priv mut offset : Int32
+  // How far back a match may reach: `WINDOW`, or less for a smaller window.
+  priv max_distance : Int32
 }
 
 ///|
-/// A finder with its table allocated; `reset` starts it.
-pub fn HtMatchfinder::HtMatchfinder() -> HtMatchfinder {
+/// A finder with its table allocated; `reset` starts it. Its matches reach
+/// fewer than `max_distance` bytes back, clamped to 1 to `WINDOW`, as for
+/// `HcMatchfinder`.
+pub fn HtMatchfinder::HtMatchfinder(
+  max_distance~ : Int32 = WINDOW,
+) -> HtMatchfinder {
   {
+    max_distance: max_distance.clamp(min=1, max=WINDOW),
     table: FixedArray::make(2 << HT_HASH_BITS, NO_POSITION),
     base: 0,
     next_hash: 0,
@@ -92,7 +99,7 @@ pub fn HtMatchfinder::longest_match(
     cur_pos -= WINDOW
   }
   let base = self.base
-  let cutoff = cur_pos - WINDOW
+  let cutoff = cur_pos - self.max_distance
   let table = self.table
   let slot = self.next_hash * 2
   self.next_hash = hash_bits(load_u32(data, in_next + 1), HT_HASH_BITS)

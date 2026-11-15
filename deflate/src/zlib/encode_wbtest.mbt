@@ -217,3 +217,21 @@ test "the Encode trait reaches the encoder's own methods" {
   assert_eq(after, encoder.memory_usage())
   assert_false(encoder.is_finished())
 }
+
+///|
+test "CINFO says the window, and the stream decodes" {
+  let input = @fixtures.sample(9, 50000)
+  for bits in 8..<=15 {
+    let stream = compress(input, window_bits=bits)
+    assert_eq(stream[0], (8 + ((bits - 8) << 4)).to_byte())
+    assert_eq(((stream[0].to_int() << 8) | stream[1].to_int()) % 31, 0)
+    assert_eq(decompress(stream), input)
+    assert_eq(
+      stream[2:],
+      @deflate.compress(input, window_bits=bits) +
+      @header.put_be32(@adler32.of_bytes(input)),
+    )
+  }
+  assert_eq(compress(input)[:2], b"\x78\x9c")
+  assert_eq(compress(input, level=-1, window_bits=15)[:2], b"\x78\x9c")
+}

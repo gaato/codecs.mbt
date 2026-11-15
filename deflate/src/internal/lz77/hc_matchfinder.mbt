@@ -33,12 +33,20 @@ pub struct HcMatchfinder {
   priv mut next_pos : Int32
   // How far back the latest match found is.
   priv mut offset : Int32
+  // How far back a match may reach: `WINDOW`, or less for a smaller window.
+  priv max_distance : Int32
 }
 
 ///|
-/// A finder with its tables allocated; `reset` starts it.
-pub fn HcMatchfinder::HcMatchfinder() -> HcMatchfinder {
+/// A finder with its tables allocated; `reset` starts it. Its matches reach
+/// fewer than `max_distance` bytes back, which is clamped to 1 to `WINDOW`:
+/// a smaller window, as a peer that cannot keep 32 KiB asks for, changes
+/// nothing but where the search stops, and the tables keep their size.
+pub fn HcMatchfinder::HcMatchfinder(
+  max_distance~ : Int32 = WINDOW,
+) -> HcMatchfinder {
   {
+    max_distance: max_distance.clamp(min=1, max=WINDOW),
     hash3: FixedArray::make(1 << HASH3_BITS, NO_POSITION),
     hash4: FixedArray::make(1 << HASH4_BITS, NO_POSITION),
     next: FixedArray::make(WINDOW, NO_POSITION),
@@ -135,7 +143,7 @@ pub fn HcMatchfinder::longest_match(
   // goes in keeps `next_pos` at or after the base.
   let cur_pos = self.slide_if_needed(in_next - self.base)
   let base = self.base
-  let cutoff = cur_pos - WINDOW
+  let cutoff = cur_pos - self.max_distance
   let next_tab = self.next
   let mut best_len = best_len
   let mut best_match = in_next

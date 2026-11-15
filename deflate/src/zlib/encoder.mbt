@@ -38,11 +38,18 @@ pub struct Encoder {
 /// 32 KiB. A decoder needs the same dictionary. The encoder keeps a view of
 /// the dictionary's last 32 KiB, not a copy, so the bytes the view belongs to
 /// stay alive as long as the encoder.
-pub fn Encoder::Encoder(level~ : Int32 = 6, dictionary? : BytesView) -> Encoder {
+///
+/// `window_bits`, 8 to 15 (clamped; 15 by default), is as for
+/// `@deflate.Encoder`, and the header's CINFO says it: `window_bits - 8`.
+pub fn Encoder::Encoder(
+  level~ : Int32 = 6,
+  dictionary? : BytesView,
+  window_bits~ : Int32 = 15,
+) -> Encoder {
   let level = @deflater.effective_level(level)
-  let header = @header.build(level, dictionary.map(dictionary_id))
+  let header = @header.build(level, dictionary.map(dictionary_id), window_bits~)
   {
-    inner: @deflater.Deflater::new(level~, dictionary?),
+    inner: @deflater.Deflater::new(level~, dictionary?, window_bits~),
     header,
     framing: header,
     sent: 0,
@@ -55,8 +62,8 @@ pub fn Encoder::Encoder(level~ : Int32 = 6, dictionary? : BytesView) -> Encoder 
 }
 
 ///|
-/// Starts a new stream with the same options: the same level and the same
-/// dictionary.
+/// Starts a new stream with the same options: the same level, dictionary
+/// and window.
 pub fn Encoder::reset(self : Encoder) -> Unit {
   self.inner.reset()
   self.framing = self.header

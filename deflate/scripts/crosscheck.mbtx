@@ -12,7 +12,11 @@ import {
 ----
 
 // Decodes the encoders' streams with the reference decoders: zlib, through
-// Node's zlib module, and the gzip command.
+// Node's zlib module, and the gzip command. A stream whose name has
+// "w<bits>" is decoded with windowBits set to that and 64-byte output
+// chunks, so a match reaching more than 64 bytes past the window it was made
+// for fails (zlib checks distances against its window and the current
+// output buffer); for zlib streams, a CINFO above windowBits fails too.
 //
 // Runs src/internal/crosscheck, which prints one line per stream: a name
 // that begins with its format (raw, zlib or gzip), the length and SHA-256 of
@@ -46,8 +50,13 @@ let node_decoder : String =
   #|const lines = require("node:fs").readFileSync(0, "latin1").split("\n");
   #|lines.pop();
   #|for (const line of lines) {
-  #|  const [format, flushed, data, dictionary] = line.split("\t");
+  #|  const [format, flushed, data, dictionary, bits] = line.split("\t");
   #|  const options = {};
+  #|  // With a 64-byte output buffer, zlib reaches back only through its
+  #|  // window and the buffer: a match more than 64 bytes past the window
+  #|  // fails with "invalid distance too far back". A one-shot buffer would
+  #|  // hold the whole output and let any distance through.
+  #|  if (bits) { options.windowBits = Number(bits); options.chunkSize = 64; }
   #|  if (flushed === "1") options.finishFlush = zlib.constants.Z_SYNC_FLUSH;
   #|  if (dictionary) options.dictionary = Buffer.from(dictionary, "base64");
   #|  const input = Buffer.from(data, "base64");
@@ -88,6 +97,7 @@ struct Stream {
   digest : String
   data : Bytes
   dictionary : String
+  window_bits : String
 }
 
 ///|
@@ -172,6 +182,13 @@ async fn main {
       digest: digest.to_owned(),
       data: @base64.decode(data),
       dictionary: dictionary.to_owned(),
+      window_bits: name
+        .split(" ")
+        .filter(word => word.has_prefix("w"))
+        .map(word => word[1:].to_string())
+        .collect()
+        .get(0)
+        .unwrap_or(""),
     })
   }
   // Every stream through one Node process.
@@ -179,7 +196,7 @@ async fn main {
   for s in streams {
     let flushed = if s.flushed { "1" } else { "0" }
     input.write_string(
-      "\{s.format}\t\{flushed}\t\{@base64.encode(s.data)}\t\{s.dictionary}\n",
+      "\{s.format}\t\{flushed}\t\{@base64.encode(s.data)}\t\{s.dictionary}\t\{s.window_bits}\n",
     )
   }
   let node = @shell.Cmd(

@@ -7,6 +7,10 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+### Added
+
+- **`window_bits` (8 to 15) for the raw DEFLATE and zlib encoders.** Every match then reaches fewer than `1 << window_bits` bytes back, so a decoder that keeps only that much history reads the stream, as WebSocket's permessage-deflate (RFC 7692) negotiates with `server_max_window_bits` and `client_max_window_bits`; zlib's header says the window in CINFO. The default, 15, gives the same bytes as before, and the encoder's memory does not change with the window.
+
 ### Changed
 
 - **Level -1 is the default level, 6, as zlib's `Z_DEFAULT_COMPRESSION` is.** It was clamped to 0, so a stream asked for with zlib's spelling of the default was stored, not compressed. `@deflate`, `@zlib` and `@gzip`'s `Encoder` and `compress` all take it; zlib's FLEVEL and gzip's XFL follow, so `@zlib.compress(input, level=-1)` begins `78 9c` as zlib's does. Other levels outside 0 to 9 are still clamped, and the output at every other level is unchanged. Migration: a caller that wants the stored output it got at -1 passes `level=0`.

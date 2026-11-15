@@ -212,9 +212,16 @@ pub fn effective_level(level : Int32) -> Int32 {
 /// level. Matches
 /// may reach back into `dictionary` as if it had come just before the
 /// stream: the encoder keeps a view of its last 32 KiB and copies them into
-/// the window at the start of every stream.
-pub fn Deflater::new(level~ : Int32, dictionary? : BytesView) -> Deflater {
+/// the window at the start of every stream. `window_bits`, clamped to 8 to
+/// 15, sets the window: matches reach fewer than `1 << window_bits` bytes
+/// back, so a decoder that keeps only that much reads the stream.
+pub fn Deflater::new(
+  level~ : Int32,
+  dictionary? : BytesView,
+  window_bits~ : Int32 = 15,
+) -> Deflater {
   let level = effective_level(level)
+  let max_distance = 1 << window_bits.clamp(min=8, max=15)
   let (strategy, depth, nice) : (Strategy, Int32, Int32) = match level {
     0 => (Stored, 0, 0)
     1 => (Fastest, 0, 32)
@@ -270,12 +277,12 @@ pub fn Deflater::new(level~ : Int32, dictionary? : BytesView) -> Deflater {
     end: -1,
     finishing: false,
     hc: if strategy is (Greedy | Lazy | Lazy2) {
-      Some(@lz77.HcMatchfinder())
+      Some(@lz77.HcMatchfinder(max_distance~))
     } else {
       None
     },
     ht: if strategy is Fastest {
-      Some(@lz77.HtMatchfinder())
+      Some(@lz77.HtMatchfinder(max_distance~))
     } else {
       None
     },

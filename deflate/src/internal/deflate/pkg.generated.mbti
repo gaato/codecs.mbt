@@ -20,7 +20,7 @@ pub fn Deflater::is_finished(Self) -> Bool
 pub fn Deflater::last_consumed(Self) -> Int32
 pub fn Deflater::last_produced(Self) -> Int32
 pub fn Deflater::memory_usage(Self) -> Int32
-pub fn Deflater::new(level~ : Int32, dictionary? : BytesView) -> Self
+pub fn Deflater::new(level~ : Int32, dictionary? : BytesView, window_bits? : Int32) -> Self
 pub fn Deflater::reset(Self) -> Unit
 pub fn Deflater::step(Self, BytesView, MutArrayView[Byte], action~ : @codec_bytes.EncodeAction) -> @codec_bytes.Status
 pub fn Deflater::step_into(Self, BytesView, FixedArray[Byte], action~ : @codec_bytes.EncodeAction) -> @codec_bytes.Status

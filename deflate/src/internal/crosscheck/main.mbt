@@ -140,6 +140,22 @@ fn main {
       )
     }
     emit("gzip \{name} l6 header", input, @gzip.compress(input, header~))
+    // Smaller windows: the name's "w<bits>" has the decoder keep only that
+    // much, so a match that reaches further fails.
+    for bits in 8..<15 {
+      for level in [1, 6, 9] {
+        emit(
+          "raw \{name} l\{level} w\{bits}",
+          input,
+          @deflate.compress(input, level~, window_bits=bits),
+        )
+        emit(
+          "zlib \{name} l\{level} w\{bits}",
+          input,
+          @zlib.compress(input, level~, window_bits=bits),
+        )
+      }
+    }
   }
   // Streams flushed as they go, cut after every flush.
   let flushed = text(100000) + @fixtures.sample(7, 60000) + text(40000)

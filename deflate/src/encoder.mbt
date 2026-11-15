@@ -37,13 +37,24 @@ pub struct Encoder {
 /// decoder must be given the same one. The encoder keeps a view of the
 /// dictionary's last 32 KiB, not a copy, so the bytes the view belongs to
 /// stay alive as long as the encoder.
-pub fn Encoder::Encoder(level~ : Int32 = 6, dictionary? : BytesView) -> Encoder {
-  { deflater: @deflater.Deflater::new(level~, dictionary?), }
+///
+/// `window_bits`, 8 to 15 (clamped; 15 by default), sets the window: no
+/// match reaches `1 << window_bits` bytes back, so a decoder that keeps only
+/// that much history reads the stream, as WebSocket's permessage-deflate
+/// (RFC 7692) lets a peer ask with `client_max_window_bits` and
+/// `server_max_window_bits`. A smaller window can only compress less; the
+/// encoder's memory is the same.
+pub fn Encoder::Encoder(
+  level~ : Int32 = 6,
+  dictionary? : BytesView,
+  window_bits~ : Int32 = 15,
+) -> Encoder {
+  { deflater: @deflater.Deflater::new(level~, dictionary?, window_bits~), }
 }
 
 ///|
-/// Starts a new stream with the same options: the same level and the same
-/// dictionary.
+/// Starts a new stream with the same options: the same level, dictionary
+/// and window.
 pub fn Encoder::reset(self : Encoder) -> Unit {
   self.deflater.reset()
 }

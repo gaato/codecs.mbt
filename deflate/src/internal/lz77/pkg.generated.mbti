@@ -16,7 +16,7 @@ pub fn match_length(FixedArray[Byte], Int32, Int32, Int32) -> Int32
 pub struct HcMatchfinder {
   // private fields
 }
-pub fn HcMatchfinder::HcMatchfinder() -> Self
+pub fn HcMatchfinder::HcMatchfinder(max_distance? : Int32) -> Self
 pub fn HcMatchfinder::catch_up(Self, FixedArray[Byte], Int32, Int32) -> Unit
 pub fn HcMatchfinder::longest_match(Self, FixedArray[Byte], Int32, Int32, Int32, Int32, Int32) -> Int32
 pub fn HcMatchfinder::memory_usage(Self) -> Int32
@@ -29,7 +29,7 @@ pub fn HcMatchfinder::skip_bytes(Self, FixedArray[Byte], Int32, Int32, Int32) ->
 pub struct HtMatchfinder {
   // private fields
 }
-pub fn HtMatchfinder::HtMatchfinder() -> Self
+pub fn HtMatchfinder::HtMatchfinder(max_distance? : Int32) -> Self
 pub fn HtMatchfinder::catch_up(Self, FixedArray[Byte], Int32, Int32) -> Unit
 pub fn HtMatchfinder::longest_match(Self, FixedArray[Byte], Int32, Int32, Int32) -> Int32
 pub fn HtMatchfinder::memory_usage(Self) -> Int32

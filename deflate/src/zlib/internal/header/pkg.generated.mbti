@@ -8,7 +8,7 @@ import {
 // Values
 pub fn be32(BytesView) -> UInt32
 
-pub fn build(Int32, UInt32?) -> Bytes
+pub fn build(Int32, UInt32?, window_bits? : Int32) -> Bytes
 
 pub fn check_trailer(UInt32, BytesView) -> Result[Unit, String]
 

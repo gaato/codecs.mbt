@@ -35,14 +35,15 @@ pub fn decompress(
 
 ///|
 /// Compresses `input` into a whole raw DEFLATE stream, at `level` (0 to 9,
-/// clamped, with -1 as 6; 6 by default) and with the preset `dictionary` if given, as
-/// `Encoder` does.
+/// clamped, with -1 as 6; 6 by default), with the preset `dictionary` if
+/// given and a window of `1 << window_bits` bytes, as `Encoder` does.
 pub fn compress(
   input : BytesView,
   level~ : Int32 = 6,
   dictionary? : BytesView,
+  window_bits~ : Int32 = 15,
 ) -> Bytes {
-  let encoder = Encoder(level~, dictionary?)
+  let encoder = Encoder(level~, dictionary?, window_bits~)
   let chunk = FixedArray::make(1 << 16, b'\x00')
   let out = Buffer()
   let mut rest = input
