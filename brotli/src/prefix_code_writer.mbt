@@ -5,6 +5,9 @@
 ///|
 /// Scratch space for writing prefix codes, shared by a meta-block's codes.
 priv struct CodeWriter {
+  /// Builds the codes, libdeflate's way, for every alphabet up to the
+  /// largest.
+  maker : @huffman.CodeMaker
   used : FixedArray[Int32]
   // The run-length coded code lengths: symbols 0..17 and their extra bits.
   rle_symbols : FixedArray[Int32]
@@ -18,6 +21,7 @@ priv struct CodeWriter {
 ///|
 fn CodeWriter::new() -> CodeWriter {
   {
+    maker: @huffman.CodeMaker(max_alphabet=MAX_ALPHABET),
     used: FixedArray::make(4, 0),
     rle_symbols: FixedArray::make(MAX_ALPHABET, 0),
     rle_extra: FixedArray::make(MAX_ALPHABET, 0),
@@ -50,7 +54,14 @@ fn CodeWriter::write_code(
       count += 1
     }
   }
-  @huffman.code_lengths(freqs, alphabet, MAX_CODE_LENGTH, lengths)
+  if count >= 2 {
+    // A meta-block holds at most 64 KiB of commands, so the frequencies add
+    // up to less than CodeMaker's 1 << 21.
+    self.maker.make(freqs, alphabet, MAX_CODE_LENGTH, lengths, codes)
+  } else {
+    lengths.fill(0, end=alphabet)
+    codes.fill(0, end=alphabet)
+  }
   if count > 4 {
     self.write_complex(w, lengths, alphabet)
   } else {
@@ -59,9 +70,6 @@ fn CodeWriter::write_code(
       used[0] = 0
     }
     let count = count.max(1)
-    if count == 1 {
-      lengths[used[0]] = 0
-    }
     // The decoder gives the listed symbols lengths in a fixed order, the
     // shortest first.
     for i in 1..<count {
@@ -81,7 +89,6 @@ fn CodeWriter::write_code(
       w.write(1, if lengths[used[0]] == 1 { 1 } else { 0 })
     }
   }
-  @huffman.canonical_codes(lengths, alphabet, codes)
 }
 
 ///|
@@ -104,20 +111,11 @@ fn CodeWriter::write_complex(
   for i in 0..<self.rle_count {
     cl_freqs[self.rle_symbols[i]] += 1
   }
-  // A one-symbol code length code is legal but codes in zero bits; give it
-  // a second, unused symbol so that every code length code is complete.
-  let mut distinct = 0
-  for f in cl_freqs {
-    if f > 0 {
-      distinct += 1
-    }
-  }
-  if distinct == 1 {
-    cl_freqs[if cl_freqs[0] == 0 { 0 } else { 1 }] = 1
-  }
+  // A one-symbol code length code is legal but codes in zero bits;
+  // CodeMaker gives it a second, unused symbol (0, or 1 when the one used
+  // is 0), so that every code length code is complete.
   let cl_lengths = self.cl_lengths
-  @huffman.code_lengths(cl_freqs, 18, 5, cl_lengths)
-  @huffman.canonical_codes(cl_lengths, 18, self.cl_codes)
+  self.maker.make(cl_freqs, 18, 5, cl_lengths, self.cl_codes)
   let hskip = if cl_lengths[code_length_order[0]] != 0 ||
     cl_lengths[code_length_order[1]] != 0 {
     0

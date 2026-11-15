@@ -14,6 +14,7 @@ never does. Every breaking change is listed with a migration note.
 ### Changed
 
 - **Level -1 is the default level, 6, as zlib's `Z_DEFAULT_COMPRESSION` is.** It was clamped to 0, so a stream asked for with zlib's spelling of the default was stored, not compressed. `@deflate`, `@zlib` and `@gzip`'s `Encoder` and `compress` all take it; zlib's FLEVEL and gzip's XFL follow, so `@zlib.compress(input, level=-1)` begins `78 9c` as zlib's does. Other levels outside 0 to 9 are still clamped, and the output at every other level is unchanged. Migration: a caller that wants the stored output it got at -1 passes `level=0`.
+- **Building a Huffman code sorts its most frequent symbols by heapsort, as libdeflate does.** They were sorted by insertion, which takes time quadratic in their number; a code of 704 symbols now takes about a third of the time on Wasm and half on Native. The output does not change.
 
 ## [0.1.2] - 2026-11-15
 

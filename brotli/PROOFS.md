@@ -70,7 +70,8 @@ trusted, like the bridges, to say what the Why3 symbols are.
 
 ## Not proved
 
-- `code_lengths` (`parts/huffman`, Brotli's encoder): that its lengths stay
+- `code_lengths` (`parts/huffman`, the reference the tests compare
+  `CodeMaker` with): that its lengths stay
   within the limit, that Kraft's sum is exactly 1 and that unused symbols
   get 0. It keeps the used symbols in an `Array` sorted with `sort_by`,
   which the prover does not model, and its retry loop has no measure that
@@ -82,7 +83,7 @@ trusted, like the bridges, to say what the Why3 symbols are.
   "code lengths stay within the limit and the code stays complete" and
   "code lengths: within the limit, complete, and optimal when nothing is
   cut" check it.
-- `CodeMaker::make` (`parts/huffman`, DEFLATE's encoder): the same
+- `CodeMaker::make` (`parts/huffman`, the encoder's codes): the same
   properties. Its counting of code lengths keeps Kraft's sum at exactly 1
   by construction, but that no count goes below 0 rests on libdeflate's
   argument that the tree's depths only grow as it is walked, which needs

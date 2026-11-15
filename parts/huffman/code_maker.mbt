@@ -99,17 +99,11 @@ pub fn CodeMaker::make(
       lengths[sym] = 0
     }
   }
+  // The last counter's symbols, as many as all of them, by heapsort as
+  // libdeflate sorts them: every key differs (it holds the symbol), so the
+  // order is the same whatever the sort.
   let lo = counters[n - 2]
-  let hi = counters[n - 1]
-  for i in (lo + 1)..<hi {
-    let v = a[i]
-    let mut j = i - 1
-    while j >= lo && a[j] > v {
-      a[j + 1] = a[j]
-      j -= 1
-    }
-    a[j + 1] = v
-  }
+  heap_sort(a, lo, counters[n - 1] - lo)
   if used < 2 {
     two_codewords(freqs, n, lengths, codes)
     return
@@ -136,6 +130,47 @@ pub fn CodeMaker::make(
     codes[sym] = reverse_bits(next[len], len)
     next[len] += 1
   }
+}
+
+///|
+/// Sorts `a[base..base + len)` in increasing order.
+fn heap_sort(a : FixedArray[Int32], base : Int32, len : Int32) -> Unit {
+  for i = len / 2 - 1; i >= 0; i = i - 1 {
+    sift_down(a, base, i, len)
+  }
+  for end = len - 1; end > 0; end = end - 1 {
+    let top = a[base]
+    a[base] = a[base + end]
+    a[base + end] = top
+    sift_down(a, base, 0, end)
+  }
+}
+
+///|
+/// Moves `a[base + i]` down the max-heap `a[base..base + len)` to its place.
+fn sift_down(
+  a : FixedArray[Int32],
+  base : Int32,
+  i : Int32,
+  len : Int32,
+) -> Unit {
+  let v = a[base + i]
+  let mut at = i
+  for ;; {
+    let mut child = 2 * at + 1
+    if child >= len {
+      break
+    }
+    if child + 1 < len && a[base + child + 1] > a[base + child] {
+      child += 1
+    }
+    if a[base + child] <= v {
+      break
+    }
+    a[base + at] = a[base + child]
+    at = child
+  }
+  a[base + at] = v
 }
 
 ///|

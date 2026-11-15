@@ -82,7 +82,10 @@
         "huffman_test.mbt",
         "huffman_spec_test.mbt",
         "decode_table.mbt",
-        "decode_table_spec_test.mbt"
+        "decode_table_spec_test.mbt",
+        "code_maker.mbt",
+        "code_maker_test.mbt",
+        "code_maker_wbtest.mbt"
       ],
       "lz77": ["hash.mbt", "hash_test.mbt", "matcher.mbt", "matcher_test.mbt"],
       "proof_bits": ["shifts.mbt", "shifts.mbtp", "shifts_test.mbt"],
@@ -105,7 +108,8 @@
         "enough.mbt",
         "enough_test.mbt",
         "code_maker.mbt",
-        "code_maker_test.mbt"
+        "code_maker_test.mbt",
+        "code_maker_wbtest.mbt"
       ],
       "lz77": [
         "hash.mbt",
@@ -131,7 +135,8 @@
           "huffman_test.mbt",
           "huffman_spec_test.mbt",
           "code_maker.mbt",
-          "code_maker_test.mbt"
+          "code_maker_test.mbt",
+          "code_maker_wbtest.mbt"
         ]
       },
       "proof_bits": ["shifts.mbt", "shifts.mbtp", "shifts_test.mbt"],

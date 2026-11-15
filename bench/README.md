@@ -719,7 +719,7 @@ encoder aborts on that file):
 
 | Encoder | Text | Binary | Canterbury without `ptt5` | Canterbury |
 |---|---:|---:|---:|---:|
-| gaato/brotli | 158,878 | 94,218 | 590,909 | 645,860 |
+| gaato/brotli | 158,879 | 94,219 | 590,929 | 645,891 |
 | hustcer/fbr, quality 11 | 131,556 | 92,867 | 534,975 | aborts on `ptt5` (exit status -6) |
 | mizchi/brotli, quality 1 | 169,007 | does not decode | 777,152, `asyoulik.txt` does not decode | not totalled: `asyoulik.txt` does not decode |
 | `brotli -q 4` | 160,100 | 98,397 | 581,371 | 634,667 |

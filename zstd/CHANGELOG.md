@@ -18,6 +18,7 @@ never does. Every breaking change is listed with a migration note.
 ### Changed
 
 - **Level 0 is the default level, 3, as in zstd.** It acted as 1. Migration: a caller that wants what level 0 gave passes `level=1`.
+- **Building a literals' Huffman code sorts its most frequent symbols by heapsort, as libdeflate does.** They were sorted by insertion, which takes time quadratic in their number; encoding the benchmarks' inputs takes up to 19 % less time on Native at the higher levels. The output does not change.
 
 ## [0.4.1] - 2026-11-15
 

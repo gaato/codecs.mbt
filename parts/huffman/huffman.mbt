@@ -1,6 +1,7 @@
-// Length-limited Huffman codes, as DEFLATE and Brotli encoders build them:
-// code lengths from symbol frequencies, then the canonical codes the lengths
-// define.
+// Length-limited Huffman codes: code lengths from symbol frequencies, then
+// the canonical codes the lengths define. The encoders build theirs with
+// `CodeMaker`; `code_lengths`, optimal whenever the limit does not bind, is
+// what the tests hold it to.
 
 ///|
 /// Sets `lengths[0..n)` to Huffman code lengths for the frequencies

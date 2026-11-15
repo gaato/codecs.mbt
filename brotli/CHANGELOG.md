@@ -12,6 +12,10 @@ never does. Every breaking change is listed with a migration note.
 - **LZ77 dictionaries in the encoder.** `Encoder(dictionary=d)` and `compress(dictionary=d)` let a match copy from the dictionary, past the window's reach, as `brotli -D` writes and RFC 9842's `dcb` coding reads; a match never runs past the dictionary's end. The streams decode with `brotli -d -D` and Node's zlib. A 314-byte record that shares words with a 50,000-byte dictionary compresses to 100 bytes with it, 201 without, and 95 with `brotli -q 5 -D`. The `Dictionary` builds the index encoders search it with once and shares it: 5 bytes per byte of the dictionary's last 64 MiB at most (the part a distance can reach) and a table of at most 512 KiB (`Dictionary::memory_usage`); without a dictionary, the output is unchanged.
 - **LZ77 dictionaries in the decoder** (RFC 9841 section 3.2), as `brotli -D` writes them and RFC 9842's `dcb` coding uses one. `Dictionary(bytes)`, given to `Decoder(dictionary=d)` or `decompress(dictionary=d)`, takes the distances just past the window's reach, before the static dictionary's words, whose ids move up by the dictionary's length. A copy that would run past the dictionary's end raises `Corrupt`, as google/brotli's decoder refuses it; RFC 9841 has it go on into the window, which a full window no longer holds. The dictionary is held by reference, not copied, and `memory_usage` does not count it.
 
+### Changed
+
+- **The encoder builds its prefix codes as gaato/deflate and gaato/zstd do,** with libdeflate's method (`CodeMaker`, from the repository's shared parts) instead of flooring the frequencies until the optimal code fits, which allocated and sorted for every code. The streams change, and decode as before: the Canterbury corpus comes to 645,891 bytes against 645,860, and each of the benchmarks' text and binary inputs to 1 byte more.
+
 ## [0.4.3] - 2026-11-15
 
 ### Changed
