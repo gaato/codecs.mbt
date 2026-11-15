@@ -146,11 +146,11 @@ test "frames, read without decoding them" {
 
 ## Encoding
 
-`Encoder(level=n)` and `compress(level=n)` take zstd's levels 1 to 12, 3 by default as in zstd, with zstd 1.5.7's parameters for each level and input size. For large inputs, and those of unknown size, that is fast at 1 and 2, double-fast at 3 and 4, and greedy, lazy and lazy2 from 5 to 12; a smaller input can get another strategy, as in zstd. On the Silesia and Canterbury corpora, the totals come within 1 % of `zstd -N`'s at every level. The frame carries the XXH64 content checksum unless `checksum=false`. Its bytes do not depend on how the input or the output is split: only on the input, the options and where `Flush` falls.
+`Encoder(level=n)` and `compress(level=n)` take zstd's levels 1 to 12, 3 by default as in zstd (0 is the default too), with zstd 1.5.7's parameters for each level and input size, and its negative levels, -1 down to -131072, the faster ones `zstd --fast=N` makes as level -N: they skip ahead faster the lower they go and leave literals uncoded. For large inputs, and those of unknown size, that is fast at 1 and 2, double-fast at 3 and 4, and greedy, lazy and lazy2 from 5 to 12; a smaller input can get another strategy, as in zstd. On the Silesia and Canterbury corpora, the totals come within 1 % of `zstd -N`'s at every level. The frame carries the XXH64 content checksum unless `checksum=false`. Its bytes do not depend on how the input or the output is split: only on the input, the options and where `Flush` falls.
 
 `compress` and `Encoder(content_size=n)` write the size in the frame header and pick the parameters for it, as zstd does: a small input gets small tables and declares a window no larger than itself.
 
-Not included: levels 13 to 22 (they act as 12), dictionaries, long-distance matching and multithreading. Levels below 1 act as 1.
+Not included: levels 13 to 22 (they act as 12), dictionaries, long-distance matching and multithreading.
 
 ## Memory
 

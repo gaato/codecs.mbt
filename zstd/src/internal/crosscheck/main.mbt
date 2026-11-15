@@ -157,12 +157,17 @@ fn main {
     for level in 1..<=12 {
       emit("\{name} l\{level}", input, @zstd.compress(input, level~))
     }
+    // The negative levels, zstd's --fast=N.
+    for level in [-1, -2, -3, -5, -7, -100, -131072] {
+      emit("\{name} l\{level}", input, @zstd.compress(input, level~))
+    }
     emit("\{name} l3 nocheck", input, @zstd.compress(input, checksum=false))
     // Without the content size: a window descriptor, and no size.
     streamed("\{name} l3 unsized", @zstd.Encoder(), input, 65536, 0)
   }
   let flushed = text(rng, 200000) + random(rng, 30000) + text(rng, 50000)
   streamed("flushed l1", @zstd.Encoder(level=1), flushed, 777, 10000)
+  streamed("flushed l-5", @zstd.Encoder(level=-5), flushed, 777, 10000)
   streamed("flushed l4", @zstd.Encoder(level=4), flushed, 777, 10000)
   streamed("flushed l5", @zstd.Encoder(level=5), flushed, 777, 10000)
   streamed("flushed l6", @zstd.Encoder(level=6), flushed, 777, 10000)

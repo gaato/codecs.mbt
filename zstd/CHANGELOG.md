@@ -9,7 +9,12 @@ never does. Every breaking change is listed with a migration note.
 
 ### Added
 
+- **The negative levels**, zstd's faster ones: `level=-N` is `zstd --fast=N`, down to -131072, from the row zstd keeps for them, with an acceleration of N and literals left uncoded, as zstd does. They round-trip through `zstd -d`, and the output at levels 1 to 12 is unchanged.
 - **Frames read without decoding them.** `inspect_frame` reads the header of the frame at the start of some bytes (`Frame`: a Zstandard frame's `FrameInfo` with its window, content size, dictionary id, checksum flag and header length, or a skippable frame's variant and size), and `frame_size` walks its block headers to where it ends, as zstd's `ZSTD_findFrameCompressedSize` does. `skippable_frame` writes a skippable frame, as RFC 9842's `dcz` coding begins with, and `read_skippable_frame` reads one back. They raise `Truncated` for a frame cut short and `Corrupt` for a header or a block type that RFC 8878 reserves.
+
+### Changed
+
+- **Level 0 is the default level, 3, as in zstd.** It acted as 1. Migration: a caller that wants what level 0 gave passes `level=1`.
 
 ## [0.4.1] - 2026-11-15
 

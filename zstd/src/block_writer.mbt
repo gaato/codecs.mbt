@@ -37,11 +37,14 @@ priv struct LiteralsWriter {
   // in each stream.
   counts : FixedArray[Int32]
   quarters : FixedArray[FixedArray[Int32]]
+  // False at the negative levels, where literals stay raw.
+  compress : Bool
 }
 
 ///|
-fn LiteralsWriter::new() -> LiteralsWriter {
+fn LiteralsWriter::new(compress~ : Bool) -> LiteralsWriter {
   {
+    compress,
     huffman: @huffenc.HuffmanEncoder(),
     previous: @huffenc.HuffmanEncoder(),
     previous_valid: false,
@@ -81,6 +84,14 @@ fn LiteralsWriter::plan(
   start : Int32,
   len : Int32,
 ) -> LiteralsPlan {
+  if !self.compress {
+    // As `ZSTD_noCompressLiterals`: raw, not even RLE, and nothing counted.
+    return {
+      kind: LitRaw,
+      size: raw_literals_header_len(len) + len,
+      payload: len,
+    }
+  }
   let counts = self.counts
   let four = len >= FOUR_STREAMS_FROM
   if four {

@@ -340,6 +340,19 @@ Sizes below are bytes, with each delta compared to its named finder.
 | silesia total | 59294927 | 59326768 | 59182179 | -0.05% | +0.19% | 58594755 | 58583737 | 58496546 | +0.02% | +0.17% | 58178735 | 58227258 | 58086445 | -0.08% | +0.16% | 58122624 | 57973144 | 58033936 | +0.26% | +0.15% |
 | canterbury total | 595266 | 595820 | 596752 | -0.09% | -0.25% | 592820 | 593659 | 594266 | -0.14% | -0.24% | 592162 | 592123 | 592487 | +0.01% | -0.05% | 591542 | 592008 | 592372 | -0.08% | -0.14% |
 
+### Negative levels
+
+The negative levels, measured in the same run (2026-11-15) against `zstd
+--fast=N --check -c -q FILE`, N = 1, 3, 5, 10, 100. Level -N takes row 0
+of zstd's table for the input's size class, with an acceleration of N, and
+leaves literals uncoded, as zstd does. The totals of levels 1 to 12 in that
+run are those of the tables above, byte for byte.
+
+| Corpus | gaato -1 | zstd --fast=1 | Δ | gaato -3 | zstd --fast=3 | Δ | gaato -5 | zstd --fast=5 | Δ | gaato -10 | zstd --fast=10 | Δ | gaato -100 | zstd --fast=100 | Δ |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| silesia total | 86910501 | 86956528 | -0.05% | 94571385 | 94650244 | -0.08% | 102868558 | 103083522 | -0.21% | 117724286 | 117866020 | -0.12% | 181153005 | 181480034 | -0.18% |
+| canterbury total | 882168 | 883247 | -0.12% | 1097425 | 1105894 | -0.77% | 1288790 | 1301463 | -0.97% | 1334272 | 1406399 | -5.13% | 2217065 | 2255409 | -1.70% |
+
 ### Outlier investigation
 
 Every corpus total is within 1% under both reference configurations.

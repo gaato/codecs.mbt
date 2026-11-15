@@ -1,7 +1,7 @@
 // The encoder's parameters for each level, transcribed from the reference
 // implementation: facebook/zstd v1.5.7, lib/compress/clevels.h,
 // `ZSTD_defaultCParameters` (BSD license; see NOTICE), levels 1 to 12 of
-// its four tables. Tree rows use lazy2 with the same adjusted numbers:
+// its four tables and the row the negative levels start from. Tree rows use lazy2 with the same adjusted numbers:
 // binary trees and optimal parsing are outside this encoder's scope.
 
 ///|
@@ -45,6 +45,22 @@ const MAX_LEVEL : Int32 = 12
 ///|
 /// The level `Encoder` and `compress` use by default, as zstd's.
 const DEFAULT_LEVEL : Int32 = 3
+
+///|
+/// The lowest level, zstd's `ZSTD_minCLevel()`: minus the largest block,
+/// the most acceleration a target length can ask for.
+const MIN_LEVEL : Int32 = -131072
+
+///|
+/// The level an encoder works at for `level`: 0 is the default, as in zstd,
+/// and the rest is clamped to `MIN_LEVEL` to `MAX_LEVEL`.
+fn effective_level(level : Int32) -> Int32 {
+  if level == 0 {
+    DEFAULT_LEVEL
+  } else {
+    level.clamp(min=MIN_LEVEL, max=MAX_LEVEL)
+  }
+}
 
 ///|
 fn row(
@@ -132,8 +148,38 @@ let level_tables : FixedArray[FixedArray[Params]] = [
 ]
 
 ///|
-/// The parameters for `level` (already clamped to 1..=12) and an input of
-/// `size` bytes, or of unknown size.
+/// Row 0 of each table, "base for negative levels": fast rows that a
+/// negative level gives its acceleration, as the target length.
+let negative_rows : FixedArray[Params] = [
+  row(19, 12, 13, 1, 6, 1, Fast),
+  row(18, 12, 13, 1, 5, 1, Fast),
+  row(17, 12, 12, 1, 5, 1, Fast),
+  row(14, 12, 13, 1, 5, 1, Fast),
+]
+
+///|
+/// The row of `table` for `level`, from `MIN_LEVEL` to 12 but not 0: a
+/// negative level takes row 0 with its acceleration, `-level`, as the
+/// target length, as `ZSTD_getCParams_internal` does.
+fn level_row(table : Int32, level : Int32) -> Params {
+  if level < 0 {
+    { ..negative_rows[table], target_length: -level, }
+  } else {
+    level_tables[table][level - 1]
+  }
+}
+
+///|
+/// Whether a block's literals are Huffman-coded at all: not for a fast
+/// level that accelerates, a negative one, as `ZSTD_literalsCompressionIsDisabled`
+/// decides by default. No level from 1 up is such a row.
+fn compresses_literals(params : Params) -> Bool {
+  !(params.strategy is Fast && params.target_length > 0)
+}
+
+///|
+/// The parameters for `level` (already made `effective_level`) and an input
+/// of `size` bytes, or of unknown size.
 ///
 /// As `ZSTD_getCParams` does, a known size picks the table for its size
 /// class, and the window and tables then shrink as `ZSTD_adjustCParams`
@@ -142,11 +188,11 @@ let level_tables : FixedArray[FixedArray[Params]] = [
 /// the caller states it, so the parameters, and the output, never depend on
 /// how the input is split.
 fn params_for(level : Int32, size : Int64?) -> Params {
-  guard size is Some(size) else { return level_tables[0][level - 1] }
+  guard size is Some(size) else { return level_row(0, level) }
   let table = (if size <= 256 * 1024 { 1 } else { 0 }) +
     (if size <= 128 * 1024 { 1 } else { 0 }) +
     (if size <= 16 * 1024 { 1 } else { 0 })
-  let params = level_tables[table][level - 1]
+  let params = level_row(table, level)
   // The smallest log whose power of 2 holds `size`, at least 6 (the
   // smallest hash log), as `ZSTD_adjustCParams_internal` computes it; sizes
   // above 2^30 are not resized.

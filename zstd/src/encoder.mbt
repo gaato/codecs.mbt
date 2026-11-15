@@ -50,9 +50,12 @@ pub struct Encoder {
 ///|
 /// An encoder at the start of a frame.
 ///
-/// `level` is zstd's compression level: 1 to 12, 3 by default as in zstd.
-/// Levels 13 to 22 are not implemented yet and act as 12; levels below 1,
-/// zstd's negative (faster) levels and its level 0, act as 1.
+/// `level` is zstd's compression level: 1 to 12, 3 by default as in zstd,
+/// and 0 is the default too, as in zstd. Levels 13 to 22 are not
+/// implemented yet and act as 12. The negative levels, -1 down to -131072
+/// (lower ones act as that), are zstd's faster ones (`zstd --fast=N` is
+/// level -N): they skip ahead faster the lower they go, and leave literals
+/// uncoded, as zstd does.
 ///
 /// `checksum` adds the frame's content checksum, the low 32 bits of the
 /// XXH64 of the input, as zstd does by default.
@@ -69,7 +72,7 @@ pub fn Encoder::Encoder(
   checksum~ : Bool = true,
   content_size? : Int64,
 ) -> Encoder {
-  let level = level.clamp(min=1, max=MAX_LEVEL)
+  let level = effective_level(level)
   let content_size = match content_size {
     Some(size) if size >= 0 => Some(size)
     _ => None
@@ -88,7 +91,7 @@ pub fn Encoder::Encoder(
     single_segment,
     block_max,
     data_len: 0,
-    literals: LiteralsWriter::new(),
+    literals: LiteralsWriter::new(compress=compresses_literals(params)),
     matcher: Matcher::new(params),
     sequences: @seqenc.Block(),
     sequence_writer: @seqenc.Writer(),

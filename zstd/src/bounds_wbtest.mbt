@@ -165,7 +165,7 @@ const ENCODER_PENDING_MAX : Int32 = 4 + 10 + 3 + MAX_BLOCK_SIZE + 4
 /// past the bytes written: a write reserves at most the bytes it moves.
 fn encoder_memory_bound(params~ : Params = encoder_params(12, None)) -> Int32 {
   2 * (ENCODER_PENDING_MAX + 5) +
-  LiteralsWriter::new().memory_usage() +
+  LiteralsWriter::new(compress=true).memory_usage() +
   2 * 2 * (512 + 5) +
   2 * (1 << params.window_log) +
   (1 << params.window_log).min(MAX_BLOCK_SIZE) +
@@ -217,7 +217,7 @@ fn check_encoder_bounds(e : Encoder, _room : Int32) -> Unit raise {
 ///|
 test "the encoder's fixed tables and its memory bound" {
   inspect(
-    LiteralsWriter::new().memory_usage(),
+    LiteralsWriter::new(compress=true).memory_usage(),
     content=(
       #|17096
     ),

@@ -113,3 +113,26 @@ test "effective strategy rows preserve all numeric parameters including tree row
     }
   }
 }
+
+///|
+test "levels 1 to 12 compress literals; negative levels take row 0 and accelerate" {
+  for table in 0..<4 {
+    for level in 1..<=12 {
+      assert_true(
+        compresses_literals(level_tables[table][level - 1]),
+        msg="\{table} \{level}",
+      )
+    }
+    for level in [-1, -5, -100, MIN_LEVEL] {
+      let p = level_row(table, level)
+      assert_eq(p.strategy is Fast, true)
+      assert_eq(p.target_length, -level)
+      assert_eq(p.window_log, negative_rows[table].window_log)
+      assert_false(compresses_literals(p))
+    }
+  }
+  assert_eq(effective_level(0), DEFAULT_LEVEL)
+  assert_eq(effective_level(-200000), MIN_LEVEL)
+  assert_eq(effective_level(40), MAX_LEVEL)
+  assert_eq(effective_level(-7), -7)
+}

@@ -193,7 +193,7 @@ fn literals_frame(
 ///|
 test "every kind of literals section decodes" {
   let rng = Rng::new(3111)
-  let writer = LiteralsWriter::new()
+  let writer = LiteralsWriter::new(compress=true)
   let kinds = []
   let inputs : Array[FixedArray[Byte]] = [
     FixedArray::make(1, b'q'),

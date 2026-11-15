@@ -141,7 +141,7 @@ test "sequence repeats and tables persist across raw RLE and zero-sequence block
 ///|
 test "treeless literals retain the table across raw and RLE blocks, and reset drops it" {
   let rng = Rng::new(223)
-  let writer = LiteralsWriter::new()
+  let writer = LiteralsWriter::new(compress=true)
   let data = FixedArray::makei(2000, _ => rng.below(32).to_byte())
   let first = writer.plan(data, 0, data.length())
   assert_true(first.kind is LitHuffman(_))

@@ -42,6 +42,9 @@ fn main {
     let levels = if format == "zstd" && e.name == "gaato/zstd" {
       [
         for level in 1..<=12 => ("level\{level}", level)
+      ] +
+      [
+        for n in [1, 3, 5, 10, 100] => ("fast\{n}", -n)
       ]
     } else if e.default_level == e.max_level {
       [("default", e.default_level)]

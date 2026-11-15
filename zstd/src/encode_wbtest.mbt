@@ -401,7 +401,8 @@ test "frame headers: the window from the level, the content size when known" {
     encode_drive(encoder, input, next_in=() => 1 << 20, next_out=() => 1 << 20)
   }
   // Unknown size: the window of the table for large inputs, 512 KiB at
-  // level 1, 1 MiB at level 2 and 2 MiB for the double-fast rows.
+  // level 1 and for the negative levels (row 0), 1 MiB at level 2 and 2 MiB
+  // for the double-fast rows, level 0 being the default 3.
   let windows = [
     for level in [-5, 0, 1, 2, 3, 8, 9, 12, 13, 22] => {
       let fh = frame_header_of(stream(Encoder(level~), b"abc"))
@@ -411,7 +412,7 @@ test "frame headers: the window from the level, the content size when known" {
   inspect(
     windows.join(" "),
     content=(
-      #|524288 524288 524288 1048576 2097152 2097152 4194304 4194304 4194304 4194304
+      #|524288 2097152 524288 1048576 2097152 2097152 4194304 4194304 4194304 4194304
     ),
   )
   inspect(
@@ -782,4 +783,26 @@ test "input past the content size raises after the same output, however it is sp
     let (got, _) = written_until_error(200000, text, piece, room)
     assert_true(got == expected, msg="text piece \{piece} room \{room}")
   }
+}
+
+///|
+test "level 0 is the default; negative levels round-trip, smaller as they rise" {
+  let text = Bytes::makei(200000, i => (b'a'.to_int() + i * 7 % 26).to_byte())
+  let mixed = sample_random(Rng::new(77), 300000)
+  for input in [text, mixed, Bytes::make(70000, b'z'), b"", b"x"] {
+    assert_eq(compress(input, level=0), compress(input))
+    for level in [-1, -3, -5, -10, -100, -131072, -500000] {
+      let frame = compress(input, level~)
+      assert_eq(decompress(frame), input, msg="\{level}")
+      // Streamed, of unknown size, too.
+      let encoder = Encoder(level~)
+      let streamed = encode_drive(encoder, input, next_in=() => 4096, next_out=() => {
+        1000
+      })
+      assert_eq(decompress(streamed), input, msg="streamed \{level}")
+    }
+  }
+  assert_true(
+    compress(text, level=-1).length() <= compress(text, level=-100).length(),
+  )
 }
