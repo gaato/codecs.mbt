@@ -26,7 +26,8 @@ import {
 // Usage, from the repository root (needs the zstd and brotli commands):
 //   moon run scripts/gen_oracle_vectors.mbtx [--check]
 // --check draws the same corruptions again, asks the commands again, and
-// fails unless the files hold exactly what this script writes.
+// fails unless the files' tables hold exactly what this script writes; the
+// header, which names the commands' versions, is left out of the comparison.
 
 ///|
 /// Corruptions per format.
@@ -175,13 +176,26 @@ async fn render(format : String, seed : UInt64) -> (String, String) {
 }
 
 ///|
+/// A generated file from its table on, without the header comments.
+fn verdicts(file : String) -> String {
+  match file.find("let oracle") {
+    Some(at) => file[at:].to_owned()
+    None => file
+  }
+}
+
+///|
 async fn main {
   let check = @env.args().contains("--check")
   for format in [("zstd", 8878UL), ("brotli", 7932UL)] {
     let (name, seed) = format
     let (target, text) = render(name, seed)
     if check {
-      guard @fs.exists(target) && @fs.read_text(target) == text else {
+      // The verdicts, not the header: it names the reference decoder's
+      // version, and CI's (Debian's brotli 1.1.0) gives the same verdicts
+      // as the 1.2.1 the file was written with.
+      guard @fs.exists(target) &&
+        verdicts(@fs.read_text(target)) == verdicts(text) else {
         fail(
           "\{target} is stale: run moon run scripts/gen_oracle_vectors.mbtx",
         )
