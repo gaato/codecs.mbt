@@ -353,6 +353,32 @@ run are those of the tables above, byte for byte.
 | silesia total | 86910501 | 86956528 | -0.05% | 94571385 | 94650244 | -0.08% | 102868558 | 103083522 | -0.21% | 117724286 | 117866020 | -0.12% | 181153005 | 181480034 | -0.18% |
 | canterbury total | 882168 | 883247 | -0.12% | 1097425 | 1105894 | -0.77% | 1288790 | 1301463 | -0.97% | 1334272 | 1406399 | -5.13% | 2217065 | 2255409 | -1.70% |
 
+### With a raw dictionary
+
+The dictionary vectors' inputs (`zstd/scripts/gen_dict_vectors.mbtx`:
+records of 118 bytes to 100 KB that share words with the 60,000-byte raw
+dictionary), compressed by `compress(level=n, dictionary=raw)` and by
+`zstd -D raw -n` (the vectors themselves, zstd 1.5.7), on 2026-11-15, and
+without the dictionary for comparison. Sizes in bytes.
+
+| Input | Level | gaato with dictionary | zstd -D | gaato without |
+|---|---:|---:|---:|---:|
+| record (321) | -5 | 132 | 145 | 304 |
+| record (321) | 1 | 123 | 138 | 221 |
+| record (321) | 3 | 114 | 126 | 222 |
+| record (321) | 9 | 107 | 107 | 218 |
+| record_small (118) | 3 | 50 | 51 | 106 |
+| records_4k (4000) | -5 | 1239 | 1316 | 1844 |
+| records_4k (4000) | 1 | 1080 | 1084 | 1306 |
+| records_4k (4000) | 3 | 977 | 1000 | 1260 |
+| records_4k (4000) | 9 | 848 | 871 | 1169 |
+| records_100k (100000) | -5 | 27931 | 29362 | 30797 |
+| records_100k (100000) | 3 | 23658 | 23559 | 24466 |
+
+zstd attaches a small dictionary to the frame (`ZSTD_shouldAttachDict`)
+instead of copying it into the window, and searches the two apart; this
+encoder always copies it, which explains most of the small differences.
+
 ### Outlier investigation
 
 Every corpus total is within 1% under both reference configurations.

@@ -1,17 +1,19 @@
 ///|
-/// Compresses `input` into one whole Zstandard frame. `level` and
-/// `checksum` are as for `Encoder`; the frame states its content size, and
+/// Compresses `input` into one whole Zstandard frame. `level`, `checksum`
+/// and `dictionary` are as for `Encoder`; the frame states its content size, and
 /// the parameters are chosen for it, so a small input declares a small
 /// window (a single-segment frame, whose window is its content).
 pub fn compress(
   input : BytesView,
   level~ : Int32 = DEFAULT_LEVEL,
   checksum~ : Bool = true,
+  dictionary? : Dictionary,
 ) -> Bytes {
   let encoder = Encoder(
     level~,
     checksum~,
     content_size=input.length().to_int64(),
+    dictionary?,
   )
   // A block is never larger than its input and its 3-byte header, and the
   // frame adds at most 18 header and 4 checksum bytes; one block more

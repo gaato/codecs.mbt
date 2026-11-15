@@ -61,7 +61,11 @@ test "dictionary frames: any input split and output size give the same output" {
         next_in=() => in_chunk,
         next_out~,
       )
-      assert_eq(@checksum.sha256(got), v.sha256, msg="\{v.name} \{in_chunk} \{out_chunk}")
+      assert_eq(
+        @checksum.sha256(got),
+        v.sha256,
+        msg="\{v.name} \{in_chunk} \{out_chunk}",
+      )
     }
   }
 }

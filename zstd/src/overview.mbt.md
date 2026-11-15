@@ -150,7 +150,9 @@ test "frames, read without decoding them" {
 
 `compress` and `Encoder(content_size=n)` write the size in the frame header and pick the parameters for it, as zstd does: a small input gets small tables and declares a window no larger than itself.
 
-Not included: levels 13 to 22 (they act as 12), dictionaries, long-distance matching and multithreading.
+`Encoder(dictionary=d)` and `compress(dictionary=d)` put a `Dictionary` before the frame as `zstd -D` does: the frame's matches may reach into it until the input is a window past it, and the parameters are chosen for the input and the dictionary together. The frames decode with `zstd -d -D`, and on small inputs come out the size of zstd's or smaller.
+
+Not included: levels 13 to 22 (they act as 12), long-distance matching, multithreading, and training dictionaries (`zstd --train` makes them).
 
 ## Memory
 

@@ -5,7 +5,7 @@ pub struct History {
   priv mut data : FixedArray[Byte]
   priv mut start : Int32
   priv mut end : Int32
-  priv window : Int32
+  priv mut window : Int32
   priv first : FixedArray[Int32]
   priv second : FixedArray[Int32]
 }
@@ -103,6 +103,22 @@ fn History::append_fixed(
 /// Marks the current block encoded, after raw/RLE fallback has read it.
 pub fn History::finish_block(self : History) -> Unit {
   self.start = self.end
+}
+
+///|
+/// Puts `dict` in the history before the frame's first block, as bytes
+/// already encoded, and keeps `window` bytes from now on, so that it stays.
+fn History::preload(self : History, dict : BytesView, window : Int32) -> Unit {
+  self.window = window
+  self.append(dict)
+  self.finish_block()
+}
+
+///|
+/// How far back the history keeps bytes: the window, or the window and a
+/// dictionary while the frame may reach into it.
+fn History::set_window(self : History, window : Int32) -> Unit {
+  self.window = window
 }
 
 ///|

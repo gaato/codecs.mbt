@@ -47,9 +47,20 @@ fn skewed(rng : Rng, n : Int32) -> Bytes {
 }
 
 ///|
-fn emit(name : String, input : BytesView, stream : BytesView) -> Unit {
+fn emit(
+  name : String,
+  input : BytesView,
+  stream : BytesView,
+  dictionary? : BytesView,
+) -> Unit {
   let digest = @checksum.sha256(input)
-  println("\{name}\t\{input.length()}\t\{digest}\t\{@base64.encode(stream)}")
+  let dict = match dictionary {
+    Some(d) => "\t\{@base64.encode(d)}"
+    None => ""
+  }
+  println(
+    "\{name}\t\{input.length()}\t\{digest}\t\{@base64.encode(stream)}\{dict}",
+  )
 }
 
 ///|
@@ -62,6 +73,7 @@ fn streamed(
   input : Bytes,
   chunk : Int32,
   flush_every : Int32,
+  dictionary? : BytesView,
 ) -> Unit {
   let out = Buffer()
   let buffer = FixedArray::make(1000, b'\x00')
@@ -92,12 +104,17 @@ fn streamed(
     pos = end
     let label = "\{name} c\{chunk} f\{flush_every}"
     if action is Finish {
-      emit(label, input, out.to_bytes())
+      emit(label, input, out.to_bytes(), dictionary?)
       return
     }
     if action is Flush {
       flushes += 1
-      emit("\{label} flush \{flushes}", input[:pos], out.to_bytes())
+      emit(
+        "\{label} flush \{flushes}",
+        input[:pos],
+        out.to_bytes(),
+        dictionary?,
+      )
     }
   }
 }
@@ -205,4 +222,50 @@ fn main {
   for level in [3, 4, 5, 6, 8, 12] {
     emit("distant l\{level}", distant, @zstd.compress(distant, level~))
   }
+  // Frames with a raw dictionary, as `zstd -D` makes them: small and long
+  // inputs at every strategy, of known size and streamed, flushed, and long
+  // enough at level 1 (a 512 KiB window when the size is unknown) for the
+  // dictionary to go out of reach.
+  let dictionary = text({ state: 9842, }, 60000)
+  let raw = @zstd.Dictionary::raw(dictionary)
+  for n in [0, 1, 300, 4000, 100000, 300000] {
+    let input = text(rng, n)
+    for level in [-5, -1, 1, 2, 3, 4, 5, 6, 8, 9, 12] {
+      emit(
+        "dict text\{n} l\{level}",
+        input,
+        @zstd.compress(input, level~, dictionary=raw),
+        dictionary~,
+      )
+    }
+    for level in [1, 3, 5, 12] {
+      streamed(
+        "dict text\{n} l\{level} unsized",
+        @zstd.Encoder(level~, dictionary=raw),
+        input,
+        4096,
+        0,
+        dictionary~,
+      )
+    }
+  }
+  let long = text(rng, 700000)
+  for level in [1, 3, 5] {
+    streamed(
+      "dict long l\{level}",
+      @zstd.Encoder(level~, dictionary=raw),
+      long,
+      65536,
+      0,
+      dictionary~,
+    )
+  }
+  streamed(
+    "dict flushed l3",
+    @zstd.Encoder(dictionary=raw),
+    text(rng, 50000),
+    777,
+    10000,
+    dictionary~,
+  )
 }

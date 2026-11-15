@@ -179,7 +179,8 @@ fn compresses_literals(params : Params) -> Bool {
 
 ///|
 /// The parameters for `level` (already made `effective_level`) and an input
-/// of `size` bytes, or of unknown size.
+/// of `size` bytes, or of unknown size, after a dictionary of `dict_size`
+/// bytes (0 for none) put in the window before it.
 ///
 /// As `ZSTD_getCParams` does, a known size picks the table for its size
 /// class, and the window and tables then shrink as `ZSTD_adjustCParams`
@@ -187,20 +188,49 @@ fn compresses_literals(params : Params) -> Bool {
 /// takes the table for large inputs as it is. The size is known only when
 /// the caller states it, so the parameters, and the output, never depend on
 /// how the input is split.
-fn params_for(level : Int32, size : Int64?) -> Params {
-  guard size is Some(size) else { return level_row(0, level) }
-  let table = (if size <= 256 * 1024 { 1 } else { 0 }) +
-    (if size <= 128 * 1024 { 1 } else { 0 }) +
-    (if size <= 16 * 1024 { 1 } else { 0 })
+///
+/// With a dictionary, as for zstd's dictionary copied into the window
+/// (`ZSTD_cpm_noAttachDict`): the table is that for the input and the
+/// dictionary together, or for the dictionary and 499 bytes when the size is
+/// unknown (`ZSTD_getCParamRowSize` adds 500 to the unknown size,
+/// `UINT64_MAX`, which wraps around to the dictionary and 499); a known size shrinks the window to
+/// hold both, and the tables to the dictionary and the window
+/// (`ZSTD_dictAndWindowLog`).
+fn params_for(level : Int32, size : Int64?, dict_size~ : Int32 = 0) -> Params {
+  let dict = dict_size.to_int64()
+  let row_size = match size {
+    Some(size) => Some(size + dict)
+    None if dict > 0 => Some(499L + dict)
+    None => None
+  }
+  let table = match row_size {
+    Some(rsize) =>
+      (if rsize <= 256 * 1024 { 1 } else { 0 }) +
+      (if rsize <= 128 * 1024 { 1 } else { 0 }) +
+      (if rsize <= 16 * 1024 { 1 } else { 0 })
+    None => 0
+  }
   let params = level_row(table, level)
-  // The smallest log whose power of 2 holds `size`, at least 6 (the
-  // smallest hash log), as `ZSTD_adjustCParams_internal` computes it; sizes
-  // above 2^30 are not resized.
-  let window_log = if size <= 1L << 30 {
-    let size_log = if size < 64 { 6 } else { 64 - (size - 1).clz() }
+  guard size is Some(size) else { return params }
+  // The smallest log whose power of 2 holds `size` and the dictionary, at
+  // least 6 (the smallest hash log), as `ZSTD_adjustCParams_internal`
+  // computes it; sizes above 2^30 are not resized.
+  let window_log = if size <= 1L << 30 && dict <= 1L << 30 {
+    let total = size + dict
+    let size_log = if total < 64 { 6 } else { 64 - (total - 1).clz() }
     params.window_log.min(size_log)
   } else {
     params.window_log
+  }
+  // The tables' log: the window's, or one that holds the dictionary and the
+  // window when the window does not hold the dictionary and the input
+  // (`ZSTD_dictAndWindowLog`; 31 is zstd's largest window log).
+  let table_log = if dict == 0 || 1L << window_log >= dict + size {
+    window_log
+  } else if dict + (1L << window_log) >= 1L << 31 {
+    31
+  } else {
+    64 - (dict + (1L << window_log) - 1).clz()
   }
   let bt_scale = match params.strategy {
     Btlazy2 | Btopt => 1
@@ -214,8 +244,8 @@ fn params_for(level : Int32, size : Int64?) -> Params {
   {
     ..params,
     window_log: window_log.max(10),
-    hash_log: params.hash_log.min(window_log + 1),
-    chain_log: params.chain_log - (cycle_log - window_log).max(0),
+    hash_log: params.hash_log.min(table_log + 1),
+    chain_log: params.chain_log - (cycle_log - table_log).max(0),
   }
 }
 
@@ -225,8 +255,12 @@ fn params_for(level : Int32, size : Int64?) -> Params {
 /// parameter and use Lazy2 because binary trees/optimal parsing are outside
 /// the supported strategies. Adjustment precedes mapping so the reference
 /// tree cycle bit still governs the table sizes.
-fn encoder_params(level : Int32, size : Int64?) -> Params {
-  let params = params_for(level, size)
+fn encoder_params(
+  level : Int32,
+  size : Int64?,
+  dict_size~ : Int32 = 0,
+) -> Params {
+  let params = params_for(level, size, dict_size~)
   match params.strategy {
     Btlazy2 | Btopt => { ..params, strategy: Lazy2, }
     // As ZSTD_resolveRowMatchFinderMode decides by default, from the

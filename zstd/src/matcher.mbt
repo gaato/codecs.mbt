@@ -55,6 +55,20 @@ fn Matcher::reset(self : Matcher) -> Unit {
 }
 
 ///|
+/// The finder, with `dictionary`'s content before the frame if there is
+/// one; see the finders' `preload`.
+fn Matcher::preloaded(self : Matcher, dictionary : Dictionary?) -> Matcher {
+  guard dictionary is Some(d) else { return self }
+  let content = encoder_view(d.content)
+  match self {
+    Fast(f) => f.preload(content)
+    Dfast(f) => f.preload(content)
+    Lazy(f) => f.preload(content)
+  }
+  self
+}
+
+///|
 fn Matcher::memory_usage(self : Matcher) -> Int32 {
   match self {
     Fast(f) => f.memory_usage()

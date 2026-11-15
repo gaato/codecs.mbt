@@ -6,7 +6,13 @@
 pub struct Fast {
   priv hash : FixedArray[Int32]
   priv hash_log : Int32
-  priv window : Int32
+  priv mut window : Int32
+  // The level's window. `window` is more than it while the frame's first
+  // blocks may still reach into a dictionary (`preload`).
+  priv base_window : Int32
+  // Where the dictionary ends in the history, while it is in reach; 0 for
+  // none.
+  priv mut dict_end : Int32
   priv hash_shift : Int32
   priv hash_prime : UInt64
   priv acceleration : Int32
@@ -21,7 +27,13 @@ pub struct Fast {
 pub struct Fast {
   priv hash : FixedArray[Int32]
   priv hash_log : Int32
-  priv window : Int32
+  priv mut window : Int32
+  // The level's window. `window` is more than it while the frame's first
+  // blocks may still reach into a dictionary (`preload`).
+  priv base_window : Int32
+  // Where the dictionary ends in the history, while it is in reach; 0 for
+  // none.
+  priv mut dict_end : Int32
   priv min_match : Int32
   priv acceleration : Int32
   priv history : History
@@ -44,6 +56,8 @@ pub fn Fast::Fast(
     hash,
     hash_log,
     window: 1 << window_log,
+    base_window: 1 << window_log,
+    dict_end: 0,
     hash_shift: 64 - min_match.clamp(min=4, max=7) * 8,
     hash_prime: hash_prime(min_match.clamp(min=4, max=7)),
     acceleration: target_length.max(1),
@@ -66,6 +80,8 @@ pub fn Fast::Fast(
     hash,
     hash_log,
     window: 1 << window_log,
+    base_window: 1 << window_log,
+    dict_end: 0,
     min_match: min_match.clamp(min=4, max=7),
     acceleration: target_length.max(1),
     history: History::new(1 << window_log, hash, []),
@@ -78,6 +94,33 @@ pub fn Fast::Fast(
 pub fn Fast::reset(self : Fast) -> Unit {
   self.history.reset()
   self.repeats.reset()
+  self.end_dictionary()
+}
+
+///|
+/// Puts the dictionary `dict` before the frame, after `reset`, as zstd
+/// copies one into its window (`ZSTD_loadDictionaryContent`): matches may
+/// reach into it until a block ends more than the window past it
+/// (`ZSTD_checkDictValidity`), and the history keeps it until then.
+/// Every position with eight bytes after it goes in the table.
+pub fn Fast::preload(self : Fast, dict : BytesView) -> Unit {
+  let d = dict.length()
+  guard d > 0 else { return }
+  self.window = self.base_window + d
+  self.dict_end = d
+  self.history.preload(dict, self.window)
+  // p + 8 <= d: hash_at's eight-byte read stays in the dictionary.
+  for p in 0..<(d - 7) {
+    write(self.hash, self.hash_at(p), p)
+  }
+}
+
+///|
+/// The dictionary out of reach: the level's window again.
+fn Fast::end_dictionary(self : Fast) -> Unit {
+  self.window = self.base_window
+  self.dict_end = 0
+  self.history.set_window(self.base_window)
 }
 
 ///|
@@ -121,7 +164,7 @@ pub fn Fast::find(
   repeats : @seqenc.Repeats,
   block : @seqenc.Block,
 ) -> Unit {
-  self.prepare(self.window.min(131072))
+  self.prepare(self.base_window.min(131072))
   self.history.append_fixed(input, n)
   self.find_buffered(n, repeats, block)
   self.history.finish_block()
@@ -296,5 +339,9 @@ pub fn Fast::history(self : Fast) -> History {
 ///|
 /// Makes room for a whole cutter block, independently of input step sizes.
 pub fn Fast::prepare(self : Fast, block_max : Int32) -> Unit {
+  if self.dict_end > 0 &&
+    self.history.start + block_max > self.dict_end + self.base_window {
+    self.end_dictionary()
+  }
   self.history.prepare(block_max) |> ignore
 }

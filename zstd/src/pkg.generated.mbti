@@ -8,7 +8,7 @@ import {
 }
 
 // Values
-pub fn compress(BytesView, level? : Int32, checksum? : Bool) -> Bytes
+pub fn compress(BytesView, level? : Int32, checksum? : Bool, dictionary? : Dictionary) -> Bytes
 
 pub fn decompress(BytesView, max_output? : Int32, max_window_bits? : Int32, dictionary? : Dictionary) -> Bytes raise @codec.CodecError
 
@@ -46,7 +46,7 @@ pub fn Dictionary::raw(BytesView) -> Self
 pub struct Encoder {
   // private fields
 }
-pub fn Encoder::Encoder(level? : Int32, checksum? : Bool, content_size? : Int64) -> Self
+pub fn Encoder::Encoder(level? : Int32, checksum? : Bool, content_size? : Int64, dictionary? : Dictionary) -> Self
 pub fn Encoder::is_finished(Self) -> Bool
 pub fn Encoder::last_consumed(Self) -> Int32
 pub fn Encoder::last_produced(Self) -> Int32

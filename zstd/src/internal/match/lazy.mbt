@@ -14,7 +14,13 @@ pub struct Lazy {
   priv hash_prime : UInt64
   priv attempts : Int32
   priv depth : Int32
-  priv window : Int32
+  priv mut window : Int32
+  // The level's window. `window` is more than it while the frame's first
+  // blocks may still reach into a dictionary (`preload`).
+  priv base_window : Int32
+  // Where the dictionary ends in the history, while it is in reach; 0 for
+  // none.
+  priv mut dict_end : Int32
   priv history : History
   priv mut next_update : Int32
   priv mut bias : Int32
@@ -36,7 +42,13 @@ pub struct Lazy {
   priv min_match : Int32
   priv attempts : Int32
   priv depth : Int32
-  priv window : Int32
+  priv mut window : Int32
+  // The level's window. `window` is more than it while the frame's first
+  // blocks may still reach into a dictionary (`preload`).
+  priv base_window : Int32
+  // Where the dictionary ends in the history, while it is in reach; 0 for
+  // none.
+  priv mut dict_end : Int32
   priv history : History
   priv mut next_update : Int32
   priv mut bias : Int32
@@ -90,6 +102,8 @@ pub fn Lazy::Lazy(
     (if row_finder { search_log.min(row_log) } else { search_log }),
     depth,
     window: 1 << window_log,
+    base_window: 1 << window_log,
+    dict_end: 0,
     history: History::new(1 << window_log, hash, chain),
     next_update: 0,
     bias: 0,
@@ -137,6 +151,8 @@ pub fn Lazy::Lazy(
     (if row_finder { search_log.min(row_log) } else { search_log }),
     depth,
     window: 1 << window_log,
+    base_window: 1 << window_log,
+    dict_end: 0,
     history: History::new(1 << window_log, hash, chain),
     next_update: 0,
     bias: 0,
@@ -154,6 +170,38 @@ pub fn Lazy::reset(self : Lazy) -> Unit {
   self.tags.fill(b'\x00')
   self.next_update = 0
   self.bias = 0
+  self.end_dictionary()
+}
+
+///|
+/// Puts the dictionary `dict` before the frame, after `reset`, as zstd
+/// copies one into its window (`ZSTD_loadDictionaryContent`): matches may
+/// reach into it until a block ends more than the window past it
+/// (`ZSTD_checkDictValidity`), and the history keeps it until then.
+/// Hash chains index it on the first search, as they catch up from the
+/// frame's start; rows, which skip long gaps, index it here.
+pub fn Lazy::preload(self : Lazy, dict : BytesView) -> Unit {
+  let d = dict.length()
+  guard d > 0 else { return }
+  self.window = self.base_window + d
+  self.dict_end = d
+  self.history.preload(dict, self.window)
+  if self.row_log > 0 {
+    // p + 8 <= d: hash_at's eight-byte read stays in the dictionary; the
+    // last seven positions are caught up with the first block.
+    for p in 0..<(d - 7) {
+      self.row_insert(p, self.hash_at(p))
+    }
+    self.next_update = (d - 7).max(0)
+  }
+}
+
+///|
+/// The dictionary out of reach: the level's window again.
+fn Lazy::end_dictionary(self : Lazy) -> Unit {
+  self.window = self.base_window
+  self.dict_end = 0
+  self.history.set_window(self.base_window)
 }
 
 ///|
@@ -271,7 +319,7 @@ pub fn Lazy::find(
   repeats : @seqenc.Repeats,
   block : @seqenc.Block,
 ) -> Unit {
-  self.prepare(self.window.min(131072))
+  self.prepare(self.base_window.min(131072))
   self.history.append_fixed(input, n)
   self.find_buffered(n, repeats, block)
   self.history.finish_block()
@@ -439,6 +487,10 @@ pub fn Lazy::history(self : Lazy) -> History {
 ///|
 /// Makes room for a whole cutter block, independently of input step sizes.
 pub fn Lazy::prepare(self : Lazy, block_max : Int32) -> Unit {
+  if self.dict_end > 0 &&
+    self.history.start + block_max > self.dict_end + self.base_window {
+    self.end_dictionary()
+  }
   let cut = self.history.prepare(block_max)
   // A row finder has no chain ring to keep aligned.
   if self.chain.length() > 0 {

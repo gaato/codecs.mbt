@@ -20,6 +20,7 @@
 pub struct Encoder {
   priv checksum : Bool
   priv content_size : Int64?
+  priv dictionary : Dictionary?
   // The level's parameters. The frame's window is `params.window_log`, or
   // the content size of a single-segment frame.
   priv params : Params
@@ -67,17 +68,31 @@ pub struct Encoder {
 /// size, and a frame that fits its window is written single-segment, so a
 /// decoder reserves no more than the content. A negative `content_size`
 /// counts as not given.
+///
+/// `dictionary` comes before every frame, as zstd's `-D` puts it: the
+/// frame's matches may reach into it until the input is a window past it,
+/// and the parameters are chosen for the input and the dictionary together,
+/// as zstd chooses them. A decoder needs the same dictionary. The encoder
+/// keeps it by reference and copies its content into its history at the
+/// start of every frame, so its memory grows by the dictionary's length,
+/// twice: once for the dictionary and once for the room the history keeps
+/// beyond it.
 pub fn Encoder::Encoder(
   level~ : Int32 = DEFAULT_LEVEL,
   checksum~ : Bool = true,
   content_size? : Int64,
+  dictionary? : Dictionary,
 ) -> Encoder {
   let level = effective_level(level)
   let content_size = match content_size {
     Some(size) if size >= 0 => Some(size)
     _ => None
   }
-  let params = encoder_params(level, content_size)
+  let dict_size = match dictionary {
+    Some(d) => encoder_view(d.content).length()
+    None => 0
+  }
+  let params = encoder_params(level, content_size, dict_size~)
   let window_log = params.window_log
   let single_segment = content_size is Some(size) && size <= 1L << window_log
   let block_max = match content_size {
@@ -87,12 +102,13 @@ pub fn Encoder::Encoder(
   {
     checksum,
     content_size,
+    dictionary,
     params,
     single_segment,
     block_max,
     data_len: 0,
     literals: LiteralsWriter::new(compress=compresses_literals(params)),
-    matcher: Matcher::new(params),
+    matcher: Matcher::new(params).preloaded(dictionary),
     sequences: @seqenc.Block(),
     sequence_writer: @seqenc.Writer(),
     sequence_bits: @bits.BitPacker(),
@@ -118,6 +134,7 @@ pub fn Encoder::reset(self : Encoder) -> Unit {
   self.data_len = 0
   self.hash.reset()
   self.matcher.reset()
+  self.matcher.preloaded(self.dictionary) |> ignore
   self.sequence_writer.reset()
   self.literals.reset()
   self.total_in = 0

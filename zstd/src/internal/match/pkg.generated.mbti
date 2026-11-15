@@ -18,6 +18,7 @@ pub fn Dfast::find(Self, FixedArray[Byte], Int32, @seqenc.Repeats, @seqenc.Block
 pub fn Dfast::find_buffered(Self, Int32, @seqenc.Repeats, @seqenc.Block) -> Unit
 pub fn Dfast::history(Self) -> History
 pub fn Dfast::memory_usage(Self) -> Int32
+pub fn Dfast::preload(Self, BytesView) -> Unit
 pub fn Dfast::prepare(Self, Int32) -> Unit
 pub fn Dfast::reset(Self) -> Unit
 
@@ -29,6 +30,7 @@ pub fn Fast::find(Self, FixedArray[Byte], Int32, @seqenc.Repeats, @seqenc.Block)
 pub fn Fast::find_buffered(Self, Int32, @seqenc.Repeats, @seqenc.Block) -> Unit
 pub fn Fast::history(Self) -> History
 pub fn Fast::memory_usage(Self) -> Int32
+pub fn Fast::preload(Self, BytesView) -> Unit
 pub fn Fast::prepare(Self, Int32) -> Unit
 pub fn Fast::reset(Self) -> Unit
 
@@ -49,6 +51,7 @@ pub fn Lazy::find(Self, FixedArray[Byte], Int32, @seqenc.Repeats, @seqenc.Block)
 pub fn Lazy::find_buffered(Self, Int32, @seqenc.Repeats, @seqenc.Block) -> Unit
 pub fn Lazy::history(Self) -> History
 pub fn Lazy::memory_usage(Self) -> Int32
+pub fn Lazy::preload(Self, BytesView) -> Unit
 pub fn Lazy::prepare(Self, Int32) -> Unit
 pub fn Lazy::reset(Self) -> Unit
 

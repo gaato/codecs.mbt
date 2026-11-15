@@ -4,6 +4,21 @@
 // none, and is used for frames that name none.
 
 ///|
+/// The longest dictionary content the encoder puts before a frame: of a
+/// longer one, its last this many bytes. The encoder's history holds twice
+/// the window and the dictionary in 32-bit indices, and 512 MiB keeps that
+/// within range at every level; a decoder given the whole dictionary still
+/// reads the frames, which never reach before what the encoder kept.
+const MAX_ENCODER_DICTIONARY : Int32 = 1 << 29
+
+///|
+/// The part of `content` the encoder uses: all of it, or its last
+/// `MAX_ENCODER_DICTIONARY` bytes.
+fn encoder_view(content : BytesView) -> BytesView {
+  content[(content.length() - MAX_ENCODER_DICTIONARY).max(0):]
+}
+
+///|
 /// A dictionary for `Decoder` and `Encoder`: its content, held by reference
 /// (the bytes it is a view of stay alive as long as it does), and its id.
 pub struct Dictionary {
