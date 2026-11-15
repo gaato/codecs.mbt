@@ -75,8 +75,12 @@ fn streamed(
   window_bits : Int32,
   chunk : Int32,
   flush_every : Int32,
+  dictionary? : BytesView,
 ) -> Unit {
-  let encoder = @brotli.Encoder(window_bits~)
+  let encoder = match dictionary {
+    Some(d) => @brotli.Encoder(window_bits~, dictionary=@brotli.Dictionary(d))
+    None => @brotli.Encoder(window_bits~)
+  }
   let out = Buffer()
   let buffer = FixedArray::make(1000, b'\x00')
   let mut pos = 0
@@ -108,6 +112,7 @@ fn streamed(
         "\{name} w\{window_bits} c\{chunk} f\{flush_every}",
         input,
         out.to_bytes(),
+        dictionary?,
       )
       return
     }
@@ -117,6 +122,7 @@ fn streamed(
         "\{name} w\{window_bits} c\{chunk} f\{flush_every} flush \{flushes}",
         input[:pos],
         out.to_bytes(),
+        dictionary?,
       )
     }
   }
@@ -154,6 +160,21 @@ fn main {
       @brotli.compress(far_input, window_bits~),
     )
   }
+  // Long enough for the encoder's buffer to slide: past the window and the
+  // room above it (a quarter window, or a meta-block). Zeros for the 16 MiB
+  // window, so that the stream stays small.
+  let long = text(rng, 6 << 20)
+  for window_bits in [20, 22] {
+    emit("long w\{window_bits}", long, @brotli.compress(long, window_bits~))
+  }
+  let zeros = Bytes::make(21 << 20, b'\x00')
+  emit("long zeros w24", zeros, @brotli.compress(zeros, window_bits=24))
+  // Around meta-block edges (64 KiB), whole and streamed.
+  for n in [65535, 65536, 65537, 131071, 131072, 131073] {
+    let input = text(rng, n)
+    emit("edge\{n} w16", input, @brotli.compress(input, window_bits=16))
+    streamed("edge\{n}", input, 16, 4096, 0)
+  }
   let flushed = text(rng, 200000) + random(rng, 30000) + text(rng, 50000)
   streamed("flushed", flushed, 22, 777, 10000)
   streamed("flushed", flushed, 16, 65536, 70000)
@@ -164,6 +185,15 @@ fn main {
   // and go on reaching into it, through `compress` and streamed.
   let dict_bytes = text(Rng::{ state: 9841, }, 60000)
   let dict = @brotli.Dictionary(dict_bytes)
+  // A dictionary with flushes: every part decodes with it.
+  streamed(
+    "dict flushed",
+    text(rng, 50000),
+    16,
+    777,
+    5000,
+    dictionary=dict_bytes,
+  )
   for n in [0, 1, 300, 4000, 100000, 300000] {
     let input = text(rng, n)
     for window_bits in [10, 16, 22] {

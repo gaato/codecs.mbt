@@ -15,17 +15,24 @@ import {
 //
 // Runs src/internal/crosscheck, which prints one line per stream: a name, the
 // length and SHA-256 of the input so far, and the base64 of the stream so far.
-// Each stream must decode to exactly that input:
-// - a whole stream with the `brotli -d` command, which fails on a stream that
-//   is cut short, corrupt or followed by more bytes;
-// - a stream cut after a flush with Node's zlib (which bundles google/brotli),
-//   since it must give out everything without being told the end, and the
-//   command gives out nothing for a stream without its end. Node is given
+// Each stream must decode to exactly that input, with Node's zlib (which
+// bundles google/brotli) and, when whole, also with the command (a build of
+// its own of the same library, separately installed):
+// - a whole stream with Node told the input is complete, and with the
+//   `brotli -d` command, which fail on a stream that is cut short, corrupt
+//   or followed by more bytes;
+// - a stream cut after a flush with Node alone, since it must give out
+//   everything without being told the end, and the command gives out
+//   nothing for a stream without its end. Node is given
 //   finishFlush BROTLI_OPERATION_FLUSH: it then runs the decoder over the
 //   bytes and returns what it gave out, instead of raising "unexpected end of
 //   file" as it does when told that the input is complete. It raises only on
 //   corrupt input; a stream that holds back some output decodes to fewer
 //   bytes, and the length and SHA-256 catch that.
+//
+// A line may carry a fifth field, the base64 of the LZ77 dictionary the
+// stream needs: both decoders are given it (Node's `dictionary` option and
+// `brotli -d -D`).
 //
 // Usage, from the repository root (needs the brotli command and node):
 //   moon run brotli/scripts/crosscheck.mbtx [-- --target native|js|wasm|wasm-gc] [--compare]
@@ -35,17 +42,21 @@ import {
 // Exit status: 0 = every stream decodes, 1 = one does not, 2 = setup failure.
 
 ///|
-/// Decodes each line of stdin (the base64 of a stream cut after a flush) and
-/// prints the length and SHA-256 of what came out, or `error` and why.
+/// Decodes each line of stdin (whether the stream was cut after a flush, its
+/// base64 and its dictionary's) and prints the length and SHA-256 of what
+/// came out, or `error` and why.
 let node_decoder : String =
   #|const zlib = require("node:zlib");
   #|const crypto = require("node:crypto");
   #|const lines = require("node:fs").readFileSync(0, "latin1").split("\n");
   #|lines.pop();
-  #|const flush = { finishFlush: zlib.constants.BROTLI_OPERATION_FLUSH };
   #|for (const line of lines) {
+  #|  const [flushed, data, dictionary] = line.split("\t");
+  #|  const options = flushed === "1"
+  #|    ? { finishFlush: zlib.constants.BROTLI_OPERATION_FLUSH } : {};
+  #|  if (dictionary) options.dictionary = Buffer.from(dictionary, "base64");
   #|  try {
-  #|    const out = zlib.brotliDecompressSync(Buffer.from(line, "base64"), flush);
+  #|    const out = zlib.brotliDecompressSync(Buffer.from(data, "base64"), options);
   #|    const digest = crypto.createHash("sha256").update(out).digest("hex");
   #|    console.log(`${out.length} ${digest}`);
   #|  } catch (err) {
@@ -178,11 +189,14 @@ async fn main {
       },
     })
   }
-  // The flushed streams, all through one Node process.
-  let flushed = streams.filter(s => s.name.contains(" flush "))
+  // Every stream through one Node process: a whole one told it is whole, a
+  // flushed one decoded as far as it goes.
   let input = StringBuilder()
-  for s in flushed {
-    input.write_string("\{@base64.encode(s.data)}\n")
+  for s in streams {
+    let flushed = if s.name.contains(" flush ") { "1" } else { "0" }
+    input.write_string(
+      "\{flushed}\t\{@base64.encode(s.data)}\t\{@base64.encode(s.dictionary)}\n",
+    )
   }
   let node = @shell.Cmd(
     "node",
@@ -194,29 +208,28 @@ async fn main {
     return
   }
   let node_results = node.stdout().split("\n").map(l => l.to_owned()).collect()
-  if node_results.length() != flushed.length() + 1 {
+  if node_results.length() != streams.length() + 1 {
     setup_failure(
-      "node answered \{node_results.length() - 1} of \{flushed.length()} streams",
+      "node answered \{node_results.length() - 1} of \{streams.length()} streams",
     )
     return
   }
-  let mut next_flushed = 0
   let mut failures = 0
   let mut checked = 0
-  for s in streams {
+  for n, s in streams {
+    let result = node_results[n]
+    if result.strip_prefix("error ") is Some(err) {
+      println("FAIL \{s.name}: node: \{err}")
+      failures += 1
+      continue
+    } else if result != "\{s.size} \{s.digest}" {
+      let length = result.split(" ").collect()[0]
+      println("FAIL \{s.name}: node decodes it to \{length} different bytes")
+      failures += 1
+      continue
+    }
     if s.name.contains(" flush ") {
-      let result = node_results[next_flushed]
-      next_flushed += 1
-      if result.strip_prefix("error ") is Some(err) {
-        println("FAIL \{s.name}: \{err}")
-        failures += 1
-      } else if result != "\{s.size} \{s.digest}" {
-        let length = result.split(" ").collect()[0]
-        println("FAIL \{s.name}: decodes to \{length} different bytes")
-        failures += 1
-      } else {
-        checked += 1
-      }
+      checked += 1
       continue
     }
     let dict_args = if s.dictionary.length() == 0 {
