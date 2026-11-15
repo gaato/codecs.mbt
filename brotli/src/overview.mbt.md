@@ -115,7 +115,7 @@ test "stop at the end of the stream" {
 
 ## What it decodes
 
-Every RFC 7932 stream, including the static dictionary and its 121 transforms. Input comes in chunks of any size, down to one byte, and output goes into slices of any size, under the rules of [`gaato/codec_bytes`](https://mooncakes.io/docs/gaato/codec_bytes). The rules the decoder applies to what it reads and the canonical codes the encoder writes are proved against RFC 7932; [PROOFS.md](https://github.com/gaato/codecs.mbt/blob/main/brotli/PROOFS.md) lists what is proved and what is trusted.
+Every RFC 7932 stream, including the static dictionary and its 121 transforms. Input comes in chunks of any size, down to one byte, and output goes into slices of any size, under the rules of [`gaato/codec_bytes`](https://mooncakes.io/docs/gaato/codec_bytes). The rules the decoder applies to what it reads and its verdict on a prefix code's lengths are proved against RFC 7932; its decoding tables and the encoder's codes, made as libdeflate makes them, are tested, not proved; [PROOFS.md](https://github.com/gaato/codecs.mbt/blob/main/brotli/PROOFS.md) lists what is proved and what is trusted.
 
 An LZ77 dictionary (RFC 9841 section 3.2), given to `Decoder(dictionary=d)` or `decompress(dictionary=d)` as a `Dictionary` of raw bytes, lets a stream copy from it, as `brotli -D` writes them and RFC 9842's `dcb` coding uses one: distances just past the window's reach address the dictionary from its end, and the static dictionary's words come after them. A copy that would run past the dictionary's end raises `Corrupt`, as google/brotli's decoder refuses it (RFC 9841 has it go on into the window, which a full window no longer holds).
 
@@ -141,7 +141,7 @@ A step that raises first hands out the output that comes before the error (answe
 
 ## When to use it
 
-gaato/brotli fits Brotli that arrives in pieces or comes from anyone. `Decoder` takes input in pieces down to one byte, writes into your slices and holds its window and at most 1.3 MiB of tables (a process decoding 256 MiB of output in 64 KiB pieces peaks at 20.1 MiB, most of it the runtime). It agreed with `brotli -d` on all 81 valid and 359 invalid streams of the comparison, and its decoding rules and the encoder's codes are proved against RFC 7932. It runs on Native, JS, Wasm and Wasm GC; its encoder has one quality, about google/brotli's 4.
+gaato/brotli fits Brotli that arrives in pieces or comes from anyone. `Decoder` takes input in pieces down to one byte, writes into your slices and holds its window and at most 1.3 MiB of tables (a process decoding 256 MiB of output in 64 KiB pieces peaks at 20.1 MiB, most of it the runtime). It agreed with `brotli -d` on all 81 valid and 359 invalid streams of the comparison, and its decoding rules are proved against RFC 7932. It runs on Native, JS, Wasm and Wasm GC; its encoder has one quality, about google/brotli's 4.
 
 On Wasm, a decoder that takes the whole stream at once can be faster: hustcer/fbr's takes about 0.77 times as long as gaato/brotli on the benchmarks' text there, and 1.3 (Native), 1.6 (Wasm GC) and 1.6 (JS) times as long on the other targets. Its encoder at quality 11 writes 17 % less on that text and takes 142 to 386 times as long as ours.
 

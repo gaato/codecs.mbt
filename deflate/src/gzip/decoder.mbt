@@ -84,10 +84,10 @@ pub struct Decoder {
   // The header being read: its flags, fixed fields, and variable fields as
   // they gather; `held` counts the bytes in the variable fields.
   priv mut fixed : @header.Fixed
-  priv mut extra : Buffer?
+  priv mut extra : Field?
   priv mut extra_left : Int32
-  priv mut name : Buffer?
-  priv mut comment : Buffer?
+  priv mut name : Field?
+  priv mut comment : Field?
   priv mut held : Int32
   priv mut header_crc : UInt32
   priv mut header : Header?
@@ -191,10 +191,70 @@ pub fn Decoder::header(self : Decoder) -> Header? {
 ///|
 /// Bytes held for the stream: those of the raw DEFLATE decoder (see
 /// `@deflate.Decoder::memory_usage`) and the variable fields of the current
-/// header, at most `max_header_bytes`, and none with `keep_header=false`. The
-/// fixed-size header and trailer bytes, at most 10, are not counted.
+/// header with the room allocated for the one being read, at most
+/// `max_header_bytes`, and none with `keep_header=false`. The fixed-size
+/// header and trailer bytes, at most 10, are not counted.
 pub fn Decoder::memory_usage(self : Decoder) -> Int32 {
-  self.inner.memory_usage() + self.held
+  let size = (f : Field?) => {
+    match f {
+      Some(field) => field.data.length()
+      None => 0
+    }
+  }
+  // While the fields gather, their arrays (the extra field's whole declared
+  // length among them); once the header is made of them, its bytes, `held`.
+  let fields = if self.extra is None &&
+    self.name is None &&
+    self.comment is None {
+    self.held
+  } else {
+    size(self.extra) + size(self.name) + size(self.comment)
+  }
+  self.inner.memory_usage() + fields
+}
+
+///|
+/// A variable header field as it gathers: its bytes, `data[0:len]`, in an
+/// array that grows no further than the field can reach.
+priv struct Field {
+  mut data : FixedArray[Byte]
+  mut len : Int32
+}
+
+///|
+fn Field::new(capacity : Int32) -> Field {
+  { data: FixedArray::make(capacity, b'\x00'), len: 0, }
+}
+
+///|
+/// Adds `bytes`, growing the array by doubling but never past `reach`
+/// bytes, the most the field can come to (the bytes already reserved for
+/// it and what `max_header_bytes` leaves).
+fn Field::append(self : Field, bytes : BytesView, reach : Int32) -> Unit {
+  let need = self.len + bytes.length()
+  if need > self.data.length() {
+    let capacity = (2 * self.data.length()).max(need).min(reach.max(need))
+    let grown = FixedArray::make(capacity, b'\x00')
+    FixedArray::unsafe_blit(grown, 0, self.data, 0, self.len)
+    self.data = grown
+  }
+  self.data.blit_from_bytesview(self.len, bytes)
+  self.len = need
+}
+
+///|
+/// Gives back the room past the field's bytes, once it is complete.
+fn Field::trim(self : Field) -> Unit {
+  if self.data.length() > self.len {
+    let exact = FixedArray::make(self.len, b'\x00')
+    FixedArray::unsafe_blit(exact, 0, self.data, 0, self.len)
+    self.data = exact
+  }
+}
+
+///|
+fn Field::to_bytes(self : Field) -> Bytes {
+  Bytes::from_array(self.data[0:self.len])
 }
 
 ///|
@@ -323,7 +383,7 @@ fn Decoder::run(self : Decoder, end~ : Bool) -> Status raise Stop {
         let length = @header.le16(Bytes::from_array(self.hdr[0:2]))
         if self.keep_header {
           self.reserve(length, known=true)
-          self.extra = Some(Buffer(size_hint=length))
+          self.extra = Some(Field::new(length))
         }
         self.extra_left = length
         self.state = Extra
@@ -511,9 +571,9 @@ fn Decoder::drop_header(self : Decoder) -> Unit {
 
 ///|
 /// A buffer for a name or a comment, or None to skip it.
-fn Decoder::field_buffer(self : Decoder) -> Buffer? {
+fn Decoder::field_buffer(self : Decoder) -> Field? {
   if self.keep_header {
-    Some(Buffer())
+    Some(Field::new(0))
   } else {
     None
   }
@@ -548,10 +608,11 @@ fn Decoder::reserve(
 
 ///|
 /// Takes the next `n` input bytes into the field `into`.
-fn Decoder::keep(self : Decoder, into : Buffer?, n : Int32) -> Unit {
+fn Decoder::keep(self : Decoder, into : Field?, n : Int32) -> Unit {
   let bytes = self.view[self.in_pos:self.in_pos + n]
-  if into is Some(buffer) {
-    buffer.write_bytesview(bytes)
+  if into is Some(field) {
+    // `reserve` has counted these bytes in `held`.
+    field.append(bytes, field.len + n + (self.max_header_bytes - self.held))
   }
   self.header_crc = @crc32.update_bytes(self.header_crc, bytes)
   self.in_pos += n
@@ -561,7 +622,7 @@ fn Decoder::keep(self : Decoder, into : Buffer?, n : Int32) -> Unit {
 /// Takes the input bytes of a zero-terminated field into `into`, or past it
 /// when `into` is None, and the zero if it is there: whether the field is
 /// complete.
-fn Decoder::zero_terminated(self : Decoder, into : Buffer?) -> Bool raise Stop {
+fn Decoder::zero_terminated(self : Decoder, into : Field?) -> Bool raise Stop {
   let mut n = 0
   while self.in_pos + n < self.view.length() && self.view[self.in_pos + n] != 0 {
     n += 1
@@ -574,6 +635,11 @@ fn Decoder::zero_terminated(self : Decoder, into : Buffer?) -> Bool raise Stop {
     return false
   }
   self.keep(None, 1)
+  // Only the field being read keeps room to spare, so that the fields stay
+  // within `max_header_bytes` in all.
+  if into is Some(field) {
+    field.trim()
+  }
   true
 }
 

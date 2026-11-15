@@ -16,6 +16,11 @@ never does. Every breaking change is listed with a migration note.
 - **Level -1 is the default level, 6, as zlib's `Z_DEFAULT_COMPRESSION` is.** It was clamped to 0, so a stream asked for with zlib's spelling of the default was stored, not compressed. `@deflate`, `@zlib` and `@gzip`'s `Encoder` and `compress` all take it; zlib's FLEVEL and gzip's XFL follow, so `@zlib.compress(input, level=-1)` begins `78 9c` as zlib's does. Other levels outside 0 to 9 are still clamped, and the output at every other level is unchanged. Migration: a caller that wants the stored output it got at -1 passes `level=0`.
 - **Building a Huffman code sorts its most frequent symbols by heapsort, as libdeflate does.** They were sorted by insertion, which takes time quadratic in their number; a code of 704 symbols now takes about a third of the time on Wasm and half on Native. The output does not change.
 - **Error messages.** The messages of `Truncated` and `TrailingData` read the same way as in the other modules: "the input holds no ..." or "the input ends inside ...", and "data after ..." the last unit. Raw DEFLATE says "the input ends inside the DEFLATE data" (it said "the DEFLATE data ends early") and "data after the final block" in every case; zlib "the input ends inside the header or the trailer"; gzip "the input ends inside a member's header" or "... trailer". The kinds are unchanged.
+### Fixed
+
+- **The README says which codes are proved:** the fixed Huffman code's canonical codes; the codes the encoder builds for each block (`CodeMaker`, libdeflate's method) are tested, as PROOFS.md lists them, not proved.
+- **gzip's `memory_usage` counts the room a header's name or comment has allocated,** not only its bytes: a name read in pieces grew by doubling past what was counted (a name of 32,769 bytes with `max_header_bytes=32769` held 65,536 and was counted as 32,769). The fields now grow no further than `max_header_bytes` leaves them and are trimmed once complete, so the bound, `46,592 + max_header_bytes`, holds for what is allocated.
+
 ## [0.1.2] - 2026-11-15
 
 ### Changed

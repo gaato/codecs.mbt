@@ -8,7 +8,15 @@ fn check_bounds(d : Decoder, room : Int32) -> Unit raise {
   let held = [d.extra, d.name, d.comment].fold(init=0, (n, b) => {
     n +
     (match b {
-      Some(buffer) => buffer.length()
+      Some(field) => field.len
+      None => 0
+    })
+  })
+  // What the fields' arrays take, room to spare included.
+  let allocated = [d.extra, d.name, d.comment].fold(init=0, (n, b) => {
+    n +
+    (match b {
+      Some(field) => field.data.length()
       None => 0
     })
   })
@@ -27,7 +35,13 @@ fn check_bounds(d : Decoder, room : Int32) -> Unit raise {
   assert_true(d.held <= d.max_header_bytes)
   assert_true(d.inner.kept_bytes() <= 5)
   assert_eq(d.inner.memory_usage(), 46592)
-  assert_eq(d.memory_usage(), d.inner.memory_usage() + d.held)
+  let gathering = d.extra is Some(_) ||
+    d.name is Some(_) ||
+    d.comment is Some(_)
+  assert_eq(
+    d.memory_usage(),
+    d.inner.memory_usage() + (if gathering { allocated } else { d.held }),
+  )
   assert_true(d.memory_usage() <= 46592 + d.max_header_bytes)
 }
 
@@ -109,5 +123,33 @@ test "the encoder reports the raw encoder's bound and its header after every ste
         },
       )
     }
+  }
+}
+
+///|
+test "a name that grows to the limit is counted with the room allocated for it" {
+  // A header with FNAME and 32,769 bytes of name, no terminator yet: the
+  // name's array has grown by doubling, and memory_usage counts all of it.
+  let limit = 32769
+  let header = Bytes::from_array([
+    b'\x1f', b'\x8b', b'\x08', b'\x08', b'\x00', b'\x00', b'\x00', b'\x00', b'\x00',
+    b'\xff',
+  ])
+  let input = header + Bytes::make(limit, b'n')
+  let out = FixedArray::make(16, b'\x00')
+  for piece in [1, 7, 4096, input.length()] {
+    let d = Decoder(max_header_bytes=limit)
+    let mut pos = 0
+    while pos < input.length() {
+      let end = (pos + piece).min(input.length())
+      let status = d.step_into(input[pos:end], out, end=false)
+      assert_true(status is NeedMoreInput)
+      pos = end
+      check_bounds(d, out.length())
+    }
+    guard d.name is Some(name) else { fail("no name") }
+    assert_eq(name.len, limit)
+    assert_eq(d.memory_usage(), d.inner.memory_usage() + name.data.length())
+    assert_true(d.memory_usage() <= 46592 + limit)
   }
 }

@@ -20,6 +20,7 @@ never does. Every breaking change is listed with a migration note.
 
 ### Fixed
 
+- **The README no longer says the encoder's codes are proved.** They are made as libdeflate makes them (`CodeMaker`), which PROOFS.md lists as not proved; the tests hold them to optimal codes.
 - **A stream whose input ends on a meta-block's boundary before `Finish` no longer depends on the split.** When a step's input filled a 64 KiB meta-block exactly and `Finish` came in a later step, the encoder wrote that meta-block as not the last and then an empty last one, a byte more than for the same input in one step; it now keeps a full meta-block until the next step says whether more follows.
 - **`decompress(max_output=)` cannot overflow and reports a negative limit as 0,** as gaato/zstd's and gaato/deflate's do.
 - **The last meta-block's choice between compressed and uncompressed counts the empty last meta-block an uncompressed one needs after it,** 1 byte, so a last meta-block that compresses to within that byte of its size is no longer written uncompressed.
