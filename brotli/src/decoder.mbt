@@ -284,7 +284,7 @@ pub fn Decoder::last_produced(self : Decoder) -> Int32 {
 /// Bytes the decoder holds: the window and the prefix code tables of the
 /// largest meta-block so far, which grow with the stream, and what is
 /// allocated with the decoder (the context maps, the trees' offsets, the
-/// code reader's and the table builder's scratch space), 27,729 bytes. At
+/// code reader's and the table builder's scratch space), 27,793 bytes. At
 /// most `1 << max_window_bits` plus 1,343,596 bytes of tables plus those
 /// (see RESOURCE_BOUNDS.md). `reset` releases the window and keeps the
 /// tables. The static dictionary, shared by every decoder, and an LZ77
@@ -327,7 +327,8 @@ fn Decoder::fixed_memory(self : Decoder) -> Int32 {
     self.block_len.length() +
     self.dist_ring.length() +
     self.code.cl_lengths.length() +
-    self.code.lengths.length()
+    self.code.lengths.length() +
+    self.code.counts.length()
   ) +
   self.builder.memory_usage()
 }

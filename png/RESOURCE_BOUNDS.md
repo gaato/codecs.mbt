@@ -36,3 +36,24 @@ counted.
 | Decoder memory (`Decoder::memory_usage`) | The zlib decoder, the palette and the two rows above: 47,360 bytes before the step after `Header`, then 47,360 + 2 × (1 + row bytes), the same to the end of the image; 47,360 again after `reset`. With chunks to report, plus the block of the one being read, and 46,592 for the second zlib decoder when iCCP, zTXt or iTXt is reported | Cannot overflow: each part is bounded by its own row | `src/bounds_wbtest.mbt`: "memory stays what the formula says after every step, for every format and split", "memory: the zlib decoder, the palette, and two rows from the step after Header"; `src/fuzz_wbtest.mbt`: "corrupted images raise errors or decode, the same under every split, within bounds" |
 | One-shot image (`decode`, `pixels`) | The image's rows, deinterlaced: height × ceil(width × bits a pixel / 8) bytes, computed in 64 bits from IHDR and checked before anything is allocated against `max_output`: 536,870,912 bytes (512 MiB) by default, at most 2^31 − 1, what an array holds; then the streaming decoder's memory, bounded by its rows | `LimitExceeded({ resource: Output, needed: Some(bytes), limit: max_output })` | `src/convert_wbtest.mbt`: "decode: only checked rows, max_output before anything is allocated, is_signature", "decode: 512 MiB of rows by default, checked at the header", "decode: an image larger than an array holds is refused at its header" |
 | Converter's table (`src/convert.mbt`, `Converter::table`) | 1,024 bytes: RGBA for each of 256 indices, whatever the palette's length, so that every index reads inside it | Cannot overflow: fixed size | `src/convert_wbtest.mbt`: "palette: entries with tRNS's alpha, indices past the palette opaque black" |
+
+## Fixed per decoder
+
+Allocated when the decoder is made, whatever the image:
+
+| Structure | Size |
+|---|---|
+| zlib decoder | 46,592 bytes (`deflate/RESOURCE_BOUNDS.md`), counted by `memory_usage` |
+| Palette | 768 bytes, counted by `memory_usage` |
+| Fixed-length chunks' fields and the 256 bytes they are read into | About 0.5 KiB, not counted |
+| Units held back: 8 bytes at a time, IHDR's 13 and an early fcTL's 26 | 47 bytes, not counted |
+| The CRC-32's tables | 9 KiB computed at start-up, shared by every decoder and not counted |
+
+## Left to the caller
+
+| Structure | Grows with | Why it is not bounded here |
+|---|---|---|
+| The image's rows | The image | `step` hands them out a pass at a time into the caller's slices; the caller decides what to keep |
+| Input chunks | What the caller passes | `step` keeps no reference to them after it returns |
+| `decode` output | The image | It returns the whole image, checked against `max_output` before anything is allocated; use `Decoder` to stream |
+| Reported chunks' blocks after they are handed out | What the caller keeps | The decoder drops its block once handed out; a `Bytes` the caller keeps is the caller's |

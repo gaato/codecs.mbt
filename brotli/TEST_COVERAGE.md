@@ -6,9 +6,10 @@ ledger:
 
 > **Every uncovered line is either covered by a test or listed below with a
 > reason.** `scripts/coverage_report.mbtx` enforces this: a file with uncovered
-> lines must have a row here whose budget is at least the actual count, and
-> the script fails otherwise. Rows for fully covered files are flagged as
-> stale and rows with slack are noted, so budgets only ever shrink.
+> lines must have a row here whose budget is exactly the actual count, and
+> the script fails otherwise, for a row with a larger budget and for one of a
+> fully covered file as well: a budget with room to spare would let a line
+> that tests stop reaching go unnoticed.
 
 ## Running it
 
@@ -17,8 +18,10 @@ moon run scripts/coverage_report.mbtx -- brotli   # measure, print tables, check
 moon run scripts/coverage_report.mbtx -- brotli --from-json _build/coverage_report.brotli.json   # recheck only
 ```
 
-CI runs it after the gates on every push and pull request. Exit status: 0 =
-ledger OK, 1 = an unexplained or over-budget file, 2 = the run itself failed
+The gates run it (`scripts/gates.mbtx`), on every push and pull request in
+CI too. Exit status: 0 = ledger OK, 1 = a file whose uncovered lines differ
+from its row (no row, more lines, fewer, or a row for a covered file), 2 = the
+run itself failed
 (a failing test, a build error). The tests are deterministic: fixed vectors,
 streams built bit by bit, and seeded pseudo-random splits and corruptions.
 
@@ -30,7 +33,8 @@ streams built bit by bit, and seeded pseudo-random splits and corruptions.
   byte copy, the bit writer, prefix codes and decoding tables, the match finder), measured
   here through the tests copied with them, with the proof packages
   `src/internal/proof_bits/` and `src/internal/proof_codes/`; and under
-  `src/internal/rules/` and `src/internal/transform/`, the decoder's pure
+  `src/internal/rules/`, `src/internal/prefix_code/` and
+  `src/internal/transform/`, the decoder's pure
   functions of the values it has read and its dictionary word transforms. The test-only
   checksum package and the crosscheck tool under `src/internal/` are not
   measured.
@@ -48,8 +52,9 @@ streams built bit by bit, and seeded pseudo-random splits and corruptions.
 - moon's bundled tcc cannot link on some hosts (openSUSE); the script sets
   `MOON_CC=cc` unless it is already set.
 
-Snapshot at the last full measurement (2026-10-21): **98.7 %** (929/941
-lines).
+Snapshot at the last full measurement (2026-11-15): **97.6 %** (1332/1365
+lines); the 33 uncovered lines are ledgered below, most of them the JS and
+Wasm GC variants that native does not compile.
 
 ## Policy
 
@@ -64,6 +69,12 @@ Must be covered by tests:
   random splits;
 - both ways of ending a stream: `EndOfInput` (trailing bytes, `Done` only
   with `end`) and `EndOfMember` (stopping before what follows);
+- LZ77 dictionaries: `brotli -D`'s streams at every quality and window
+  (`brotli/scripts/gen_dict_vectors.mbtx`), copies from the dictionary into
+  output slices down to one byte and once the ring is full, a copy past the
+  dictionary's end or the meta-block's refused, and the encoder's matches
+  into the dictionary, shared between encoders and the same under every
+  split (`src/dictionary_lz77_wbtest.mbt`);
 - the `gaato/codec_bytes` trait implementations, through generic code in
   `src/api_test.mbt`;
 - every encoder path: simple prefix codes of one to four symbols, complex
@@ -75,11 +86,13 @@ Must be covered by tests:
 Accepted as uncovered (needs a row):
 
 - defensive arms that are unreachable by construction;
-- aborts that `panic` tests reach, whose counts the abort loses;
-- code compiled only for another target, which the gates test there;
+- lines that only an `abort` reaches, run by `panic` tests, whose counts the
+  abort discards;
+- code compiled only for another target (JS, Wasm GC), which the gates test
+  there;
 - testable lines not yet tested, marked `not yet tested`.
 
-Budgets are exact uncovered counts at the last measurement.
+Budgets are the exact uncovered counts: the script fails on any difference.
 
 ## Accepted uncovered
 
@@ -87,8 +100,10 @@ Budgets are exact uncovered counts at the last measurement.
 | --- | --- | --- |
 | src/decoder.mbt | 1 | In `next_aligned_byte`, loading a byte from `stash`: uncompressed and metadata bytes would come from it only if `stash` held bytes there, and it never does. A unit leaves bytes in `stash` only when they fall short of what it needs, so when it completes it has consumed them all; the byte-aligned loops start after that unit. |
 | src/internal/bits/bit_packer.mbt | 10 | `BitPacker::write`, `BitPacker::write_fitting` and `BitPacker::flush` for JS (`#cfg(target="js")`), the 32-bit accumulator moved a byte at a time: the ledger measures native, which compiles the 64-bit `write` and the eight-byte `flush` instead. The gates run the same tests on JS: `src/internal/bits/bit_packer_test.mbt` and the encoder's, including the SHA-256 of its output. |
-| src/internal/blit/blit.mbt | 4 | `bytes` and `into_view` for JS (`#cfg(target="js")`), forward loops without index checks: the ledger measures native, which compiles the block copies instead. The gates run the same tests on JS: `src/internal/blit/blit_test.mbt` and the decoder's tests, which write through both. |
+| src/internal/blit/blit.mbt | 6 | `bytes` and `into_view` for JS (`#cfg(target="js")`), forward loops without index checks, and `forward` for JS and Wasm GC, a byte at a time where native and Wasm copy eight: the ledger measures native, which compiles the block copies and the eight-byte steps instead. The gates run the same tests on JS: `src/internal/blit/blit_test.mbt` and the decoder's tests, which write through both. |
 | src/internal/huffman/decode_table.mbt | 3 | The `abort`s of `Builder::Builder` (a root outside 1 to 15 bits, an alphabet past 4096 symbols) and of `Builder::build` (a table without room): the `panic` tests of `src/internal/huffman/decode_table_spec_test.mbt` run them, but the abort ends the test before its coverage counts are written. |
-| src/commands.mbt | 4 | In `fast_literals`, the MSB6 context (`p1 >> 2`): the one test stream with MSB6 (`src/crafted_wbtest.mbt`, "abb") is too short for the fast path, which needs two input bytes left; the slow path's `literal_context` computes the same expression and that test covers it. And `copy_overlapping` for JS and Wasm GC, a byte at a time, excluded by native's cfg; the gates run the decoder's tests and vectors there. And Wasm's `fast_commands_pay`, which turns the fast command loop off there, excluded the same way; on Wasm the decoder's tests and vectors run through the slow path. |
+| src/commands.mbt | 2 | In `fast_literals`, the MSB6 context (`p1 >> 2`): the one test stream with MSB6 (`src/crafted_wbtest.mbt`, "abb") is too short for the fast path, which needs two input bytes left; the slow path's `literal_context` computes the same expression and that test covers it. And Wasm's `fast_commands_pay`, which turns the fast command loop off there, excluded by native's cfg; on Wasm the decoder's tests and vectors run through the slow path. |
+| src/lz77_dictionary.mbt | 2 | The `abort` of `dictionary_copy` without a dictionary: the decoder enters it only from `distance`, which takes the dictionary's branch only when there is one. And in `dictionary_match`, the stop at a candidate past the furthest distance a stream can code (67,108,860 bytes counting the window's reach): the index holds only the dictionary's last 67,108,860 bytes, so a candidate is that far back only with a dictionary near that size and input as far into the stream, whose index alone would take over 300 MiB, more than the tests allocate. The check subtracts before it compares, so that the sum it stands for cannot overflow; the crosscheck's dictionary streams decode with `brotli -d -D`. |
+| src/internal/huffman/code_maker.mbt | 1 | The `abort` of `CodeMaker::CodeMaker` for an alphabet outside 2 to 1,024 symbols: the `panic` test of `src/internal/huffman/code_maker_test.mbt` runs it, but the abort ends the test before its coverage counts are written. |
 | src/internal/lz77/hash.mbt | 6 | `load4`, `read` and `write` for JS and Wasm GC (`#cfg(not(any(target="native", target="wasm")))`), which read a byte at a time and check every index: the ledger measures native, which compiles the one-load and unchecked ones instead. The gates run the same tests on JS and Wasm GC: the match finders' tests and the encoder's, including the SHA-256 of its output. |
 | src/internal/match_length_fast/length.mbt | 2 | The checked JS/Wasm GC `length`, excluded by native's cfg. The package's alignment, exact-end, mismatch and overlap tests run on all four targets. |

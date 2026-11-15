@@ -38,6 +38,8 @@ pub fn le16(BytesView) -> Int32
 
 pub fn le32(BytesView) -> UInt32
 
+pub fn next_field(Int32, Int32) -> Int32
+
 pub fn parse_fixed(BytesView) -> Result[Fixed, String]
 
 pub fn put_le32(UInt32) -> Bytes

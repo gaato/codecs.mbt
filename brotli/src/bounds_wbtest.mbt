@@ -21,7 +21,7 @@ fn max_decoder_table_bytes() -> Int32 {
 
 ///|
 /// What a decoder allocates when it is made, as RESOURCE_BOUNDS.md gives it.
-const DECODER_FIXED_MEMORY : Int32 = 27729
+const DECODER_FIXED_MEMORY : Int32 = 27793
 
 ///|
 /// The bound RESOURCE_BOUNDS.md gives for `Decoder::memory_usage`.
@@ -307,4 +307,63 @@ test "the encoder's waiting output is at most a meta-block" {
   // Random input comes out as uncompressed meta-blocks, the largest.
   assert_true(largest > BLOCK_SIZE)
   assert_true(largest <= MAX_ENCODER_PENDING)
+}
+
+///|
+test "metadata meta-blocks are skipped as they arrive, none of them held" {
+  // WBITS 16; a metadata meta-block (MNIBBLES 0, MSKIPBYTES 3) of 1 MiB;
+  // then the last, empty meta-block.
+  let size = 1 << 20
+  let header = BitWriter::new()
+    .bits(1, 0)
+    .bits(1, 0)
+    .bits(2, 3)
+    .bits(1, 0)
+    .bits(2, 3)
+    .bits(24, size - 1)
+    .finish()
+  let stream = Buffer()
+  stream.write_bytes(header)
+  stream.write_bytes(Bytes::make(size, b'\x5a'))
+  stream.write_byte(b'\x03')
+  let stream = stream.to_bytes()
+  let decoder = Decoder(max_window_bits=16)
+  let got = drive(decoder, stream, next_in=() => 4096, next_out=() => 1024, check=(
+    d,
+    room,
+  ) => {
+    check_bounds(d, room)
+    // The window is not allocated for bytes that are not output.
+    assert_eq(d.memory_usage(), DECODER_FIXED_MEMORY)
+  })
+  assert_eq(got.length(), 0)
+}
+
+///|
+test "with a dictionary, the encoder's memory stays within its bound after every step" {
+  let rng = Rng::new(9841)
+  let content = sample_random(rng, 100000)
+  let dict = Dictionary(content)
+  let input = Buffer()
+  while input.length() < 300000 {
+    let at = rng.below(99000)
+    input.write_bytesview(content[at:at + 1000])
+    input.write_bytes(sample_random(rng, 50))
+  }
+  let input = input.to_bytes()
+  for w in [10, 16, 22] {
+    let encoder = Encoder(window_bits=w, dictionary=dict)
+    let stream = encode_drive(
+      encoder,
+      input,
+      next_in=() => 1 + rng.below(20000),
+      next_out=() => 1 + rng.below(5000),
+      flush=_ => rng.below(8) == 0,
+      check=check_encoder_bounds,
+    )
+    assert_true(decompress(stream, dictionary=dict) == input)
+    // The index is the dictionary's, counted by it, not by the encoder.
+    assert_true(dict.memory_usage() > 0)
+    assert_true(encoder.memory_usage() <= encoder_memory_bound(w))
+  }
 }

@@ -22,8 +22,9 @@ priv struct CodeReader {
   cl_code : Group
   mut cl_index : Int32
   mut cl_space : Int32
-  mut cl_count : Int32
   lengths : FixedArray[Int32]
+  // How many lengths of each value the code has, for `@prefix_code.code_shape`.
+  counts : FixedArray[Int32]
   mut symbol : Int32
   mut space : Int32
   mut prev_len : Int32
@@ -42,8 +43,8 @@ fn CodeReader::new() -> CodeReader {
     cl_code: Group::new(1),
     cl_index: 0,
     cl_space: 0,
-    cl_count: 0,
     lengths: FixedArray::make(MAX_ALPHABET, 0),
+    counts: FixedArray::make(16, 0),
     symbol: 0,
     space: 0,
     prev_len: 0,
@@ -91,7 +92,6 @@ fn Decoder::read_code(self : Decoder) -> Bool raise Stop {
       code.cl_lengths.fill(0)
       code.cl_index = hskip
       code.cl_space = 32
-      code.cl_count = 0
       code.phase = CodeLengthLengths
       false
     }
@@ -111,22 +111,23 @@ fn Decoder::read_code(self : Decoder) -> Bool raise Stop {
       code.cl_index += 1
       if v != 0 {
         code.cl_space -= 32 >> v
-        code.cl_count += 1
       }
+      // The code space counted here says when the lengths end; whether
+      // they make a code is `@prefix_code.code_shape`'s verdict, which `moon
+      // prove` checks against Kraft's sum.
       if (v != 0 && code.cl_space <= 0) || code.cl_index == 18 {
-        if !(code.cl_count == 1 || code.cl_space == 0) {
-          raise corrupt("invalid code length code")
-        }
+        let shape = @prefix_code.code_shape(code.cl_lengths, 18, code.counts)
         code.cl_code.reset(1, 18)
-        if code.cl_count == 1 {
-          for s in 0..<18 {
-            if code.cl_lengths[s] != 0 {
-              code.cl_code.single(0, s)
-              break
+        match shape {
+          Complete => code.cl_code.build(self.builder, 0, code.cl_lengths, 18)
+          Single =>
+            for s in 0..<18 {
+              if code.cl_lengths[s] != 0 {
+                code.cl_code.single(0, s)
+                break
+              }
             }
-          }
-        } else {
-          code.cl_code.build(self.builder, 0, code.cl_lengths, 18)
+          Other => raise corrupt("invalid code length code")
         }
         code.lengths.fill(0, end=code.alphabet)
         code.symbol = 0
@@ -174,7 +175,8 @@ fn Decoder::read_code(self : Decoder) -> Bool raise Stop {
       if code.symbol < code.alphabet && code.space > 0 {
         return false
       }
-      if code.space != 0 {
+      guard @prefix_code.code_shape(code.lengths, code.alphabet, code.counts)
+        is Complete else {
         raise corrupt("incomplete or oversubscribed prefix code")
       }
       code.group.build(self.builder, code.tree, code.lengths, code.alphabet)

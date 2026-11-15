@@ -11,7 +11,7 @@ test "heap_sort sorts any range as a plain sort does" {
     let base = next(5)
     let a = FixedArray::makei(base + len + 3, _ => next(1 << 20))
     let expected = Array::from_iter(a.iter())
-    let middle = expected[base:base + len].to_array()
+    let middle = expected[base:base + len].to_owned()
     middle.sort()
     for i in 0..<len {
       expected[base + i] = middle[i]

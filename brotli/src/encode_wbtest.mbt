@@ -494,7 +494,7 @@ test "input that ends on a meta-block's boundary before Finish gives the same st
     (b'a'.to_int() + rng.below(4) + i % 7).to_byte()
   })
   for blocks in 1..<=3 {
-    let input = text[:blocks * BLOCK_SIZE].to_bytes()
+    let input = text[:blocks * BLOCK_SIZE].to_owned()
     // The same encoder given everything with `Finish` in one step.
     let whole = encode_drive(Encoder(), input, next_in=() => input.length(), next_out=() => {
       1 << 18

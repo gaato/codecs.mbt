@@ -158,3 +158,35 @@ test "CTable: memory for the largest table" {
   // 512 states of 4 bytes, three arrays of 53, and 512 bytes of scratch.
   inspect(table.memory_usage(), content="3196")
 }
+
+///|
+test "spread's walk visits each state below the -1 symbols once, then returns to 0" {
+  // `spread` places the symbols of probability 1 or more along one walk:
+  // from state 0 in steps of (size >> 1) + (size >> 3) + 3, an odd number,
+  // skipping the states at the top that the -1 symbols took. That the walk
+  // covers states 0 to `high` exactly once in `high + 1` steps and then is
+  // back at 0 depends only on the table's size and `high`, so every table
+  // log the format uses (5 to 9) and every `high` is checked here: with
+  // probabilities that add up to the table, every state gets one symbol.
+  for log in 5..<=9 {
+    let size = 1 << log
+    let step = (size >> 1) + (size >> 3) + 3
+    let mask = size - 1
+    for high in 0..<size {
+      let seen = FixedArray::make(size, false)
+      let mut pos = 0
+      for _ in 0..<=high {
+        assert_true(pos <= high && !seen[pos], msg="log \{log} high \{high}")
+        seen[pos] = true
+        pos = (pos + step) & mask
+        let mut skips = 0
+        while pos > high {
+          pos = (pos + step) & mask
+          skips += 1
+          assert_true(skips < size)
+        }
+      }
+      assert_eq(pos, 0, msg="log \{log} high \{high}")
+    }
+  }
+}

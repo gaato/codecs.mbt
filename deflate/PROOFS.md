@@ -34,6 +34,9 @@ against the code.
 | --- | --- | --- | --- | --- | --- |
 | `header_of` | `src/zlib/internal/header` | Core of `parse` (RFC 1950 section 2.2): refused, with the reason, exactly by zlib's checks in order (FCHECK: CMF * 256 + FLG a multiple of 31; CM 8; CINFO at most 7); an accepted header's window is 2^(CINFO + 8), 2^8 to 2^15 bytes, its level FLEVEL and its dictionary flag FDICT | unbounded | `shr`, `low_bits` | Z3, CVC5 |
 | `start_refusal` | `src/gzip/internal/header` | Core of `check_start` (RFC 1952 section 2.3.1): refuses, in order, a magic number other than 1f 8b, a method other than 8, and a reserved flag (bits 5 to 7), and nothing else | unbounded | `shr` | Z3, CVC5 |
+| `next_field` | `src/gzip/internal/header` | The header field the gzip decoder reads next (RFC 1952 section 2.3): of FEXTRA, FNAME, FCOMMENT and FHCRC, in that order from `from` on, the first whose flag (bits 2, 3, 4 and 1 of FLG) is set, or the data when none is left | unbounded | none | Z3, CVC5 |
+| `flag_set` | `src/gzip/internal/header` | Bit `bit` of the byte `flags`, `flags / 2^bit % 2` | unbounded | `shr`, `low_bits` | Z3, CVC5 |
+| `le16_of` | `src/gzip/internal/header` | Core of `le16`: XLEN and the header's CRC-16 are two bytes, the first the low one, at most 65,535 | unbounded | `shl` | Z3, CVC5 |
 | `update_bytes` | `src/zlib/internal/adler32` | No sum passes 2^32 - 1 between reductions with zlib's NMAX of 5552 bytes (the proof fails at 5553), and both halves of a checksum that has absorbed a byte are reduced modulo 65521 | machine-int | `byte_u32` | Z3 only: CVC5 1.4.2 runs out of time on 23 of its 56 goals at 120 s each (the quadratic bound on the second sum, in machine integers) |
 | `shape` | `src/internal/inflate` | The decoder's judgement of a code's lengths (RFC 1951 section 3.2.2, as zlib's inftrees.c reads them), lengths of 0 to 15: `counts` ends up counting them, and the verdict is the one Kraft's sum of the counts (the sum of 2^(15 - length) over the symbols with a code) gives: `Bad` exactly when it is over 2^15, `Complete` exactly when it is 2^15, and below, `Lone` for one code of one bit, `Empty` for no code at all, `Bad` otherwise | unbounded | none | Z3, CVC5 |
 | `reverse_bits` | `parts/huffman` | The low `n` bits of `code` (`n` up to 15) in reverse order, as `rev` of `parts/proof_codes` defines them (bit `j` becomes bit `n - 1 - j`), and below 2^n | unbounded | `shr`, `low_bits` | Z3, CVC5 |
@@ -65,7 +68,18 @@ trusted, like the bridges, to say what the Why3 symbols are.
 
 ## Not proved
 
-- `code_lengths` (`parts/huffman`, Brotli's encoder): that its lengths stay
+- The CRC-32 (`parts/crc32`, gzip's trailer and FHCRC): its tables and its
+  eight bytes at a time. They are functions of `UInt` words with shifts and
+  exclusive or, which the prover's integers do not model. The tests check
+  them against a bitwise reference written from RFC 1952, whole, in
+  pieces and from every alignment (`src/internal/crc32/crc32_test.mbt`).
+- `le32`, `check_crc` and `check_size` (`src/gzip/internal/header`), the
+  trailer's two words: they compute in `UInt32`, which the unbounded
+  prelude does not model. `src/gzip/internal/header/header_test.mbt` checks
+  a word one byte off in each position, and the decoder's tests every
+  trailer they write.
+- `code_lengths` (`parts/huffman`, the reference the tests compare
+  `CodeMaker` with): that its lengths stay
   within the limit, that Kraft's sum is exactly 1 and that unused symbols
   get 0. It keeps the used symbols in an `Array` sorted with `sort_by`,
   which the prover does not model, and its retry loop has no measure that
@@ -77,7 +91,7 @@ trusted, like the bridges, to say what the Why3 symbols are.
   "code lengths stay within the limit and the code stays complete" and
   "code lengths: within the limit, complete, and optimal when nothing is
   cut" check it.
-- `CodeMaker::make` (`parts/huffman`, DEFLATE's encoder): the same
+- `CodeMaker::make` (`parts/huffman`, the encoder's codes): the same
   properties. Its counting of code lengths keeps Kraft's sum at exactly 1
   by construction, but that no count goes below 0 rests on libdeflate's
   argument that the tree's depths only grow as it is walked, which needs

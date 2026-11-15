@@ -166,3 +166,31 @@ test "the trailer reads back" {
     b"\x01\x02\x03\x04\x05\x06\x07\x08",
   )
 }
+
+///|
+test "next_field follows RFC 1952's order for every FLG and every field" {
+  // FEXTRA, FNAME, FCOMMENT, FHCRC: the order of the fields after the
+  // fixed part, and their flags.
+  let order = [@header.FEXTRA, @header.FNAME, @header.FCOMMENT, @header.FHCRC]
+  for flags in 0..<256 {
+    for from in 0..<=4 {
+      let mut expected = 4
+      for k = 3; k >= from; k = k - 1 {
+        if (flags & order[k]) != 0 {
+          expected = k
+        }
+      }
+      assert_eq(@header.next_field(flags, from), expected)
+    }
+  }
+}
+
+///|
+test "le16 reads two bytes, the first the low one" {
+  for lo in [0, 1, 0x7f, 0x80, 0xff] {
+    for hi in [0, 1, 0x7f, 0x80, 0xff] {
+      let b = Bytes::from_array([lo.to_byte(), hi.to_byte()])
+      assert_eq(@header.le16(b[:]), lo + 256 * hi)
+    }
+  }
+}

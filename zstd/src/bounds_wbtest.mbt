@@ -170,12 +170,18 @@ const ENCODER_PENDING_MAX : Int32 = 4 + 10 + 3 + MAX_BLOCK_SIZE + 4
 /// buffer, waiting output, match window/hash, sequence arrays and scratch,
 /// and both entropy coders. Packer capacities include doubling and 5 bytes
 /// past the bytes written: a write reserves at most the bytes it moves.
-fn encoder_memory_bound(params~ : Params = encoder_params(12, None)) -> Int32 {
+fn encoder_memory_bound(
+  params~ : Params = encoder_params(12, None),
+  dictionary_len~ : Int32 = 0,
+) -> Int32 {
+  // The history holds a dictionary of D bytes as part of its window, as
+  // RESOURCE_BOUNDS.md's History row has it.
+  let reach = (1 << params.window_log) + dictionary_len
   2 * (ENCODER_PENDING_MAX + 5) +
   LiteralsWriter::new(compress=true).memory_usage() +
   2 * 2 * (512 + 5) +
-  2 * (1 << params.window_log) +
-  (1 << params.window_log).min(MAX_BLOCK_SIZE) +
+  2 * reach +
+  reach.min(MAX_BLOCK_SIZE) +
   4 * (1 << params.hash_log) +
   (if params.strategy is Fast {
     12
@@ -196,11 +202,12 @@ fn encoder_memory_bound(params~ : Params = encoder_params(12, None)) -> Int32 {
 /// Checks the encoder's bounds after a step.
 fn check_encoder_bounds(e : Encoder, _room : Int32) -> Unit raise {
   let h = e.matcher.history()
-  assert_true(
-    h.capacity() <=
-    2 * (1 << e.params.window_log) +
-    (1 << e.params.window_log).min(MAX_BLOCK_SIZE),
-  )
+  let dictionary_len = match e.dictionary {
+    Some(d) => encoder_view(d.content).length()
+    None => 0
+  }
+  let reach = (1 << e.params.window_log) + dictionary_len
+  assert_true(h.capacity() <= 2 * reach + reach.min(MAX_BLOCK_SIZE))
   assert_true(e.block_max <= MAX_BLOCK_SIZE)
   assert_true(e.data_len <= e.block_max)
   assert_true(h.block_start() + e.data_len <= h.capacity())
@@ -218,7 +225,9 @@ fn check_encoder_bounds(e : Encoder, _room : Int32) -> Unit raise {
   assert_true(e.sequences.count <= MAX_BLOCK_SIZE / 3)
   assert_true(e.sequences.ll.length() <= MAX_BLOCK_SIZE / 3)
   assert_true(e.sequences.literal_count <= MAX_BLOCK_SIZE)
-  assert_true(e.memory_usage() <= encoder_memory_bound(params=e.params))
+  assert_true(
+    e.memory_usage() <= encoder_memory_bound(params=e.params, dictionary_len~),
+  )
 }
 
 ///|
@@ -361,6 +370,34 @@ test "the encoder's memory_usage stays within its bound after every step" {
   // Each backend's packer may double at different points; the common
   // upper bound includes its retained capacity, not only pending bytes.
   assert_true(most > 600000 && most <= encoder_memory_bound())
+}
+
+///|
+test "with a dictionary, the encoder's memory stays within its bound after every step" {
+  let rng = Rng::new(45)
+  let input = sample_text(rng, 200000)
+  for dictionary_len in [1000, 100000, 1 << 20] {
+    let dict = Dictionary::raw(sample_text(rng, dictionary_len))
+    for level in [1, 3, 4, 12] {
+      for content_size in [None, Some(input.length().to_int64())] {
+        let mut most = 0
+        let stream = encode_drive(
+          Encoder(level~, content_size?, dictionary=dict),
+          input,
+          next_in=() => 3000 + rng.below(70000),
+          next_out=() => 1 + rng.below(70000),
+          flush=_ => rng.below(5) == 0,
+          check=(e, room) => {
+            check_encoder_bounds(e, room)
+            most = most.max(e.memory_usage())
+          },
+        )
+        assert_true(decompress(stream, dictionary=dict) == input)
+        // The history holds the dictionary: more than without it.
+        assert_true(most > dictionary_len)
+      }
+    }
+  }
 }
 
 ///|

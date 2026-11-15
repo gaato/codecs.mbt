@@ -1,0 +1,38 @@
+// RFC 7932 section 3.5: a complex prefix code's lengths must make a complete
+// code, Kraft's sum 1 (2^15 in units of 2^-15); the code length code may
+// also hold a single symbol with a length.
+
+predicate code_shape_pre(lengths : FixedArray[Int], n : Int, counts : FixedArray[Int]) {
+  // The largest decoder alphabet is the 704 insert-and-copy symbols.
+  // Each count is at most 704, so even the loose bound on Kraft's weighted
+  // count, 704 * (16384 + ... + 1), is below 2^31.
+  @proof_codes.lengths_within(lengths, n, 15) && n <= 704 && counts.length() == 16
+}
+
+// How many symbols have a length: the counts of lengths 1 to 15.
+fn used(c : FixedArray[Int]) -> Int {
+  c[1] + c[2] + c[3] + c[4] + c[5] + c[6] + c[7] + c[8] + c[9] + c[10] + c[11] + c[12] + c[13] + c[14] + c[15]
+}
+
+// `counts` ends up counting the lengths, and the shape is the one their
+// Kraft's sum and the number of symbols with a length give.
+predicate code_shape_post(
+  lengths : FixedArray[Int],
+  n : Int,
+  counts : FixedArray[Int],
+  result : CodeShape,
+) {
+  @proof_codes.counted(counts, lengths, n) && shape_of(counts, result)
+}
+
+predicate shape_of(c : FixedArray[Int], result : CodeShape) {
+  match result {
+    Complete => @proof_codes.kraft(c) == 32768
+    Single => @proof_codes.kraft(c) != 32768 && used(c) == 1
+    Other => @proof_codes.kraft(c) != 32768 && used(c) != 1
+  }
+}
+
+predicate zero_below(c : FixedArray[Int], l : Int) {
+  ∀ j : Int, 0 <= j && j < l → c[j] == 0
+}

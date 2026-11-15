@@ -449,20 +449,27 @@ fn Decoder::run(self : Decoder, end~ : Bool) -> Status raise Stop {
 /// Moves on to the first header field from `from` on that the flags announce,
 /// or to the data once none is left.
 fn Decoder::next_field(self : Decoder, from : State) -> Unit {
-  let flags = self.fixed.flags
   self.hdr_len = 0
-  self.state = match from {
-    ExtraLength if (flags & @header.FEXTRA) != 0 => ExtraLength
-    ExtraLength | Name if (flags & @header.FNAME) != 0 => {
+  let index = match from {
+    ExtraLength => 0
+    Name => 1
+    Comment => 2
+    HeaderCrc => 3
+    _ => 4
+  }
+  // The order and the flags are RFC 1952's, which `@header.next_field` is
+  // proved to follow.
+  self.state = match @header.next_field(self.fixed.flags, index) {
+    0 => ExtraLength
+    1 => {
       self.name = self.field_buffer()
       Name
     }
-    ExtraLength | Name | Comment if (flags & @header.FCOMMENT) != 0 => {
+    2 => {
       self.comment = self.field_buffer()
       Comment
     }
-    ExtraLength | Name | Comment | HeaderCrc if (flags & @header.FHCRC) != 0 =>
-      HeaderCrc
+    3 => HeaderCrc
     _ => {
       self.begin_data()
       Data

@@ -235,3 +235,54 @@ test "two encoders, interleaved, share one index and write the same bytes" {
   assert_eq(out_a.to_bytes(), out_b.to_bytes())
   assert_eq(decompress(out_a.to_bytes(), dictionary=dict), input)
 }
+
+///|
+test "copies from the dictionary wait for room once the ring is full of output" {
+  let rng = Rng::new(9842)
+  let content = Bytes::makei(4000, _ => rng.below(256).to_byte())
+  let dict = Dictionary(content)
+  assert_eq(dict.length(), 4000)
+  assert_true(dict.content() == content[:])
+  // Pieces of the dictionary, far more than the 1 KiB window, and a tail
+  // the dictionary does not hold, so the last command is literals.
+  let input = Buffer()
+  while input.length() < 20000 {
+    let at = rng.below(3700)
+    input.write_bytesview(content[at:at + 300])
+  }
+  input.write_bytes(b"\x00\x01\x02 the end")
+  let input = input.to_bytes()
+  let stream = encode_drive(
+    Encoder(window_bits=10, dictionary=dict),
+    input,
+    next_in=() => 5000,
+    next_out=() => 1 << 16,
+  )
+  assert_true(stream.length() < input.length() / 4)
+  for out_chunk in [1, 7, 1500] {
+    let got = drive(
+      Decoder(max_window_bits=10, dictionary=dict),
+      stream,
+      next_in=() => 1 << 16,
+      next_out=() => out_chunk,
+    )
+    assert_true(got == input, msg="\{out_chunk}")
+  }
+}
+
+///|
+test "a copy from the dictionary past the end of the meta-block is corrupt" {
+  // Three bytes, then command 130 (no insert, a copy of 4) at distance 4
+  // (code 17, extra bit 1), the dictionary's first byte: the copy fits the
+  // dictionary but is longer than the meta-block.
+  let stream = BitWriter::new()
+    .fixed_commands(mlen=3, literal=0, command=130, distance=17)
+    .bits(1, 1)
+    .finish()
+  let error = try decompress(stream, dictionary=Dictionary(b"wxyz")) catch {
+    @codec.CodecError(kind, message) => "\{Repr(kind)}: \{message}"
+  } noraise {
+    _ => "decoded"
+  }
+  inspect(error, content="Corrupt: copy past the end of the meta-block")
+}

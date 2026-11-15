@@ -43,6 +43,37 @@ against the code.
 | `window_size` | `src/internal/frame` | Core of the header package's `window_size`: `2^(10 + Exponent) + 2^(10 + Exponent) / 8 * Mantissa` (section 3.1.1.1.2), at most 2^41 + 7 * 2^38, with no overflow in 64 bits | machine-int | `shl1_u64`, `mantissa_u64` | Z3, CVC5 |
 | `settle` | `src/internal/fse` | Core of `normalize`, the encoder's normalized distribution (section 4.1.1): whatever shares it is given for the symbols of `counts[0:n]` (at most 2^17 in all, the last one seen, `n` at most the `size` of 2^5 to 2^9 states), the probabilities it writes take exactly `size` states, a -1 taking one, and fit the counts: 0 for a symbol never seen, at least 1 or -1 for every other | unbounded | none | Z3, CVC5 |
 | `build_table` | `src/internal/huffman` | Core of `Huffman::build` (section 4.2.1): refuses the weights, with the reason, exactly by the decoder's checks in order (a weight above 11; no weight but the implied one; Max_Number_of_Bits, the number of bits of the sum of 2^(Weight - 1), above 11; a gap to 2^Max_Number_of_Bits that is not a power of 2; no weight of 1, the implied one included), and never for overfilling the table; otherwise gives the implied last weight, `log2(gap) + 1`, returns Max_Number_of_Bits, and fills the table: the weights' shares make up its 2^Max_Number_of_Bits entries, and each symbol of weight `w > 0` has the 2^(w - 1) entries of its place in the order of weights and then symbols, each with the symbol and the code length `Max_Number_of_Bits + 1 - w`. It reads only inside its tables and writes the weights not at all | unbounded | `shl`, `byte_of` | Z3 only: CVC5 1.4.2 runs out of time on 11 of its goals at 30 s each, in `build_table`, `fill` and `place_apart`: the sums of the counts with a variable Max_Number_of_Bits, the case split on how two symbols' weights compare, and the frame of the table's blocks |
+| `reverse_bits` | `parts/huffman` | The low `n` bits of `code` (`n` up to 15) in reverse order, as `rev` of `parts/proof_codes` defines them (bit `j` becomes bit `n - 1 - j`), and below 2^n | unbounded | `shr`, `low_bits` | Z3, CVC5 |
+| `involution` | `parts/proof_reverse` | `rev` is an involution: reversing the `n` bits of a number below 2^n twice gives the number back, for `n` up to 15 | unbounded | none | Z3, CVC5 |
+| `canonical_into` | `parts/huffman` | Core of `canonical_codes` (RFC 1951 section 3.2.2): `count` counts the code lengths, and each symbol's code is its canonical code reversed, the first code of its length (`next_code`) plus the symbols of that length before it; a symbol without a code gets 0 | unbounded | none | Z3, CVC5 |
+| `canonical_order` | `parts/proof_canonical` | The canonical codes increase in canonical order and form a prefix code: when `s` comes before `t` (a shorter code, or as long and a smaller symbol), the 15-bit sequences that start with `s`'s code all come before those that start with `t`'s | unbounded | none | Z3, CVC5 |
+| `canonical_fits` | `parts/proof_canonical` | With Kraft's sum at most 1, each canonical code fits its length: the sequences it starts end within the code space | unbounded | none | Z3, CVC5 |
+
+
+## Not proved
+
+- `Fse::build` and `Fse::read` (`src/fse.mbt`), the decoder's FSE tables,
+  and `spread` (`src/internal/fse`), where they and the encoder's tables
+  put each symbol: that every state gets one symbol when the probabilities
+  add up to the table. It holds because the walk from state 0 in odd steps
+  covers a table of 2^log states, skipping those the -1 symbols took, a fact
+  of modular arithmetic the solvers do not find. It depends only on the
+  table's size and how many states the -1 symbols took, so
+  `src/internal/fse/fse_test.mbt` checks it for every table log the format
+  uses (5 to 9) and every such count: "spread's walk visits each state
+  below the -1 symbols once, then returns to 0".
+- `Dictionary::parse` (`src/dictionary.mbt`): its tables are read by
+  `Huffman::read` and `Fse::read`, unproved like the above, and it checks
+  the repeat offsets against the content. "formatted dictionaries that do
+  not parse are Corrupt" cuts them at every kind of place, and the
+  dictionaries `zstd --train` writes decode as zstd decodes them.
+- XXH64 (`src/internal/xxhash`): 64-bit multiplications and rotations,
+  which the prover's integers do not model. Its tests compare digests with
+  the reference's for every length 1 to 96 at all sixteen alignments, and
+  split the input every way around its stripes.
+- `code_lengths` and `CodeMaker::make` (`src/internal/huffman_code`, a copy
+  of `parts/huffman`), the encoder's Huffman codes: brotli/PROOFS.md says
+  why, and `src/internal/huffman_code/code_maker_test.mbt` tests them.
 
 ## Trusted bridges
 

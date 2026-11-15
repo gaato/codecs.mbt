@@ -6,9 +6,9 @@ const BROTLI_TABLE_BYTES : Int32 = 1343596
 ///|
 /// The bound brotli/RESOURCE_BOUNDS.md gives for a decoder's
 /// `memory_usage`: the window `max_window_bits` allows, the tables, and the
-/// 27,729 bytes allocated with the decoder.
+/// 27,793 bytes allocated with the decoder.
 fn brotli_decoder_limit(max_window_bits : Int32) -> Int32? {
-  Some((1 << max_window_bits) + BROTLI_TABLE_BYTES + 27729)
+  Some((1 << max_window_bits) + BROTLI_TABLE_BYTES + 27793)
 }
 
 ///|

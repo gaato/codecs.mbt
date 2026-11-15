@@ -6,9 +6,10 @@ Coveralls-JSON mode. The rule is a closed ledger:
 
 > **Every uncovered line is either covered by a test or listed below with a
 > reason.** `scripts/coverage_report.mbtx` enforces this: a file with uncovered
-> lines must have a row here whose budget is at least the actual count, and
-> the script fails otherwise. Rows for fully covered files are flagged as
-> stale and rows with slack are noted, so budgets only ever shrink.
+> lines must have a row here whose budget is exactly the actual count, and
+> the script fails otherwise, for a row with a larger budget and for one of a
+> fully covered file as well: a budget with room to spare would let a line
+> that tests stop reaching go unnoticed.
 
 ## Running it
 
@@ -17,8 +18,10 @@ moon run scripts/coverage_report.mbtx -- deflate   # measure, print tables, chec
 moon run scripts/coverage_report.mbtx -- deflate --from-json _build/coverage_report.deflate.json   # recheck only
 ```
 
-CI runs it after the gates on every push and pull request. Exit status: 0 =
-ledger OK, 1 = an unexplained or over-budget file, 2 = the run itself failed
+The gates run it (`scripts/gates.mbtx`), on every push and pull request in
+CI too. Exit status: 0 = ledger OK, 1 = a file whose uncovered lines differ
+from its row (no row, more lines, fewer, or a row for a covered file), 2 = the
+run itself failed
 (a failing test, a build error). The tests are deterministic: fixed vectors,
 streams built bit by bit, and seeded pseudo-random splits and corruptions.
 
@@ -41,10 +44,9 @@ streams built bit by bit, and seeded pseudo-random splits and corruptions.
 The pitfalls the script pins (stale counters, `-f summary` skewing totals,
 tcc on openSUSE) are described in zstd's ledger, `zstd/TEST_COVERAGE.md`.
 
-Snapshot at the last full measurement (2026-11-13): **98.9 %** (1572/1589
-lines), the seventeen uncovered lines ledgered below: eight of them are the
-JS and Wasm GC variants of the match finders' reads and of the zlib
-decoder's Adler-32, which native does not compile.
+Snapshot at the last full measurement (2026-11-15): **98.1 %** (1598/1629
+lines); the 31 uncovered lines are ledgered below, most of them the JS and
+Wasm GC variants that native does not compile.
 
 ## Policy
 
@@ -91,15 +93,17 @@ Accepted as uncovered (needs a row):
 - defensive arms that are unreachable by construction;
 - lines that only an `abort` reaches, run by `panic` tests, whose counts the
   abort discards;
+- code compiled only for another target (JS, Wasm GC), which the gates test
+  there;
 - testable lines not yet tested, marked `not yet tested`.
 
-Budgets are exact uncovered counts at the last measurement.
+Budgets are the exact uncovered counts: the script fails on any difference.
 
 ## Accepted uncovered
 
 | File | Budget | Reason |
 | --- | --- | --- |
-| src/internal/blit/blit.mbt | 4 | `bytes` and `into_view` for JS (`#cfg(target="js")`), forward loops without index checks: the ledger measures native, which compiles the block copies instead. The gates run the same tests on JS: `src/internal/blit/blit_test.mbt` and the decoders' and encoders' tests, which write through both. |
+| src/internal/blit/blit.mbt | 6 | `bytes` and `into_view` for JS (`#cfg(target="js")`), forward loops without index checks, and `forward` for JS and Wasm GC, a byte at a time where native and Wasm copy eight: the ledger measures native, which compiles the block copies and the eight-byte steps instead. The gates run the same tests on JS: `src/internal/blit/blit_test.mbt` and the decoders' and encoders' tests, which write through both. |
 | src/internal/huffman/decode_table.mbt | 3 | The `abort`s of `Builder::Builder` (a root outside 1 to 15 bits, an alphabet past 4096 symbols) and of `Builder::build` (a table without room): the `panic` tests of `src/internal/huffman/decode_table_spec_test.mbt` run them, but the abort ends the test before its coverage counts are written. |
 | src/internal/inflate/blocks.mbt | 1 | In `Inflater::run`, the `abort` for the fast path running out of input: unreachable by construction, since it runs only while the input holds the 8 bytes a unit can need. |
 | src/internal/inflate/inflater.mbt | 1 | In `Inflater::step_with`, the `abort` for an unfinished unit that keeps more bytes than `stash` holds: unreachable by construction, since a unit needs at most 6 bytes beyond the bits held and keeps only those it fell short with. |
@@ -108,6 +112,5 @@ Budgets are exact uncovered counts at the last measurement.
 | src/internal/deflate/deflater.mbt | 2 | In `Deflater::step`, the `abort` for an input buffer that is full with no block complete: unreachable by construction, since the buffer holds the window, a whole block and the look-ahead, and a block ends at 65,535 bytes. |
 | src/internal/lz77/matchfinder.mbt | 7 | `load_u32`, `may_beat` and `extend_match` for JS and Wasm GC (`#cfg(not(any(target="native", target="wasm")))`), which read a byte at a time: the ledger measures native, which compiles the four-bytes-at-once ones instead. The gates run the same tests on JS and Wasm GC: the match finders' tests and the encoder's, including the SHA-256 of its output. |
 | src/zlib/internal/adler32_fast/adler32_fast.mbt | 1 | `update` for JS and Wasm GC (`#cfg(not(any(target="native", target="wasm")))`), which calls `@adler32.update`: the ledger measures native, which compiles the SIMD one instead. The gates run the package's tests, which compare it with `@adler32.update`, on JS and Wasm GC too. |
-| src/internal/inflate/fast.mbt | 2 | `copy_forward` for JS and Wasm GC, a byte at a time, excluded by native's cfg. The gates run the decoders' tests and vectors there. |
 | src/internal/lz77/hash.mbt | 6 | `load4`, `read` and `write` for JS and Wasm GC (`#cfg(not(any(target="native", target="wasm")))`), which read a byte at a time and check every index: the ledger measures native, which compiles the one-load and unchecked ones instead. The gates run the same tests on JS and Wasm GC: the match finders' tests and the encoder's, including the SHA-256 of its output. |
 | src/internal/match_length_fast/length.mbt | 2 | The checked JS/Wasm GC `length`, excluded by native's cfg. The package's alignment, exact-end, mismatch and overlap tests run on all four targets. |

@@ -133,3 +133,45 @@ test "a block ends when its sequences fill the store" {
     assert_eq(Bytes::from_array(back[:inflater.last_produced()]), input)
   }
 }
+
+///|
+test "put writes the low bits of each value, least significant first, and align pads" {
+  let mut state = 1951UL
+  let next = bound => {
+    state = state * 6364136223846793005UL + 1442695040888963407UL
+    (state >> 33).to_int() % bound
+  }
+  for round in 0..<200 {
+    let d = Deflater::new(level=6)
+    // The bits a model writes: one per entry, least significant first.
+    let model : Array[Int32] = []
+    for _ in 0..<(1 + next(300)) {
+      let n = next(17)
+      // High bits above `n` must not reach the stream.
+      let value = next(1 << 30)
+      d.put(value, n)
+      for i in 0..<n {
+        model.push((value >> i) & 1)
+      }
+      if next(10) == 0 {
+        d.align()
+        while model.length() % 8 != 0 {
+          model.push(0)
+        }
+      }
+    }
+    d.align()
+    while model.length() % 8 != 0 {
+      model.push(0)
+    }
+    assert_eq(d.bitcount, 0)
+    assert_eq(d.out_pos, model.length() / 8, msg="round \{round}")
+    for i in 0..<d.out_pos {
+      let mut byte = 0
+      for b in 0..<8 {
+        byte = byte | (model[8 * i + b] << b)
+      }
+      assert_eq(d.out[i].to_int(), byte, msg="round \{round} byte \{i}")
+    }
+  }
+}

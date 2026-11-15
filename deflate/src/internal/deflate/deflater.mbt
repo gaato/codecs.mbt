@@ -646,9 +646,15 @@ fn Deflater::end_segment(self : Deflater) -> Unit {
 }
 
 ///|
-/// Writes the low `n` (at most 16) bits of `value`.
+/// Writes the low `n` (0 to 16) bits of `value`, least significant first;
+/// the bits above them are dropped, so that they cannot spill into the next
+/// field. Fewer than 8 bits wait between calls, so the accumulator never
+/// holds more than 23. The block writer's loop (`flush_block`) keeps its own
+/// copy of the accumulator, with codes and extra bits that fit their lengths
+/// by construction.
 fn Deflater::put(self : Deflater, value : Int32, n : Int32) -> Unit {
-  self.bits = self.bits | (value.reinterpret_as_uint() << self.bitcount)
+  let value = value.reinterpret_as_uint() & ((1U << n) - 1)
+  self.bits = self.bits | (value << self.bitcount)
   self.bitcount += n
   while self.bitcount >= 8 {
     self.out[self.out_pos] = self.bits.to_byte()

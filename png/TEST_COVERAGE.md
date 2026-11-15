@@ -6,9 +6,10 @@ ledger:
 
 > **Every uncovered line is either covered by a test or listed below with a
 > reason.** `scripts/coverage_report.mbtx` enforces this: a file with uncovered
-> lines must have a row here whose budget is at least the actual count, and
-> the script fails otherwise. Rows for fully covered files are flagged as
-> stale and rows with slack are noted, so budgets only ever shrink.
+> lines must have a row here whose budget is exactly the actual count, and
+> the script fails otherwise, for a row with a larger budget and for one of a
+> fully covered file as well: a budget with room to spare would let a line
+> that tests stop reaching go unnoticed.
 
 ## Running it
 
@@ -17,8 +18,10 @@ moon run scripts/coverage_report.mbtx -- png   # measure, print tables, check th
 moon run scripts/coverage_report.mbtx -- png --from-json _build/coverage_report.png.json   # recheck only
 ```
 
-CI runs it after the gates on every push and pull request. Exit status: 0 =
-ledger OK, 1 = an unexplained or over-budget file, 2 = the run itself failed
+The gates run it (`scripts/gates.mbtx`), on every push and pull request in
+CI too. Exit status: 0 = ledger OK, 1 = a file whose uncovered lines differ
+from its row (no row, more lines, fewer, or a row for a covered file), 2 = the
+run itself failed
 (a failing test, a build error).
 
 ### What is measured
@@ -40,8 +43,9 @@ ledger OK, 1 = an unexplained or over-budget file, 2 = the run itself failed
 The pitfalls the script pins (stale counters, `-f summary` skewing totals,
 tcc on openSUSE) are described in zstd's ledger, `zstd/TEST_COVERAGE.md`.
 
-Snapshot at the last full measurement (2026-11-13): **99.7 %** (928/931
-lines), the three uncovered lines ledgered below.
+Snapshot at the last full measurement (2026-11-15): **99.3 %** (1051/1058
+lines); the 7 uncovered lines are ledgered below, all of them the JS and Wasm
+GC variants that native does not compile.
 
 ## Policy
 
@@ -70,9 +74,20 @@ every frame against the png crate's. Outside the gates,
 [`docs/robustness.md`](https://github.com/gaato/codecs.mbt/blob/main/png/docs/robustness.md) records a run over corpora of
 broken files from typst, image-png and libspng.
 
+Accepted as uncovered (needs a row):
+
+- defensive arms that are unreachable by construction;
+- lines that only an `abort` reaches, run by `panic` tests, whose counts the
+  abort discards;
+- code compiled only for another target (JS, Wasm GC), which the gates test
+  there;
+- testable lines not yet tested, marked `not yet tested`.
+
+Budgets are the exact uncovered counts: the script fails on any difference.
+
 ## Accepted uncovered
 
 | File | Budget | Reason |
 |---|---|---|
-| src/internal/blit/blit.mbt | 4 | `bytes` and `into_view` for JS (`#cfg(target="js")`), forward loops without index checks: the ledger measures native, which compiles the block copies instead. The gates run the same tests on JS: `src/internal/blit/blit_test.mbt`, and the decoder's, among them "step_into writes what step writes, into a whole array". |
+| src/internal/blit/blit.mbt | 6 | `bytes` and `into_view` for JS (`#cfg(target="js")`), forward loops without index checks, and `forward` for JS and Wasm GC, a byte at a time where native and Wasm copy eight: the ledger measures native, which compiles the block copies and the eight-byte steps instead. The gates run the same tests on JS: `src/internal/blit/blit_test.mbt`, and the decoder's, among them "step_into writes what step writes, into a whole array". |
 | src/internal/filter_fast/filter_fast.mbt | 1 | `unfilter` for JS and Wasm GC (`#cfg(not(any(target="native", target="wasm")))`), which calls `@filter.unfilter`: the ledger measures native, which compiles the SIMD one instead. The gates run the package's tests, which compare it with `@filter.unfilter`, on JS and Wasm GC too. |

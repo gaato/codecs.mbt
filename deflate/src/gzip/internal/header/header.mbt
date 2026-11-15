@@ -96,7 +96,56 @@ pub fn parse_fixed(b : BytesView) -> Result[Fixed, String] {
 ///|
 /// The little-endian value of two bytes: XLEN, or a header's CRC-16.
 pub fn le16(b : BytesView) -> Int32 {
-  b[0].to_int() | (b[1].to_int() << 8)
+  le16_of(b[0].to_int(), b[1].to_int())
+}
+
+///|
+/// The value of the bytes `lo` and `hi`, `lo` first.
+fn le16_of(
+  lo : Int32,
+  hi : Int32,
+) -> Int32 where {
+  proof_require: @proof_bits.is_byte(lo) && @proof_bits.is_byte(hi),
+  proof_ensure: result => result == lo + 256 * hi && result <= 65535,
+} {
+  lo + @proof_bits.shl(hi, 8)
+}
+
+///|
+/// The header field that comes first from `from` on, of the extra field
+/// (0), the name (1), the comment (2) and the header's CRC-16 (3), as FLG
+/// `flags` announces them: 4, the data, when none is left. RFC 1952 orders
+/// them so, and gives them the flag bits 2, 3, 4 and 1.
+pub fn next_field(
+  flags : Int32,
+  from : Int32,
+) -> Int32 where {
+  proof_require: next_field_pre(flags, from),
+  proof_ensure: result => result == spec_next_field(flags, from),
+} {
+  if from <= 0 && flag_set(flags, 2) {
+    0
+  } else if from <= 1 && flag_set(flags, 3) {
+    1
+  } else if from <= 2 && flag_set(flags, 4) {
+    2
+  } else if from <= 3 && flag_set(flags, 1) {
+    3
+  } else {
+    4
+  }
+}
+
+///|
+/// Whether bit `bit` of the byte `flags` is set.
+fn flag_set(
+  flags : Int32,
+  bit : Int32,
+) -> Bool where {
+  proof_require: @proof_bits.is_byte(flags) && 0 <= bit && bit < 8,
+  proof_ensure: result => result == (flag_bit(flags, bit) == 1),
+} {
+  @proof_bits.low_bits(@proof_bits.shr(flags, bit), 1) == 1
 }
 
 ///|

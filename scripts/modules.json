@@ -39,6 +39,7 @@
       "src/internal/proof_bits",
       "src/internal/proof_codes",
       "src/internal/rules",
+      "src/internal/prefix_code",
       "src/internal/transform"
     ],
     "deflate": [
@@ -169,6 +170,7 @@
       }
     },
     "brotli": {
+      "src/internal/prefix_code": { "prelude": "unbounded", "solvers": ["z3", "cvc5"] },
       "src/internal/rules": {
         "prelude": "unbounded",
         "solvers": ["z3", "cvc5"],

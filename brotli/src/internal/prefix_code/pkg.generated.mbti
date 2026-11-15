@@ -1,0 +1,18 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/brotli/internal/prefix_code"
+
+// Values
+pub fn code_shape(FixedArray[Int32], Int32, FixedArray[Int32]) -> CodeShape
+
+// Errors
+
+// Types and methods
+pub(all) enum CodeShape {
+  Complete
+  Single
+  Other
+}
+
+// Type aliases
+
+// Traits

@@ -6,9 +6,10 @@ ledger:
 
 > **Every uncovered line is either covered by a test or listed below with a
 > reason.** `scripts/coverage_report.mbtx` enforces this: a file with uncovered
-> lines must have a row here whose budget is at least the actual count, and
-> the script fails otherwise. Rows for fully covered files are flagged as
-> stale and rows with slack are noted, so budgets only ever shrink.
+> lines must have a row here whose budget is exactly the actual count, and
+> the script fails otherwise, for a row with a larger budget and for one of a
+> fully covered file as well: a budget with room to spare would let a line
+> that tests stop reaching go unnoticed.
 
 ## Running it
 
@@ -17,8 +18,10 @@ moon run scripts/coverage_report.mbtx -- zstd   # measure, print tables, check t
 moon run scripts/coverage_report.mbtx -- zstd --from-json _build/coverage_report.zstd.json   # recheck only
 ```
 
-CI runs it after the gates on every push and pull request. Exit status: 0 =
-ledger OK, 1 = an unexplained or over-budget file, 2 = the run itself failed
+The gates run it (`scripts/gates.mbtx`), on every push and pull request in
+CI too. Exit status: 0 = ledger OK, 1 = a file whose uncovered lines differ
+from its row (no row, more lines, fewer, or a row for a covered file), 2 = the
+run itself failed
 (a failing test, a build error). The tests are deterministic: fixed vectors,
 streams built byte by byte and bit by bit, and seeded pseudo-random splits
 and corruptions.
@@ -49,10 +52,9 @@ and corruptions.
 - moon's bundled tcc cannot link on some hosts (openSUSE); the script sets
   `MOON_CC=cc` unless it is already set.
 
-Snapshot at the last full measurement (2026-11-13): **96.9 %**
-(2011/2075 lines); the remaining 64 lines include 50 checked-target lines
-that native does not compile, alongside the existing 14 lines. Every line
-is listed with its reason below.
+Snapshot at the last full measurement (2026-11-15): **94.7 %**
+(2563/2707 lines); the 144 uncovered lines are ledgered below, most of them
+the JS and Wasm GC variants that native does not compile.
 
 ## Policy
 
@@ -173,9 +175,13 @@ the external crosscheck. No uncovered-line budget was added.
 Accepted as uncovered (needs a row):
 
 - defensive arms that are unreachable by construction;
+- lines that only an `abort` reaches, run by `panic` tests, whose counts the
+  abort discards;
+- code compiled only for another target (JS, Wasm GC), which the gates test
+  there;
 - testable lines not yet tested, marked `not yet tested`.
 
-Budgets are exact uncovered counts at the last measurement.
+Budgets are the exact uncovered counts: the script fails on any difference.
 
 Wide matcher reads add independent checked hash comparisons at every
 alignment for widths 4..8, exact-end match lengths and every mismatch
@@ -209,7 +215,7 @@ No uncovered-line budget is added for shared history.
 
 | File | Budget | Reason |
 | --- | --- | --- |
-| src/internal/blit/blit.mbt | 4 | `bytes` and `into_view` for JS (`#cfg(target="js")`), forward loops without index checks: the ledger measures native, which compiles the block copies instead. The gates run the same tests on JS: `src/internal/blit/blit_test.mbt` and the decoder's tests, which write through both. |
+| src/internal/blit/blit.mbt | 6 | `bytes` and `into_view` for JS (`#cfg(target="js")`), forward loops without index checks, and `forward` for JS and Wasm GC, a byte at a time where native and Wasm copy eight: the ledger measures native, which compiles the block copies and the eight-byte steps instead. The gates run the same tests on JS: `src/internal/blit/blit_test.mbt` and the decoder's tests, which write through both. |
 | src/internal/match/access.mbt | 37 | Checked `read`, `write`, `match_length` and `may_beat` for JS/Wasm GC, and `hash_bytes` for Wasm GC (64-bit) and JS (32-bit halves, with `mul_high`): excluded by native's cfg. The gates run the same matcher tests and unchanged SHA-256 pins on both checked targets, and `src/internal/match/hash_wbtest.mbt` compares `hash_bytes` with the 64-bit hashes for every width there. |
 | src/dictionary.mbt | 1 | The `NeedInput` arm of `Dictionary::parse`'s catch: `Huffman::read` and `Fse::read` read a dictionary that is all in memory, so they raise `Fail` for a short one and never `NeedInput`; the arm keeps the match total. "formatted dictionaries that do not parse are Corrupt" cuts the tables at every kind of place. |
 | src/frame_info.mbt | 1 | `inspect_frame`'s `Err` from `parse_frame_header`, whose only refusal, the reserved bit, `frame_header_len` has made first. "a frame cut anywhere is Truncated, a bad one Corrupt" sets the reserved bit. |
@@ -227,7 +233,7 @@ No uncovered-line budget is added for shared history.
 | src/internal/seqenc/codes.mbt | 1 | Checked `table_get` for JS/Wasm GC, excluded by native's cfg. `src/internal/seqenc/codes_test.mbt` compares both codes with the baseline scan for every length 0..131072 on all four targets. |
 | src/internal/xxhash/xxhash.mbt | 25 | Checked JS/Wasm GC read32/read64, and JS's `consume_stripes`, `round_limbs`, `mul_high` and `read32_u`, which compute the lanes in 32-bit halves because a 64-bit integer is a BigInt there: excluded by native's cfg. The gates run the reference digests, incremental splits and exact-end/unaligned tests on all four targets, and `src/internal/xxhash/xxhash_wbtest.mbt` compares `consume_stripes` with the 64-bit `round` on random lanes and bytes. |
 | src/fse.mbt | 1 | `Fse::read` raising when `Fse::build` returns false: the spread of symbols over the table (`@fse.spread`) fills it exactly whenever the probabilities sum to the table size, and `Fse::read` only builds once they do (a probability never exceeds what remains: the largest value a field can hold is `remaining + 1`). RFC 8878 section 4.1.1 states the same guarantee. Kept because a table with unset rows could index past itself. `src/internal/fse/fse_test.mbt` checks that `spread` reports a distribution that does not fill the table. |
-| src/huffman.mbt | 1 | In `Huffman::build`, the message for weights that overfill the table, which `@huffman.build_table` never reports: see the next row. |
+| src/huffman.mbt | 1 | In `Huffman::build`, the message for weights that overfill the table, which `@huffman.build_table` never reports: see the row of `src/internal/huffman/table.mbt`. |
 | src/internal/bits/bit_packer.mbt | 10 | `BitPacker::write`, `BitPacker::write_fitting` and `BitPacker::flush` for JS (`#cfg(target="js")`), the 32-bit accumulator moved a byte at a time: the ledger measures native, which compiles the 64-bit `write` and the eight-byte `flush` instead. The gates run the same tests on JS: `src/internal/bits/bit_packer_test.mbt` and the encoder's round trips. |
 | src/internal/huffman/table.mbt | 2 | In `fill`, the check for weights that overfill the table and its OVERFULL: each weight `w` takes `2^(w-1)` of `2^max_bits` entries, and the implied last weight completes the sum to exactly `2^max_bits`, so the blocks never run past the table. `moon prove` proves it (PROOFS.md: `build_table` never returns OVERFULL). Kept because the reference decoder checks it. |
 | src/internal/huffman_code/code_maker.mbt | 1 | The `abort` of `CodeMaker::CodeMaker` for an alphabet outside 2 to 1,024 symbols: the `panic` test of `src/internal/huffman_code/code_maker_test.mbt` runs it, but the abort ends the test before its coverage counts are written. |

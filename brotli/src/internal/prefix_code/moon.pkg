@@ -1,0 +1,10 @@
+// Kraft's rule for complex prefix codes, isolated from the scalar header
+// and distance rules: the counting theory otherwise perturbs their proofs.
+
+import {
+  "gaato/brotli/internal/proof_codes",
+}
+
+proof_enabled = true
+
+supported_targets = "js + native + wasm + wasm-gc"

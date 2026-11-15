@@ -24,8 +24,11 @@ import {
 //   --from-json FILE  recheck an existing Coveralls JSON report against the
 //                     ledger instead of re-running the instrumented tests.
 //
-// Exit status: 0 = every uncovered line is ledgered, 1 = unexplained coverage
-// gaps or over-budget files, 2 = setup/run failure.
+// Exit status: 0 = every uncovered line is ledgered and every budget is
+// exactly its file's uncovered lines, 1 = unexplained coverage gaps,
+// over-budget files, budgets with slack or ledger rows for files with no gap
+// (a budget larger than the gap would hide a line tests stop reaching),
+// 2 = setup/run failure.
 //
 // Measurement pitfalls this script works around (see TEST_COVERAGE.md):
 // - In a moon.work workspace `moon -C <member> test` tests every member. Run
@@ -343,23 +346,28 @@ async fn check(
       println(
         "STALE LEDGER \{file.pad_end(32, ' ')} file not in coverage output",
       )
+      bad = true
     } else if uncovered.get(file) is Some(count) {
+      // A budget larger than the gap would let a line that tests stop
+      // reaching go unnoticed, so it must match exactly.
       if count < limit {
         println(
-          "note: budget slack \{file.pad_end(21, ' ')} \{right(count, 4)} uncovered < budget \{limit}",
+          "SLACK        \{file.pad_end(32, ' ')} \{right(count, 4)} uncovered < budget \{limit}",
         )
+        bad = true
       }
     } else {
       println(
         "STALE LEDGER \{file.pad_end(32, ' ')} fully covered; drop the row",
       )
+      bad = true
     }
   }
   if bad {
     println("\nledger check: FAIL")
     return 1
   }
-  println("ledger check: OK - every uncovered line is ledgered")
+  println("ledger check: OK - every uncovered line is ledgered, exactly")
   0
 }
 
