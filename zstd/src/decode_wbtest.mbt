@@ -369,7 +369,12 @@ test "after the last frame: TrailingData, Truncated, or Corrupt before any frame
     content="TrailingData",
   )
   inspect(after(skip, b"junk"), content="TrailingData")
-  // Fewer than four bytes, or the start of another frame, are cut short.
+  // So are fewer than four that start no frame: a byte alone, or two whose
+  // second leaves every magic number.
+  inspect(after(one, b"\xff"), content="TrailingData")
+  inspect(after(one, b"\x28\xb6"), content="TrailingData")
+  inspect(after(skip, b"\x5f\x2a\x4d\x19"), content="TrailingData")
+  // The start of another frame, cut short, is truncated.
   inspect(after(one, b"\x28\xb5\x2f"), content="Truncated")
   inspect(after(one, b"\x28\xb5\x2f\xfd"), content="Truncated")
   inspect(after(one, b"\x50\x2a\x4d\x18\x01"), content="Truncated")
@@ -477,17 +482,18 @@ test "a step that raises hands out the output before the error and reports it" {
   let (small, _, _) = run_to_error(cut, 7)
   assert_eq(small, whole)
   assert_true(whole.length() > 0)
-  // The four bytes after a frame split across steps: the step that sees
-  // they start no frame has nothing of the stream left, and consumed none.
+  // The four bytes after a frame split across steps, the first two the
+  // start of a magic number: the step that sees they start no frame has
+  // nothing of the stream left, and consumed none.
   let one = vector("gen/one_byte").input()
   let decoder = Decoder()
   let out = FixedArray::make(8, b'\x00')
-  let both = Bytes::from_array([..one[:], ..b"ju"])
+  let both = Bytes::from_array([..one[:], ..b"\x28\xb5"])
   debug_inspect(
     decoder.step_into(both, out, end=false),
     content="NeedMoreInput",
   )
-  let late = try decoder.step_into(b"nk", out, end=true) catch {
+  let late = try decoder.step_into(b"\x2f\x00", out, end=true) catch {
     CodecError(kind, _) => kind
   } noraise {
     _ => fail("decoded")

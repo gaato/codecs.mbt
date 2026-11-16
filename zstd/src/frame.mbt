@@ -4,20 +4,54 @@
 ///|
 /// The magic number that starts every frame, or a skippable one.
 fn Decoder::magic(self : Decoder) -> Unit raise Stop {
-  self.fill(4)
+  // The bytes are refused as soon as they begin no magic number, so that
+  // a byte after the last frame is trailing data even when it is alone.
+  let take = (4 - self.hdr_len).min(self.view.length() - self.in_pos)
+  if take > 0 {
+    self.hdr.blit_from_bytesview(
+      self.hdr_len,
+      self.view[self.in_pos:self.in_pos + take],
+    )
+    self.hdr_len += take
+    self.in_pos += take
+  }
+  if !magic_prefix(self.hdr, self.hdr_len) {
+    if self.frames == 0 {
+      raise corrupt("not a zstd stream")
+    }
+    // The stream ends where these bytes begin, if in this step's input.
+    self.in_pos = (self.in_pos - self.hdr_len).max(0)
+    raise Fail(TrailingData, "data after the last frame")
+  }
+  if self.hdr_len < 4 {
+    raise NeedInput
+  }
   let magic = self.hdr_le(0, 4).to_uint()
   if magic == FRAME_MAGIC {
     self.hdr_len = 0
     self.state = FrameHeader
-  } else if (magic & 0xFFFFFFF0) == 0x184D2A50 {
-    self.state = SkippableSize
-  } else if self.frames == 0 {
-    raise corrupt("not a zstd stream")
   } else {
-    // The stream ends where these four bytes begin, if in this step's input.
-    self.in_pos = (self.in_pos - self.hdr_len).max(0)
-    raise Fail(TrailingData, "data after the last frame")
+    // `magic_prefix` has let only the two kinds through.
+    self.state = SkippableSize
   }
+}
+
+///|
+/// Whether the first `n` bytes of `hdr` begin a magic number, little-endian:
+/// a frame's (28 B5 2F FD) or a skippable frame's (5x 2A 4D 18).
+fn magic_prefix(hdr : FixedArray[Byte], n : Int32) -> Bool {
+  let frame : FixedArray[Byte] = [b'\x28', b'\xB5', b'\x2F', b'\xFD']
+  let skippable : FixedArray[Byte] = [b'\x50', b'\x2A', b'\x4D', b'\x18']
+  let mut is_frame = true
+  let mut is_skippable = true
+  for i in 0..<n {
+    let b = hdr[i]
+    is_frame = is_frame && b == frame[i]
+    // The first byte's low four bits are the skippable frame's variant.
+    let masked = if i == 0 { b & b'\xF0' } else { b }
+    is_skippable = is_skippable && masked == skippable[i]
+  }
+  is_frame || is_skippable
 }
 
 ///|
