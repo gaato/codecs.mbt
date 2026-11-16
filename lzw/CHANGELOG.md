@@ -7,6 +7,8 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-16
+
 ### Added
 
 - **LZW in four flavours**, chosen by `Format`: `gif(min_code_size)`, `tiff()`, `pdf(early_change~)` and `unix_compress(max_bits~, block_mode~)` (.Z), each with its bit order, clear and end codes, widths and point of widening. `gif` and `unix_compress` raise `Unsupported` for sizes their formats do not have, .Z of 9 bits among them (no writer and reader agree on it).

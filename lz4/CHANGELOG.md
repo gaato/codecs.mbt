@@ -7,6 +7,8 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-16
+
 ### Added
 
 - **LZ4 frames, streamed**: `Decoder` and `Encoder` under the rules of `gaato/codec_bytes`. The decoder reads independent and linked blocks of 64 KiB to 4 MiB, stored or compressed, checks the header, block and content checksums (XXH32) and the content size, skips skippable frames, reads legacy frames (`lz4 -l`) and frames one after another, and stops after the first under `until=EndOfMember` (a legacy frame raises `Unsupported` there); `frame_info()` gives the header. It holds a window of 256 KiB at most, never a whole block. A block's bytes come out before the checksums that cover them, as provisional output.

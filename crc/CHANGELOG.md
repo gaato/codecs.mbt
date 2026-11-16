@@ -7,6 +7,8 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-16
+
 ### Added
 
 - **CRCs of up to 64 bits.** `Crc::new` from Ross Williams's parameters, `Crc::named` for the 112 CRCs of the reveng catalogue of at most 64 bits by name or alias, `checksum`, `update` (zlib's way of continuing a CRC), `combine` (the CRC of two pieces from theirs, in logarithmic time) and `Digest` for data in pieces. `Crc::try_new` checks parameters that come from data, with the reason when they make no CRC. Every named CRC gives the catalogue's check value, those of whole-byte widths its residue too, and each agrees with the CRC computed bit by bit from its definition.

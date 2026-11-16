@@ -7,6 +7,8 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-16
+
 ### Added
 
 - **Snappy's raw format, whole**: `compress_raw` and `decompress_raw`, which checks the declared length against `max_output` and against what the stream's bytes can make before allocating, and `raw_compress_bound`.
