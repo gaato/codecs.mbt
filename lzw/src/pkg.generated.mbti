@@ -1,0 +1,68 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/lzw"
+
+import {
+  "gaato/codec",
+  "gaato/codec_bytes",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn compress(BytesView, Format) -> Bytes raise @codec.CodecError
+
+pub fn compress_bound(Int64, Format) -> Int64
+
+pub fn decoder_memory_bound(Format) -> Int64
+
+pub fn decompress(BytesView, Format, max_output? : Int32, allow_missing_end? : Bool) -> Bytes raise @codec.CodecError
+
+pub fn encoder_memory_bound(Format) -> Int64
+
+// Errors
+
+// Types and methods
+pub struct Decoder {
+  // private fields
+}
+pub fn Decoder::Decoder(Format, until? : @codec_bytes.Until, allow_missing_end? : Bool) -> Self
+pub fn Decoder::is_finished(Self) -> Bool
+pub fn Decoder::last_consumed(Self) -> Int32
+pub fn Decoder::last_produced(Self) -> Int32
+pub fn Decoder::memory_usage(Self) -> Int32
+pub fn Decoder::reset(Self) -> Unit
+pub fn Decoder::step(Self, BytesView, MutArrayView[Byte], end~ : Bool) -> @codec_bytes.Status raise @codec.CodecError
+pub fn Decoder::stream_format(Self) -> Format
+pub impl @codec_bytes.Decode for Decoder
+
+pub struct Encoder {
+  // private fields
+}
+pub fn Encoder::Encoder(Format) -> Self
+pub fn Encoder::is_finished(Self) -> Bool
+pub fn Encoder::last_consumed(Self) -> Int32
+pub fn Encoder::last_produced(Self) -> Int32
+pub fn Encoder::memory_usage(Self) -> Int32
+pub fn Encoder::reset(Self) -> Unit
+pub fn Encoder::step(Self, BytesView, MutArrayView[Byte], action~ : @codec_bytes.EncodeAction) -> @codec_bytes.Status raise @codec.CodecError
+pub impl @codec_bytes.Encode for Encoder
+
+#derive(Eq, @debug.Debug)
+pub struct Format {
+  literal_bits : Int32
+  msb_first : Bool
+  early_change : Bool
+  max_bits : Int32
+  unix : Bool
+  block_mode : Bool
+}
+pub fn Format::equal(Self, Self) -> Bool
+pub fn Format::gif(Int32) -> Self raise @codec.CodecError
+pub fn Format::not_equal(Self, Self) -> Bool
+pub fn Format::pdf(early_change? : Bool) -> Self
+pub fn Format::tiff() -> Self
+pub fn Format::to_repr(Self) -> @debug.Repr
+pub fn Format::unix_compress(max_bits? : Int32, block_mode? : Bool) -> Self raise @codec.CodecError
+
+// Type aliases
+
+// Traits

@@ -25,5 +25,6 @@ import {
   "gaato/png@0.1.3",
   "gaato/snappy@0.1.0",
   "gaato/lz4@0.1.0",
+  "gaato/lzw@0.1.0",
   "moonbitlang/typst@0.1.7",
 }

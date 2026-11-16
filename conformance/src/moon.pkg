@@ -13,6 +13,7 @@ import {
   "gaato/png",
   "gaato/snappy",
   "gaato/lz4",
+  "gaato/lzw",
   "moonbitlang/typst/codecs",
   "moonbitlang/core/debug",
   "moonbitlang/core/encoding/base64",

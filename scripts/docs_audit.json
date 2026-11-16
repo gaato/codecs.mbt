@@ -1,5 +1,5 @@
 {
-  "modules": ["codec", "codec_bytes", "codec_image", "crc", "snappy", "lz4", "zstd", "brotli", "deflate", "png"],
+  "modules": ["codec", "codec_bytes", "codec_image", "crc", "snappy", "lz4", "lzw", "zstd", "brotli", "deflate", "png"],
   "generated": [
     "crc/src/internal/crc32",
     "crc/src/internal/crc32c",

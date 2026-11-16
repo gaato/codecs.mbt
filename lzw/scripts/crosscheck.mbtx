@@ -1,0 +1,229 @@
+----
+import {
+  "moonbitlang/core/async",
+  "moonbitlang/core/async/fs",
+  "moonbitlang/core/async/shell",
+  "moonbitlang/core/encoding/base64",
+  "moonbitlang/core/encoding/hex",
+  "moonbitlang/core/env",
+  "moonbitlang/x@0.5.6/crypto",
+}
+----
+
+// Decodes the encoder's streams with references that share no code with
+// it, and compares their sizes with what those references write.
+//
+// Runs src/internal/crosscheck, which prints one line per stream: a name,
+// the set (GIF of a minimum code size, TIFF, PDF's EarlyChange 0, or .Z of
+// a maximum width, with or without block mode), the base64 of the input and
+// of the stream. GIF, TIFF and PDF streams must decode to exactly the input
+// with weezl (scripts/reference, image-rs's LZW, run with cargo, versions
+// pinned by its Cargo.lock); .Z streams with `gzip -d` and, in block mode
+// (all compress writes), with `compress -d`. The totals of each set's
+// streams must be within 1 % of weezl's and of `compress -b`'s for the same
+// inputs.
+//
+// Usage, from the repository root (needs cargo, gzip and ncompress):
+//   moon run lzw/scripts/crosscheck.mbtx
+
+///|
+let max_output : Int = 1 << 30
+
+///|
+fn[T] setup_failure(message : String) -> T {
+  eprintln(message)
+  @env.exit(2)
+}
+
+///|
+fn sha256_hex(data : Bytes) -> String {
+  @hex.encode(Bytes::from_array(@crypto.sha256(data)))
+}
+
+///|
+/// A set's weezl flavour, or None for a .Z set.
+fn flavour(set : String) -> String? {
+  if set.has_prefix("z") {
+    None
+  } else {
+    Some(set)
+  }
+}
+
+///|
+/// A .Z set's maximum width.
+fn z_bits(set : String) -> Int {
+  match set {
+    "z12" => 12
+    "z10" => 10
+    _ => 16
+  }
+}
+
+///|
+/// Runs the reference over `lines`, one answer a line.
+async fn reference(lines : Array[String]) -> Array[String] {
+  let input = StringBuilder()
+  for l in lines {
+    input.write_string(l + "\n")
+  }
+  let run = @shell.Cmd(
+    "cargo",
+    [
+      "run", "--quiet", "--release", "--locked", "--manifest-path", "scripts/reference/Cargo.toml",
+    ],
+    stdin=Text(input.to_string()),
+  ).output(max_output_bytes=max_output)
+  if run.exit_code() != 0 {
+    setup_failure("scripts/reference: \{run.stderr()}")
+  }
+  let answers = run.stdout().split("\n").map(l => l.to_owned()).collect()
+  if answers.length() != lines.length() + 1 {
+    setup_failure(
+      "scripts/reference answered \{answers.length() - 1} of \{lines.length()} lines",
+    )
+  }
+  answers
+}
+
+///|
+/// What `command args` writes for `data` on its standard input, or the
+/// error it reports.
+async fn filter(command : String, args : Array[String], data : Bytes) -> Result[Bytes, String] {
+  let output = @shell.Cmd(command, args, stdin=Binary(data)).output(
+    max_output_bytes=max_output,
+  )
+  if output.exit_code() != 0 {
+    return Err(output.stderr().trim().to_string())
+  }
+  Ok(output.stdout_bytes())
+}
+
+///|
+async fn main {
+  if !@fs.exists("lzw/moon.mod") {
+    setup_failure("run from the repository root")
+  }
+  let env = if @env.get_env_var("MOON_CC") is None {
+    { "MOON_CC": "cc" }
+  } else {
+    {}
+  }
+  let run = @shell.Cmd(
+    "moon",
+    ["run", "--release", "--target", "native", "src/internal/crosscheck"],
+    cwd="lzw",
+    env~,
+  ).output(max_output_bytes=max_output)
+  if run.exit_code() != 0 {
+    setup_failure(run.stderr())
+  }
+  let names = []
+  let sets = []
+  let inputs : Array[Bytes] = []
+  let streams : Array[Bytes] = []
+  for line in run.stdout().split("\n") {
+    if line.is_empty() {
+      continue
+    }
+    guard line.split("\t").collect() is [name, set, input, stream] else {
+      setup_failure("unexpected line from the crosscheck tool: \{line}")
+    }
+    names.push(name.to_string())
+    sets.push(set.to_string())
+    inputs.push(@base64.decode(input))
+    streams.push(@base64.decode(stream))
+  }
+  // weezl decodes the GIF, TIFF and PDF streams, and writes its own.
+  let decode_lines = []
+  let encode_lines = []
+  let weezl_index = []
+  for i, set in sets {
+    if flavour(set) is Some(f) {
+      decode_lines.push("lzw-decode:\{f}\t\{@base64.encode(streams[i])}")
+      encode_lines.push("lzw-encode:\{f}\t\{@base64.encode(inputs[i])}")
+      weezl_index.push(i)
+    }
+  }
+  let decoded = reference(decode_lines)
+  let encoded = reference(encode_lines)
+  let weezl_decoded : Map[Int, String] = Map([])
+  let theirs_size : Map[Int, Int] = Map([])
+  for k, i in weezl_index {
+    weezl_decoded[i] = decoded[k]
+    theirs_size[i] = @base64.decode(encoded[k]).length()
+  }
+  let mut failures = 0
+  for i, name in names {
+    let set = sets[i]
+    let expected = "\{inputs[i].length()} \{sha256_hex(inputs[i])}"
+    if weezl_decoded.get(i) is Some(answer) {
+      if answer != expected {
+        println("FAIL \{name} \{set}: weezl gives \{answer}")
+        failures += 1
+        continue
+      }
+    } else {
+      let readers = if set == "znb" {
+        [("gzip", ["-d", "-c"])]
+      } else {
+        // `compress -d`, not `uncompress`, which some systems make a
+        // wrapper of gzip's.
+        [("gzip", ["-d", "-c"]), ("compress", ["-d", "-c"])]
+      }
+      let mut ok = true
+      for reader in readers {
+        let (command, args) = reader
+        match filter(command, args, streams[i]) {
+          Ok(out) if out == inputs[i] => ()
+          Ok(out) => {
+            println(
+              "FAIL \{name} \{set}: \{command} decodes it to \{out.length()} different bytes",
+            )
+            ok = false
+          }
+          Err(e) => {
+            println("FAIL \{name} \{set}: \{command}: \{e}")
+            ok = false
+          }
+        }
+      }
+      if !ok {
+        failures += 1
+        continue
+      }
+      if set != "znb" {
+        // -f: write it even when it does not save anything.
+        match filter("compress", ["-c", "-f", "-b", "\{z_bits(set)}"], inputs[i]) {
+          Ok(z) => theirs_size[i] = z.length()
+          Err(e) => setup_failure("compress: \{e}")
+        }
+      }
+    }
+    println("ok   \{name} \{set}: \{inputs[i].length()} -> \{streams[i].length()} bytes")
+  }
+  let ours : Map[String, Int] = Map([])
+  let theirs : Map[String, Int] = Map([])
+  for i, set in sets {
+    if theirs_size.get(i) is Some(t) {
+      ours[set] = ours.get(set).unwrap_or(0) + streams[i].length()
+      theirs[set] = theirs.get(set).unwrap_or(0) + t
+    }
+  }
+  for set in ours.keys() {
+    let a = ours.get(set).unwrap_or(0)
+    let b = theirs.get(set).unwrap_or(1)
+    let ratio = a.to_double() / b.to_double()
+    let reference = if set.has_prefix("z") { "compress" } else { "weezl" }
+    println("size \{set}: ours \{a}, \{reference} \{b} (\{ratio})")
+    if ratio > 1.01 {
+      println("FAIL \{set}: more than 1 % larger than \{reference}'s")
+      failures += 1
+    }
+  }
+  if failures > 0 {
+    println("crosscheck: \{failures} failures")
+    @env.exit(1)
+  }
+  println("crosscheck: \{names.length()} streams decode with weezl, gzip and compress")
+}

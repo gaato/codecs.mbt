@@ -14,7 +14,8 @@ benchmarks decode the raw DEFLATE data inside the gzip members. The Snappy
 benchmarks decode what gaato/snappy writes for the same text and binary,
 which is what the snap crate writes, to the byte (`snappy/scripts/crosscheck.mbtx`);
 the LZ4 benchmarks, what gaato/lz4 writes, which is lz4's, to the byte
-(`lz4/src/vectors_wbtest.mbt`).
+(`lz4/src/vectors_wbtest.mbt`); the LZW benchmarks, what gaato/lzw writes as
+TIFF and as .Z (compress's bytes, `lzw/src/vectors_wbtest.mbt`).
 `moon run scripts/gen_bench_data.mbtx` regenerates them; it needs the `zstd`,
 `brotli` and `gzip` commands.
 

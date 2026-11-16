@@ -28,8 +28,8 @@ The byte-stream contract and the compression formats exist today: zstd,
 brotli, DEFLATE with its two containers, zlib and gzip, in one module of
 three packages (`gaato/deflate`, `gaato/deflate/zlib`, `gaato/deflate/gzip`),
 Snappy (`gaato/snappy`), whose raw format is whole only and whose framing
-format streams, and LZ4 (`gaato/lz4`), whose frames stream and whose blocks
-are whole.
+format streams, LZ4 (`gaato/lz4`), whose frames stream and whose blocks
+are whole, and LZW (`gaato/lzw`) in the flavours of GIF, TIFF, PDF and .Z.
 So do the image contract, `gaato/codec_image`, and its first format, PNG with
 APNG (`gaato/png`). The audio row shows where such codecs would go; nothing in
 the layers below has to change for them. One building block is also a module

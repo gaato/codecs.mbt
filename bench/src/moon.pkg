@@ -7,6 +7,7 @@ import {
   "gaato/png",
   "gaato/snappy",
   "gaato/lz4",
+  "gaato/lzw",
   "gaato/codec_bench/png_data",
   "moonbitlang/typst/codecs",
   "moonbitlang/core/bench",

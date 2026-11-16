@@ -5,6 +5,7 @@ members = [
   "crc",
   "snappy",
   "lz4",
+  "lzw",
   "harness",
   "conformance",
   "bench",

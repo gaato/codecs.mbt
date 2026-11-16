@@ -8,7 +8,10 @@
 //! options "bs=<4..7>,indep=<0|1>,cc=<0|1>,bc=<0|1>,cs=<0|1>,level=<n>,
 //! dictid=<n>", the dictionary when given), lz4-block-encode:<acceleration>
 //! (LZ4_compress_fast, or after LZ4_loadDict with a dictionary) and
-//! lz4-legacy-encode (lz4 -l's legacy frame).
+//! lz4-legacy-encode (lz4 -l's legacy frame). With weezl: lzw-decode:<flavour>
+//! and lzw-encode:<flavour>, the flavour gif-<min code size>, tiff (codes
+//! from the most significant bit, widening a code early) or msb (PDF's
+//! EarlyChange 0: most significant bit first, widening as GIF does).
 
 use base64::Engine;
 use sha2::{Digest, Sha256};
@@ -130,6 +133,38 @@ fn lz4f_encode(options: &str, input: &[u8], dict: &[u8]) -> Vec<u8> {
     }
 }
 
+/// weezl's configuration for an lzw flavour.
+fn lzw_flavour(flavour: &str) -> (weezl::BitOrder, u8, bool) {
+    match flavour {
+        "tiff" => (weezl::BitOrder::Msb, 8, true),
+        "msb" => (weezl::BitOrder::Msb, 8, false),
+        _ => {
+            let size = flavour.strip_prefix("gif-").expect("gif-<size>").parse().expect("a size");
+            (weezl::BitOrder::Lsb, size, false)
+        }
+    }
+}
+
+fn lzw_decode(flavour: &str, input: &[u8]) -> Result<Vec<u8>, String> {
+    let (order, size, tiff) = lzw_flavour(flavour);
+    let mut decoder = if tiff {
+        weezl::decode::Decoder::with_tiff_size_switch(order, size)
+    } else {
+        weezl::decode::Decoder::new(order, size)
+    };
+    decoder.decode(input).map_err(|e| format!("{e:?}"))
+}
+
+fn lzw_encode(flavour: &str, input: &[u8]) -> Vec<u8> {
+    let (order, size, tiff) = lzw_flavour(flavour);
+    let mut encoder = if tiff {
+        weezl::encode::Encoder::with_tiff_size_switch(order, size)
+    } else {
+        weezl::encode::Encoder::new(order, size)
+    };
+    encoder.encode(input).expect("weezl encodes")
+}
+
 /// A block from LZ4_compress_fast, or after LZ4_loadDict with a dictionary.
 fn lz4_block_encode(acceleration: i32, input: &[u8], dict: &[u8]) -> Vec<u8> {
     use lz4_sys::*;
@@ -188,6 +223,7 @@ fn main() {
         let dict = fields.next().map(|d| b64.decode(d).expect("base64")).unwrap_or_default();
         if let Some(encoded) = match format.split_once(':') {
             Some(("lz4f-encode", options)) => Some(lz4f_encode(options, &input, &dict)),
+            Some(("lzw-encode", flavour)) => Some(lzw_encode(flavour, &input)),
             Some(("lz4-block-encode", acceleration)) => {
                 Some(lz4_block_encode(acceleration.parse().expect("acceleration"), &input, &dict))
             }
@@ -207,6 +243,7 @@ fn main() {
                     .map(|_| out)
                     .map_err(|e| e.to_string())
             }
+            f if f.starts_with("lzw-decode:") => lzw_decode(&f["lzw-decode:".len()..], &input),
             "lz4-frame" => {
                 let mut out = Vec::new();
                 lz4_flex::frame::FrameDecoder::new(&input[..])

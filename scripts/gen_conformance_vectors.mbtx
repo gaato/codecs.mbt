@@ -18,7 +18,8 @@ import {
 // large ones, and the stream of flushed messages of the formats that have one
 // (zlib's, shaped as Discord sends it). Snappy's vectors hold raw and framed
 // streams, and LZ4's frames, blocks and frames that need a dictionary; only
-// the streams a decoder reads without more are taken.
+// the streams a decoder reads without more are taken. LZW's come in every
+// flavour, the flavour in each name.
 //
 // Usage, from the repository root:
 //   moon run scripts/gen_conformance_vectors.mbtx [--check]
@@ -34,6 +35,7 @@ let formats : Array[(String, String)] = [
   ("gzip", "deflate/src/gzip/vectors_wbtest.mbt"),
   ("snappy", "snappy/src/vectors_wbtest.mbt"),
   ("lz4", "lz4/src/vectors_wbtest.mbt"),
+  ("lzw", "lzw/src/vectors_wbtest.mbt"),
 ]
 
 ///|
@@ -41,7 +43,8 @@ let formats : Array[(String, String)] = [
 /// under the contract read without a dictionary; a vector without either is
 /// always one.
 let streamed_formats : Array[String] = [
-  "snappy-frame", "b4i", "b4d", "b7i", "b5ix", "fast9", "legacy",
+  "snappy-frame", "b4i", "b4d", "b7i", "b5ix", "fast9", "legacy", "gif-2", "gif-4",
+  "gif-8", "tiff", "msb", "z16", "z12", "z10",
 ]
 
 ///|

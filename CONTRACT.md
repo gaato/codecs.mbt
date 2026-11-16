@@ -222,6 +222,8 @@ here, so that adding one later does not require changing it.
 | raw DEFLATE | implemented (Decode and Encode) | No header and no checksum. Trailing bytes after the final block raise `TrailingData`. |
 | Snappy | implemented (framing format: Decode and Encode) | Streams one after another under `EndOfInput`; `EndOfMember` stops before the identifier of a stream that follows data. Skippable chunks and padding are skipped. A chunk's output comes out as soon as it is decoded, and `ChecksumMismatch` after it when its CRC-32C fails (rule 6). No bytes at all are the empty stream, as the snap crate writes it; the encoder writes the identifier alone, as every stream begins with it. A compressed chunk is held whole, up to what 64 KiB compresses to; a longer one, which the format allows and no encoder writes, raises `LimitExceeded`. The raw format has its length first and copies that reach the start of the output, so it is whole only, outside the contract. |
 | LZ4 frame | implemented (Decode and Encode) | Concatenated frames, skippable frames and legacy frames under `EndOfInput`; under `EndOfMember` a skippable frame is a member of its own, and the legacy frame, which has no end marker, raises `Unsupported`. A frame that names a dictionary raises `DictionaryRequired` without one. A content size the frame does not hold raises `ChecksumMismatch`, as gzip's ISIZE does. A block's output comes out as it is decoded, before the block and content checksums (rule 6). The block format has no framing and is whole only, outside the contract. |
+| LZW (GIF, TIFF, PDF) | implemented (Decode and Encode) | One stream per input, ending at the end code: bytes after it are `TrailingData`, and `EndOfMember` stops right after it. A stream without its end code raises `Truncated` unless the decoder is told to take the end of the input for it (`allow_missing_end`). `Flush` raises `Unsupported`: LZW cannot flush. |
+| .Z (Unix compress) | implemented (Decode and Encode) | No end code: the stream ends with the input, so `EndOfMember` raises `Unsupported`, and a prefix cut at a code decodes cleanly, as compress reads it. The header's width is a memory limit: a stream wider than the decoder's raises `LimitExceeded`. `Flush` raises `Unsupported`. |
 | xz | fits | Several streams with padding. The memory limit is resumable on the concrete type. Filter chains that cannot flush raise `Unsupported`. |
 | .lzma | fits | No magic and no checksum; trailing bytes are `TrailingData`. Cannot flush. |
 | bzip2 | fits | Output appears a block at a time, which is consistent with rule 1. Its CRC is the MSB-first variant. |
@@ -239,6 +241,7 @@ here, so that adding one later does not require changing it.
 | RFC 1950, 1951, 1952 | Informational, neither updated nor obsoleted | zlib, DEFLATE and gzip, in gaato/deflate. Its errata (7764, 8429, 7517) clarify wording and change no decoder's behaviour. |
 | Snappy's format description and framing format (google/snappy) | not RFCs | gaato/snappy. |
 | LZ4 Frame Format 1.6.4 and Block Format | not RFCs | gaato/lz4. |
+| GIF89a, TIFF 6.0 (section 13), PDF's LZWDecode, ncompress 5.0 | not RFCs | gaato/lzw. .Z has no specification; compress's source is its reference. |
 | .xz File Format 1.2.1 | not RFC | Used only for the paper check above. |
 
 ### Errata

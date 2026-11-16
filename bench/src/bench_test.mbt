@@ -295,6 +295,60 @@ test "lz4" (b : @bench.T) {
 }
 
 ///|
+/// Decodes an LZW stream whole into 64 KiB slices, as a consumer would,
+/// and returns how many bytes came out.
+fn lzw_decode(input : Bytes, format : @lzw.Format) -> Int32 {
+  let decoder = @lzw.Decoder(format)
+  let out = FixedArray::make(1 << 16, b'\x00')
+  let mut rest = input[:]
+  let mut total = 0
+  for ;; {
+    let status = decoder.step(rest, out.mut_view(), end=true) catch {
+      _ => abort("lzw: bad stream")
+    }
+    rest = rest[decoder.last_consumed():]
+    total += decoder.last_produced()
+    if status is Done {
+      return total
+    }
+  }
+}
+
+///|
+test "lzw" (b : @bench.T) {
+  // The inputs, as the reference decoders give them back; our .Z is
+  // compress's, to the byte (lzw/src/vectors_wbtest.mbt).
+  let text = @brotli.decompress(decode64(brotli_text)) catch {
+    _ => abort("brotli: bad stream")
+  }
+  let binary = @brotli.decompress(decode64(brotli_binary)) catch {
+    _ => abort("brotli: bad stream")
+  }
+  let tiff = @lzw.Format::tiff()
+  let z = @lzw.Format::unix_compress() catch { _ => abort("format") }
+  let encode = (input : Bytes, format : @lzw.Format) => {
+    @lzw.compress(input, format) catch {
+      _ => abort("lzw: encode")
+    }
+  }
+  let tt = encode(text, tiff)
+  let tb = encode(binary, tiff)
+  let zt = encode(text, z)
+  assert_eq(lzw_decode(tt, tiff), text_size)
+  assert_eq(lzw_decode(tb, tiff), binary_size)
+  assert_eq(lzw_decode(zt, z), text_size)
+  b.bench(name="lzw tiff text 512 KiB", () => b.keep(lzw_decode(tt, tiff)))
+  b.bench(name="lzw tiff binary 128 KiB", () => b.keep(lzw_decode(tb, tiff)))
+  b.bench(name="lzw .Z text 512 KiB", () => b.keep(lzw_decode(zt, z)))
+  b.bench(name="lzw encode tiff text 512 KiB", () => {
+    b.keep(encode(text, tiff).length())
+  })
+  b.bench(name="lzw encode .Z text 512 KiB", () => {
+    b.keep(encode(text, z).length())
+  })
+}
+
+///|
 /// Decodes a PNG image whole into 64 KiB slices of rows, as a consumer
 /// would, and returns how many bytes of rows came out.
 fn png_decode(input : Bytes) -> Int32 {
