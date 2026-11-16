@@ -273,7 +273,7 @@ library ships:
 | [Milky2018/zstd](https://mooncakes.io/docs/Milky2018/zstd) | 0.1.4 | zstd |
 | [hustcer/fbr](https://mooncakes.io/docs/hustcer/fbr) | 0.8.2 | Brotli |
 | [mizchi/brotli](https://mooncakes.io/docs/mizchi/brotli) | 0.2.2 | Brotli |
-| [moonbit-community/flate](https://mooncakes.io/docs/moonbit-community/flate) | 0.10.0 | raw DEFLATE, zlib, gzip |
+| [moonbit-community/flate](https://mooncakes.io/docs/moonbit-community/flate): its latest release, three days before its code went into MoonBit's core library as `compress/flate`, `compress/zlib` and `compress/gzip` (moonbitlang/core#4459, the last row) | 0.10.0 | raw DEFLATE, zlib, gzip |
 | [gmlewis/flate](https://mooncakes.io/docs/gmlewis/flate), [gmlewis/zlib](https://mooncakes.io/docs/gmlewis/zlib), [gmlewis/gzip](https://mooncakes.io/docs/gmlewis/gzip) | 0.36.17, 0.21.17, 0.34.17 | raw DEFLATE, zlib, gzip |
 | [mizchi/zlib](https://mooncakes.io/docs/mizchi/zlib) (the pure package, not `mizchi/zlib/native`) | 0.4.10 | raw DEFLATE, zlib, gzip |
 | [hustcer/fzip](https://mooncakes.io/docs/hustcer/fzip) | 0.8.8 | raw DEFLATE, zlib, gzip |
