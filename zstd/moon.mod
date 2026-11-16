@@ -4,7 +4,7 @@
 
 name = "gaato/zstd"
 
-version = "0.5.0"
+version = "0.5.1"
 
 license = "Apache-2.0"
 

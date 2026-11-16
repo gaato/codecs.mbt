@@ -7,6 +7,8 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-17
+
 ### Fixed
 
 - **One to three bytes after the last frame that begin no magic number** (a lone `0xFF`, or `28 B6`) raise `TrailingData`, with `last_consumed()` at the end of the stream, as soon as they are seen; they raised `Truncated` at the end of the input, as if they began a frame.
