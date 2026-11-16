@@ -1,13 +1,15 @@
 ///|
-/// Decodes a whole raw DEFLATE stream held in memory. `max_output` caps the
-/// decoded size (unlimited by default) and raises
+/// Decodes a whole raw DEFLATE stream held in memory, with the preset
+/// `dictionary` if the stream was compressed with one, as `Decoder` does.
+/// `max_output` caps the decoded size (unlimited by default) and raises
 /// `LimitExceeded({ resource: Output, .. })` past it; bytes after the final
 /// block raise `TrailingData`.
 pub fn decompress(
   input : BytesView,
+  dictionary? : BytesView,
   max_output? : Int32,
 ) -> Bytes raise @codec.CodecError {
-  let decoder = Decoder()
+  let decoder = Decoder(dictionary?)
   let chunk = FixedArray::make(1 << 16, b'\x00')
   let out = Buffer()
   let mut rest = input

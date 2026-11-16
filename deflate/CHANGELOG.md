@@ -7,6 +7,11 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+### Added
+
+- **`decompress(input, dictionary?)`**: the one-shot raw DEFLATE decoder takes a preset dictionary, as `Decoder` and the core library's `inflate_exact` do.
+- **[Moving from MoonBit's core library or moonbit-community/flate](https://github.com/gaato/codecs.mbt/blob/main/deflate/docs/migrating.md)**: the names, errors and behaviour that differ.
+
 ## [0.3.0] - 2026-11-17
 
 ### Added

@@ -28,6 +28,11 @@ test "streams with a preset dictionary decode with it, and only with it" {
     )
     assert_eq(again, got, msg=v.name)
     assert_eq(refusal(v.input()), Corrupt, msg=v.name)
+    assert_eq(
+      @fixtures.sha256(decompress(v.input(), dictionary~)),
+      v.sha256,
+      msg=v.name,
+    )
   }
 }
 

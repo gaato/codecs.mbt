@@ -2,6 +2,8 @@
 
 Streaming decoders and encoders for DEFLATE (RFC 1951) and the two formats around it, zlib (RFC 1950) and gzip (RFC 1952), in pure MoonBit, for Native, JS, Wasm and Wasm GC. They take input in chunks of any size, write output into slices of any size, verify every checksum, and keep their memory fixed, so they fit HTTP's `gzip` and `deflate` codings, `.gz` files, PNG and WebSocket compression alike.
 
+The one-shot functions have the same shape as those of MoonBit's core library (`moonbitlang/core/compress`) and of moonbit-community/flate, so decoding with either moves to `@zlib` and `@gzip` mostly by changing the import; [Moving from MoonBit's core library](https://github.com/gaato/codecs.mbt/blob/main/deflate/docs/migrating.md) lists what else changes: levels, error types and a few defaults.
+
 ## Install
 
 ```sh
@@ -315,6 +317,7 @@ The one-shot decoder of moonbit-community/flate 0.10.0, its latest release befor
 - [Comparison with other MoonBit implementations](https://github.com/gaato/codecs.mbt/blob/main/bench/README.md#compression-codecs-against-other-implementations): what each supports, checks and holds, and how fast it decodes and encodes
 - [The byte-stream codec contract](https://github.com/gaato/codecs.mbt/blob/main/CONTRACT.md) that every `Decoder` and `Encoder` keeps
 - [Compression levels and ratio](https://github.com/gaato/codecs.mbt/blob/main/deflate/docs/compression.md): how the levels work, and sizes against zlib
+- [Moving from MoonBit's core library or moonbit-community/flate](https://github.com/gaato/codecs.mbt/blob/main/deflate/docs/migrating.md): the names, errors and behaviour that differ
 - [Resource bounds](https://github.com/gaato/codecs.mbt/blob/main/deflate/RESOURCE_BOUNDS.md): every limit and the tests that hold it
 - [Proofs](https://github.com/gaato/codecs.mbt/blob/main/deflate/PROOFS.md) and [test coverage](https://github.com/gaato/codecs.mbt/blob/main/deflate/TEST_COVERAGE.md)
 
