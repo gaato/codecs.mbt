@@ -135,10 +135,12 @@ the dictionary they were made with.
   PNG decoder with its image counterpart, in
   [codecs.mbt](https://github.com/gaato/codecs.mbt).
 
+Core's `Optimal` maps to levels 10 to 12 here, using libdeflate's
+near-optimal parser. There is no separate `Split` strategy: the compressed
+levels from 2 onward already split blocks when their statistics change.
+
 ## What the core library has and gaato/deflate does not
 
 - ZIP archives (`archive/zip`).
-- The `Split` and `Optimal` strategies, which can give smaller output than
-  level 9 for more time.
 - `cancelled`, `two_pass` and `fast_store` in the one-shot functions (see
   [One-shot functions](#one-shot-functions)).

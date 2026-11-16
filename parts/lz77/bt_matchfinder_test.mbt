@@ -37,6 +37,21 @@ fn bt_oracle_input(kind : String, size : Int32) -> FixedArray[Byte] {
 }
 
 ///|
+test "panic BtMatchfinder rejects a window with no slots" {
+  ignore(@lz77.BtMatchfinder(max_distance=0))
+}
+
+///|
+test "panic BtMatchfinder rejects a hash width with no bits" {
+  ignore(@lz77.BtMatchfinder(hash3_bits=0))
+}
+
+///|
+test "panic BtMatchfinder rejects moving the buffer up" {
+  @lz77.BtMatchfinder().move_down(-1)
+}
+
+///|
 fn bt_digest_word(hash : UInt64, word : Int32) -> UInt64 {
   let mut hash = hash
   for shift in [0, 8, 16, 24] {

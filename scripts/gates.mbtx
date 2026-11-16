@@ -28,7 +28,7 @@ import {
 
 ///|
 /// Prints `message` on stderr and exits with `code`.
-fn[T] die(code : Int, message : String) -> T {
+fn[T] die(code : Int32, message : String) -> T {
   eprintln(message)
   @env.exit(code)
 }
@@ -119,6 +119,9 @@ async fn main {
   run("moon", ["run", "brotli/scripts/gen_vectors.mbtx", "--", "--check"])
   run("moon", ["run", "brotli/scripts/gen_dict_vectors.mbtx", "--", "--check"])
   run("moon", ["run", "scripts/gen_deflate_vectors.mbtx", "--", "--check"])
+  run("moon", [
+    "run", "scripts/reference/libdeflate/gen_vectors.mbtx", "--", "--check",
+  ])
   // The streams the snap crate writes, which the decoder is held to and the
   // encoder matches.
   run("moon", ["run", "snappy/scripts/gen_vectors.mbtx", "--", "--check"])
@@ -152,7 +155,9 @@ async fn main {
   // The encoders' streams decode with the reference decoders.
   if full {
     for dir in ["zstd", "brotli", "deflate", "snappy", "lz4", "lzw"] {
-      run("moon", ["run", "\{dir}/scripts/crosscheck.mbtx"], env={ "MOON_CC": cc })
+      run("moon", ["run", "\{dir}/scripts/crosscheck.mbtx"], env={
+        "MOON_CC": cc,
+      })
     }
   }
   // The proofs, with Z3, then (on request) CVC5.

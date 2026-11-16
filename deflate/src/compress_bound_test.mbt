@@ -12,7 +12,7 @@ fn incompressible(n : Int32, seed : UInt64) -> Bytes {
 test "a whole stream is never larger than storing its input" {
   for n in [0, 1, 1000, 65535, 65536, 131070, 131071, 300000] {
     let input = incompressible(n, n.to_uint64() + 1)
-    for level in -1..<=9 {
+    for level in -1..<=12 {
       for window_bits in [8, 15] {
         let raw = @deflate.compress(input, level~, window_bits~)
         assert_true(
@@ -68,7 +68,7 @@ test "gzip's bound counts the header's fields" {
 
 ///|
 test "the memory bounds are what the codecs report" {
-  for level in -1..<=9 {
+  for level in -1..<=13 {
     assert_eq(
       @deflate.Encoder(level~).memory_usage(),
       @deflate.encoder_memory_bound(level~).to_int(),
@@ -100,7 +100,7 @@ test "the bounds hold for the reviewer's cases and saturate past 2^62" {
   let zlib = @zlib.compress(b"", level=0, dictionary=b"x")
   assert_true(zlib.length().to_int64() <= @zlib.compress_bound(0L))
   // A flush splits the stream: its empty block, and the final block after.
-  for level in [0, 1, 6, 9] {
+  for level in [0, 1, 6, 9, 10, 11, 12] {
     let encoder = @deflate.Encoder(level~)
     let out = FixedArray::make(256, b'\x00')
     let _ = encoder.step_into(b"x", out, action=Flush)
@@ -132,7 +132,7 @@ test "a block that a last match carries past 65,535 bytes is within the bound" {
     }
   }
   let input = Bytes::from_array(bytes)
-  for level in 1..<=9 {
+  for level in 1..<=12 {
     let raw = @deflate.compress(input, level~)
     assert_true(raw.length().to_int64() <= @deflate.compress_bound(200000L))
     let zlib = @zlib.compress(input, level~)

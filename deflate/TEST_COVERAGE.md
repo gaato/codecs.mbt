@@ -44,8 +44,8 @@ streams built bit by bit, and seeded pseudo-random splits and corruptions.
 The pitfalls the script pins (stale counters, `-f summary` skewing totals,
 tcc on openSUSE) are described in zstd's ledger, `zstd/TEST_COVERAGE.md`.
 
-Snapshot at the last full measurement (2026-11-15): **97.2 %** (1608/1654
-lines); the 46 uncovered lines are ledgered below, most of them the JS and
+Snapshot at the last full measurement (2026-11-17): **97.6 %** (1953/2001
+lines); the 48 uncovered lines are ledgered below, most of them the JS and
 Wasm GC variants that native does not compile.
 
 ## Policy
@@ -103,6 +103,7 @@ Budgets are the exact uncovered counts: the script fails on any difference.
 
 | File | Budget | Reason |
 | --- | --- | --- |
+| src/internal/lz77/bt_matchfinder.mbt | 2 | Constructor validation aborts for an invalid window or hash width. The copied `bt_matchfinder_test.mbt` panic tests exercise both; aborting tests discard their native coverage counters. |
 | src/internal/blit/blit.mbt | 6 | `bytes` and `into_view` for JS (`#cfg(target="js")`), forward loops without index checks, and `forward` for JS and Wasm GC, a byte at a time where native and Wasm copy eight: the ledger measures native, which compiles the block copies and the eight-byte steps instead. The gates run the same tests on JS: `src/internal/blit/blit_test.mbt` and the decoders' and encoders' tests, which write through both. |
 | src/internal/crc32/crc32.mbt | 13 | `update_bytes` for JS and Wasm GC (`#cfg(not(any(target="native", target="wasm")))`), which assembles bytes in the caller's loop to preserve those backends' performance. Native compiles the word-load variant instead. The same `crc32_test.mbt` runs on JS and Wasm GC, checking the bitwise reference, offsets 0 to 7, lengths 0 to 64, and CRC continuation across every tested split. |
 | src/internal/huffman/decode_table.mbt | 3 | The `abort`s of `Builder::Builder` (a root outside 1 to 15 bits, an alphabet past 4096 symbols) and of `Builder::build` (a table without room): the `panic` tests of `src/internal/huffman/decode_table_spec_test.mbt` run them, but the abort ends the test before its coverage counts are written. |

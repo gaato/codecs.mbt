@@ -92,7 +92,7 @@ test "the encoder reports the raw encoder's bound and its header after every ste
     name: Some(b"name"),
     comment: Some(b"comment"),
   }
-  for level in 0..<=9 {
+  for level in 0..<=12 {
     let bound = @deflater.memory_bound(level).to_int()
     for header in [None, Some(named)] {
       let encoder = Encoder(level~, header?)

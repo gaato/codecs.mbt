@@ -60,11 +60,11 @@ test "the trailer" {
 
 ///|
 test "the header an encoder writes reads back, for every level" {
-  for level in -1..<=10 {
+  for level in -1..<=13 {
     for id in [None, Some(0U), Some(0x12345678U), Some(0xFFFFFFFFU)] {
       let bytes = @header.build(level, id)
       let h = @header.parse(bytes[0], bytes[1]).unwrap()
-      let clamped = level.clamp(min=0, max=9)
+      let clamped = level.clamp(min=0, max=12)
       let flevel = if clamped < 2 {
         0
       } else if clamped < 6 {

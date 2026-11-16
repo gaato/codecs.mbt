@@ -85,7 +85,7 @@ test "one inflater, given the dictionary when the header names it" {
 test "the encoder reports the raw encoder's bound after every step" {
   let input = @fixtures.sample(10, 150000)
   let dictionary = @fixtures.sample(11, 40000)
-  for level in 0..<=9 {
+  for level in 0..<=12 {
     let bound = @deflater.memory_bound(level).to_int()
     for encoder in [Encoder(level~), Encoder(level~, dictionary~)] {
       assert_eq(encoder.memory_usage(), bound)

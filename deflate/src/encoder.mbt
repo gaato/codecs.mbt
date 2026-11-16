@@ -28,9 +28,9 @@ pub struct Encoder {
 /// An encoder at the start of a stream.
 ///
 /// `level` trades speed for size as zlib's levels do: 0 writes the input in
-/// stored blocks, 1 is the fastest compression, 9 the smallest, and 6, the
+/// stored blocks, 1 is the fastest compression, 12 the smallest, and 6, the
 /// default, a balance. -1, zlib's `Z_DEFAULT_COMPRESSION`, is 6 too, and
-/// other levels outside 0 to 9 are clamped. The levels are libdeflate's.
+/// other levels outside 0 to 12 are clamped. The levels are libdeflate's.
 ///
 /// `dictionary` is a preset dictionary: the stream's matches may reach back
 /// into its last 32 KiB as if it had come just before the stream, and the
@@ -42,8 +42,8 @@ pub struct Encoder {
 /// match reaches `1 << window_bits` bytes back, so a decoder that keeps only
 /// that much history reads the stream, as WebSocket's permessage-deflate
 /// (RFC 7692) lets a peer ask with `client_max_window_bits` and
-/// `server_max_window_bits`. A smaller window can only compress less; the
-/// encoder's memory is the same.
+/// `server_max_window_bits`. A smaller window leaves the allocations of levels
+/// 0 to 9 unchanged and reduces the binary tree at levels 10 to 12.
 pub fn Encoder::Encoder(
   level~ : Int32 = 6,
   dictionary? : BytesView,

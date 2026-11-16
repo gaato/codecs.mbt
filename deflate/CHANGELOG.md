@@ -9,8 +9,19 @@ never does. Every breaking change is listed with a migration note.
 
 ### Added
 
+- **Levels 10 to 12** in the raw DEFLATE, zlib and gzip encoders: libdeflate
+  1.24's near-optimal parsing, with binary-tree matches and iterative
+  minimum-cost paths. Output is byte-identical to the reference with the
+  documented streaming limits; levels 0 to 9 keep their existing bytes.
 - **`decompress(input, dictionary?)`**: the one-shot raw DEFLATE decoder takes a preset dictionary, as `Decoder` and the core library's `inflate_exact` do.
 - **[Moving from MoonBit's core library or moonbit-community/flate](https://github.com/gaato/codecs.mbt/blob/main/deflate/docs/migrating.md)**: the names, errors and behaviour that differ.
+
+### Changed
+
+- **Levels above 9 now select the new tier**, with values above 12 clamped
+  to 12; -1 remains the default 6. Migration: callers passing 10 or more
+  previously received level 9 and must pass `level=9` to keep that output
+  and memory use. zlib FLEVEL is 3 and gzip XFL is 2 at levels 10 to 12.
 
 ## [0.3.0] - 2026-11-17
 

@@ -11,8 +11,9 @@ import {
 
 // From the repository root:
 //   moon run scripts/reference/libdeflate/gen_vectors.mbtx [--check]
-// Downloads the release tarball, verifies SOURCE.sha256 before extracting or
-// compiling, and regenerates the small match-list digest test. No upstream
+// Caches the release tarball in scripts/reference/target, downloading only
+// when missing, and verifies SOURCE.sha256 on every use before extracting or
+// compiling. Regenerates the match-list and raw-output tests. No upstream
 // sources are vendored. Needs curl, tar, cc and moonfmt. A unique temporary
 // directory isolates simultaneous runs and is removed even on failure.
 
@@ -75,24 +76,57 @@ fn input_digest(data : Bytes) -> UInt64 {
 
 ///|
 async fn generate(work : String, check : Bool) -> Unit {
+  let archive_name = "libdeflate-1.24.tar.gz"
+  let cache_dir = "scripts/reference/target"
+  let archive = "\{cache_dir}/\{archive_name}"
+  let url = "https://github.com/ebiggers/libdeflate/releases/download/v1.24/\{archive_name}"
+  if !@fs.exists(archive) {
+    // Download privately, verify, then publish atomically on the cache's
+    // filesystem so a concurrent generator cannot see a partial tarball.
+    let downloaded = "\{work}/\{archive_name}"
+    let download = @shell.Cmd("curl", [
+      "--fail", "--location", "--silent", "--show-error", "--max-time", "60", "--output",
+      downloaded, url,
+    ]).output() catch {
+      err =>
+        abort(
+          "libdeflate cache is missing at \{archive}; download failed: \{err}",
+        )
+    }
+    guard download.exit_code() == 0 else {
+      abort(
+        "libdeflate cache is missing at \{archive}; download failed: \{download.stderr()}",
+      )
+    }
+    verify_archive(downloaded)
+    @fs.mkdir(cache_dir, recursive=true, allow_exist=true)
+    let unique = work[work.rev_find("/").unwrap() + 1:]
+    let staging = "\{cache_dir}/\{unique}.tar.gz.part"
+    @fs.write_file(staging, @fs.read_file(downloaded))
+    @fs.rename(staging, archive)
+  }
+  verify_archive(archive)
+  ignore(run("tar", ["-xzf", archive, "-C", work]))
+  generate_matches(work, check)
+  generate_deflate(work, check)
+}
+
+///|
+async fn verify_archive(archive : String) -> Unit {
   let dir = "scripts/reference/libdeflate"
   let archive_name = "libdeflate-1.24.tar.gz"
-  let archive = "\{work}/\{archive_name}"
-  let url = "https://github.com/ebiggers/libdeflate/releases/download/v1.24/\{archive_name}"
-  ignore(
-    run("curl", [
-      "--fail", "--location", "--silent", "--show-error", "--max-time", "60", "--output",
-      archive, url,
-    ]),
-  )
   let pin = @fs.read_file("\{dir}/SOURCE.sha256").text().trim().to_owned()
   let hash = @hex.encode(
     Bytes::from_array(@crypto.sha256(@fs.read_file(archive).binary())),
   )
   guard pin == "\{hash}  \{archive_name}" else {
-    abort("libdeflate release SHA-256 does not match SOURCE.sha256")
+    abort("libdeflate SHA-256 mismatch for \{archive}; expected SOURCE.sha256")
   }
-  ignore(run("tar", ["-xzf", archive, "-C", work]))
+}
+
+///|
+async fn generate_matches(work : String, check : Bool) -> Unit {
+  let dir = "scripts/reference/libdeflate"
   let executable = "\{work}/bt_matches"
   ignore(
     run("cc", [
@@ -103,6 +137,7 @@ async fn generate(work : String, check : Bool) -> Unit {
       "-I",
       "\{work}/libdeflate-1.24",
       "\{dir}/bt_matches.c",
+      "\{work}/libdeflate-1.24/lib/arm/cpu_features.c",
       "-o",
       executable,
     ]),
@@ -164,6 +199,154 @@ async fn generate(work : String, check : Bool) -> Unit {
   } else {
     @fs.write_file(target, formatted.stdout())
     println("wrote \{target}: 32 match-list digests")
+  }
+}
+
+///|
+// The same LCG and byte choices as @fixtures.sample. The generated test also
+// pins its input SHA-256, so changes in either copy cannot silently pass.
+fn sample(seed : UInt32, size : Int32) -> Bytes {
+  let mut state = seed
+  let below = (bound : Int32) => {
+    state = state * 1664525U + 1013904223U
+    (state >> 8).reinterpret_as_int() % bound
+  }
+  let words = [
+    "the ", "deflate ", "stream ", "window ", "of ", "a ", "\n", "MoonBit ", "{\"key\": [1, 2]} ",
+  ]
+  let out = Buffer()
+  let block = Bytes::makei(4096, _ => (below(1 << 16) >> 8).to_byte())
+  while out.length() < size {
+    match below(3) {
+      0 =>
+        for _ in 0..<(1 + below(200)) {
+          out.write_string_utf8(words[below(words.length())])
+        }
+      1 =>
+        for _ in 0..<below(600) {
+          out.write_byte((below(1 << 16) >> 8).to_byte())
+        }
+      _ => {
+        let start = below(3000)
+        out.write_bytesview(block[start:start + 1 + below(1000)])
+      }
+    }
+  }
+  out.to_bytes()[:size].to_owned()
+}
+
+///|
+fn sha256(data : Bytes) -> String {
+  @hex.encode(Bytes::from_array(@crypto.sha256(data)))
+}
+
+///|
+fn transition_input() -> Bytes {
+  let mut state = 91U
+  let noise = Bytes::makei(60000, _ => {
+    state = state * 1664525U + 1013904223U
+    (state >> 24).to_byte()
+  })
+  noise[:20000].to_owned() +
+  Bytes::make(40000, b'\x00') +
+  noise[20000:].to_owned()
+}
+
+///|
+fn patch(source : String, old : String, replacement : String) -> String {
+  guard source.contains(old) else {
+    abort("libdeflate patch does not match: \{old}")
+  }
+  source.replace(old~, new=replacement)
+}
+
+///|
+async fn generate_deflate(work : String, check : Bool) -> Unit {
+  let root = "\{work}/libdeflate-1.24"
+  let file = "\{root}/lib/deflate_compress.c"
+  let original = @fs.read_file(file).text()
+  let source = patch(
+    original, "SOFT_MAX_BLOCK_LENGTH\t300000", "SOFT_MAX_BLOCK_LENGTH\t65535",
+  )
+  let source = patch(
+    source, "SEQ_STORE_LENGTH\t50000", "SEQ_STORE_LENGTH\t16384",
+  )
+  let source = patch(
+    source, "FAST_SOFT_MAX_BLOCK_LENGTH\t65535", "FAST_SOFT_MAX_BLOCK_LENGTH\t65535",
+  )
+  let source = patch(
+    source, "< soft_max_len + MIN_BLOCK_LENGTH", "<= soft_max_len",
+  )
+  let source = patch(
+    source, "(SOFT_MAX_BLOCK_LENGTH * 5)", "(MIN_BLOCK_LENGTH * MAX_MATCHES_PER_POS)",
+  )
+  @fs.write_file(file, source)
+  let executable = "\{work}/compress"
+  ignore(
+    run("cc", [
+      "-O2",
+      "-std=c11",
+      "-I",
+      root,
+      "scripts/reference/libdeflate/compress.c",
+      file,
+      "\{root}/lib/utils.c",
+      "\{root}/lib/x86/cpu_features.c",
+      "\{root}/lib/arm/cpu_features.c",
+      "-o",
+      executable,
+    ]),
+  )
+  let target = "deflate/src/libdeflate_vectors_wbtest.mbt"
+  let out = StringBuilder()
+  out.write_string(
+    "// Generated by scripts/reference/libdeflate/gen_vectors.mbtx, DON'T EDIT IT.\n// libdeflate 1.24 with the streaming constants in docs/compression.md.\n\n///|\ntest \"raw output is byte-identical to the pinned libdeflate at levels 0 to 12\" {\n",
+  )
+  for
+    (name, expression, input) in [
+      ("sample", "@fixtures.sample(1951, 100000)", sample(1951U, 100000)),
+      ("short", "@fixtures.sample(17, 1000)", sample(17U, 1000)),
+      ("small", "@fixtures.sample(41, 77)", sample(41U, 77)),
+      ("mixed", "@fixtures.sample(7, 210000)", sample(7U, 210000)),
+      ("runs", "Bytes::make(140000, b'\\x00')", Bytes::make(140000, b'\x00')),
+      (
+        "transition",
+        "{ let mut state = 91U; let noise = Bytes::makei(60000, _ => { state = state * 1664525U + 1013904223U; (state >> 24).to_byte() }); noise[:20000].to_owned() + Bytes::make(40000, b'\\x00') + noise[20000:].to_owned() }",
+        transition_input(),
+      ),
+    ] {
+    let input_path = "\{work}/raw_input"
+    let output_path = "\{work}/raw_output"
+    @fs.write_file(input_path, input)
+    out.write_string(
+      "  {\n    let input = \{expression}\n    assert_eq(@fixtures.sha256(input), \"\{sha256(input)}\")\n    let expected = [\n",
+    )
+    for level in 0..<=12 {
+      ignore(run(executable, [input_path, level.to_string(), output_path]))
+      let digest = sha256(@fs.read_file(output_path).binary())
+      out.write_string("      \"\{digest}\",\n")
+      if name == "sample" && level >= 10 {
+        println("level \{level}: \{digest}")
+      }
+    }
+    out.write_string(
+      "    ]\n    for level in 0..<=12 {\n      assert_eq(@fixtures.sha256(compress(input, level~)), expected[level], msg=\"\{name}/level \\{level}\")\n    }\n  }\n",
+    )
+  }
+  out.write_string("}\n")
+  let formatted = @shell.Cmd("moonfmt", ["-"], stdin=Text(out.to_string())).output()
+  formatted.check()
+  if check {
+    guard @fs.exists(target) &&
+      @fs.read_file(target).text() == formatted.stdout() else {
+      abort(
+        "\{target} is stale: run moon run scripts/reference/libdeflate/gen_vectors.mbtx",
+      )
+    }
+    println("\{target}: 78 raw-DEFLATE digests agree with libdeflate 1.24")
+  } else {
+    @fs.write_file(target, formatted.stdout())
+    println("wrote \{target}: 78 raw-DEFLATE digests")
   }
 }
 

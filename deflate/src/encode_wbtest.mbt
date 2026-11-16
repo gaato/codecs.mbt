@@ -16,7 +16,7 @@ fn encoder_inputs() -> Array[Bytes] {
 ///|
 test "compress round-trips through the decoder at every level" {
   let dictionary = @fixtures.sample(3, 40000)
-  for level in -1..<=10 {
+  for level in -1..<=12 {
     for input in encoder_inputs() {
       let stream = compress(input, level~)
       assert_eq(decompress(stream), input, msg="level \{level}")
@@ -60,12 +60,12 @@ test "the shortest streams: empty, short and after a flush" {
 }
 
 ///|
-test "levels outside 0 to 9 are clamped, but -1 is the default 6" {
+test "levels outside 0 to 12 are clamped, but -1 is the default 6" {
   let input = @fixtures.sample(4, 30000)
   assert_eq(compress(input, level=-1), compress(input, level=6))
   assert_eq(compress(input, level=-2), compress(input, level=0))
   assert_eq(compress(input, level=-5), compress(input, level=0))
-  assert_eq(compress(input, level=42), compress(input, level=9))
+  assert_eq(compress(input, level=42), compress(input, level=12))
   assert_eq(compress(input), compress(input, level=6))
   // Level 0 stores; higher levels compress.
   assert_true(compress(input, level=0).length() > input.length())
@@ -117,7 +117,7 @@ test "any input split and output size give the same stream, at every level" {
   // Words, random bytes and repeats over two blocks, and a run of zeros,
   // where matches run up to the end of a block and over it.
   let input = @fixtures.sample(5, 110000) + Bytes::make(10000, b'\x00')
-  for level in 0..<=9 {
+  for level in 0..<=12 {
     let whole = compress(input, level~)
     let encoder = Encoder(level~)
     for shape in split_shapes {
@@ -137,7 +137,7 @@ test "any split gives the same stream with a dictionary and with flushes" {
   // Flushes at the start, twice in a row, a byte apart, and within a match's
   // reach of a block's end; the last at the end of the input.
   let flush_at = [0, 1, 1, 2, 9000, 65534, 65540, 100000]
-  for level in 0..<=9 {
+  for level in 0..<=12 {
     let named = Encoder(level~, dictionary~)
     let with_dictionary = compress(input, level~, dictionary~)
     let flushed = encode_split(
@@ -199,7 +199,7 @@ fn decode_available(stream : BytesView, dictionary? : BytesView) -> Bytes raise 
 test "a flush is a sync flush: the stream so far decodes to the input so far" {
   let input = @fixtures.sample(6, 50000)
   let dictionary = @fixtures.sample(7, 10000)
-  for level in 0..<=9 {
+  for level in 0..<=12 {
     for with_dictionary in [false, true] {
       let encoder = if with_dictionary {
         Encoder(level~, dictionary~)
@@ -283,7 +283,7 @@ test "steps after the end take no input and answer Done" {
 test "reset keeps the level and the dictionary" {
   let input = @fixtures.sample(8, 70000)
   let dictionary = @fixtures.sample(9, 50000)
-  for level in [0, 3, 9] {
+  for level in [0, 3, 9, 10, 11, 12] {
     let encoder = Encoder(level~, dictionary~)
     let first = @fixtures.encode(encoder, input, next_in=() => 5000, next_out=() => {
       777
@@ -301,7 +301,7 @@ test "reset keeps the level and the dictionary" {
 }
 
 ///|
-/// The SHA-256 of `compress(input, level=n)` for n from 0 to 9, for a fixed
+/// The SHA-256 of `compress(input, level=n)` for n from 0 to 12, for a fixed
 /// input: the same on every target (the gates run the tests on all four).
 /// The ten are also the bytes that libdeflate 1.24 writes for this input at
 /// each level when built with the encoder's block limits
@@ -315,6 +315,9 @@ test "every target writes the same bytes" {
   ]
   let dictionary = @fixtures.sample(1950, 40000)
   digests.push(@fixtures.sha256(compress(input, dictionary~)))
+  for level in 10..<=12 {
+    digests.push(@fixtures.sha256(compress(input, level~)))
+  }
   inspect(
     digests.join("\n"),
     content=(
@@ -329,6 +332,9 @@ test "every target writes the same bytes" {
       #|1ce25ac7cedf61bebfae8ac9956fd5051f45741d71f00983e04986a78ab66bcb
       #|6a6285da9b35d69fde0c475e870dafccfb2add069d277ac7da76014b855843ac
       #|a55acfb4da054e39fda2aac3fa6106a159a9e161274faf378d6018262056ad86
+      #|82b3e3323e47c1da471b461587b3f33cd269c52cc3f4377be6b839129d2ecd9d
+      #|daf292f98eec7855c1aa6929cfe0d2e2f8161add6f0c44dcf6289193f953086d
+      #|8ee2c2ae9bfc0421c9ce16b1a4e70b87425ae748d1fdeb076dc2d7ce366f9a8f
     ),
   )
 }
@@ -363,7 +369,7 @@ fn random_bytes(seed : UInt32, n : Int32) -> Bytes {
 test "matches stay inside the window window_bits sets" {
   for bits in 8..<=15 {
     let window = 1 << bits
-    for level in [1, 6, 9] {
+    for level in [1, 6, 9, 10, 11, 12] {
       // A random block twice: the second copy is a match only if the first
       // is near enough. The near block stays short enough for level 1's
       // table, which keeps two positions for each hash.

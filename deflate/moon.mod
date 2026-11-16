@@ -27,7 +27,7 @@ keywords = [
   "streaming",
 ]
 
-description = "Streaming DEFLATE, zlib and gzip decoders and encoders (RFC 1951, 1950, 1952) for MoonBit: arbitrary input chunks, bounded output slices, checksums verified, gzip headers and members, zlib preset dictionaries, levels 0 to 9 and sync flush."
+description = "Streaming DEFLATE, zlib and gzip decoders and encoders (RFC 1951, 1950, 1952) for MoonBit: arbitrary input chunks, bounded output slices, checksums verified, gzip headers and members, zlib preset dictionaries, levels 0 to 12 and sync flush."
 
 source = "src"
 

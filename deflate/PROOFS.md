@@ -68,6 +68,18 @@ trusted, like the bridges, to say what the Why3 symbols are.
 
 ## Not proved
 
+- `near_parse.mbt`, `near_cost.mbt` and `near_default_costs.mbt`
+  (`src/internal/deflate/`), and the binary-tree finder copied from
+  `parts/lz77/bt_matchfinder.mbt`: resumable caching, block rewinding,
+  integer cost models and iterative minimum-cost parsing are tested, not
+  proved. `src/libdeflate_vectors_wbtest.mbt` compares raw-output SHA-256
+  with libdeflate 1.24 at levels 0 to 12; `src/encode_wbtest.mbt` tests
+  "every target writes the same bytes", "any input split and output size
+  give the same stream, at every level", dictionary/flush splits, and
+  "matches stay inside the window window_bits sets". The copied
+  `bt_matchfinder_test.mbt` and `bt_vectors_test.mbt` test tree search,
+  sliding and exact upstream match lists on all four targets.
+
 - The CRC-32 (`parts/crc32`, gzip's trailer and FHCRC): its tables and its
   eight bytes at a time. They are functions of `UInt` words with shifts and
   exclusive or, which the prover's integers do not model. The tests check

@@ -93,7 +93,8 @@ pub extend Header with @debug.Debug::{to_repr}
 ///|
 /// FLEVEL for a compression level, as zlib's `deflate.c` sets it: 0 for
 /// levels 0 and 1 (fastest), 1 for 2 to 5, 2 for 6 (the default), 3 for 7
-/// to 9. Levels outside 0 to 9 count as the nearest one.
+/// to 12. Higher levels also use 3; negative levels use 0 here (the caller
+/// resolves the default -1 before building the header).
 pub fn flevel(level : Int32) -> Int32 {
   if level < 2 {
     0

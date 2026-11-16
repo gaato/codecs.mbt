@@ -29,7 +29,7 @@ pub struct Encoder {
 ///|
 /// An encoder at the start of a stream.
 ///
-/// `level` is as for `@deflate.Encoder`: 0 (stored) to 9 (smallest), 6 by
+/// `level` is as for `@deflate.Encoder`: 0 (stored) to 12 (smallest), 6 by
 /// default, clamped, and -1 is 6 as in zlib; the header's FLEVEL says which
 /// kind of level it was, as zlib's does.
 ///

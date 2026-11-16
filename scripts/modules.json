@@ -136,7 +136,10 @@
         "hc_matchfinder.mbt",
         "hc_matchfinder_test.mbt",
         "ht_matchfinder.mbt",
-        "ht_matchfinder_test.mbt"
+        "ht_matchfinder_test.mbt",
+        "bt_matchfinder.mbt",
+        "bt_matchfinder_test.mbt",
+        "bt_vectors_test.mbt"
       ],
       "proof_bits": ["shifts.mbt", "shifts.mbtp", "shifts_test.mbt"],
       "proof_codes": ["codes.mbt", "codes.mbtp", "codes_test.mbt"]

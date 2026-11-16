@@ -216,6 +216,9 @@ fn Deflater::should_end_block(
 /// Parses up to the end of a block, the end of the segment, or the end of
 /// the look-ahead.
 fn Deflater::parse(self : Deflater) -> Parsed {
+  if self.near is Some(n) {
+    return self.parse_near(n)
+  }
   let end_known = self.end >= 0
   let in_end = if end_known { self.end } else { self.avail }
   // A step of the parser may begin at positions before `stop`.

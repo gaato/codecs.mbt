@@ -22,13 +22,13 @@ pub fn Header::is_writable(self : Header) -> Bool {
 /// The header an encoder writes when given none: no name, comment or extra
 /// field, MTIME 0 (unknown), OS 255 (unknown), so that the same input gives
 /// the same bytes everywhere, and XFL as zlib sets it for `level`: 4 (the
-/// fastest) at levels 0 and 1, 2 (the slowest) at 9, 0 otherwise.
+/// fastest) at levels 0 and 1, 2 (the slowest) at 9 to 12, 0 otherwise.
 fn default_header(level : Int32) -> Header {
   let level = @deflater.effective_level(level)
   {
     text: false,
     mtime: 0,
-    xfl: if level == 9 {
+    xfl: if level >= 9 {
       b'\x02'
     } else if level <= 1 {
       b'\x04'
@@ -65,7 +65,7 @@ pub struct Encoder {
 ///|
 /// An encoder at the start of a stream.
 ///
-/// `level` is as for `@deflate.Encoder`: 0 (stored) to 9 (smallest), 6 by
+/// `level` is as for `@deflate.Encoder`: 0 (stored) to 12 (smallest), 6 by
 /// default, clamped, and -1 is 6 as in zlib.
 ///
 /// `header` is written as it is: FTEXT from `text`, MTIME, XFL and OS, and
@@ -74,7 +74,7 @@ pub struct Encoder {
 /// that is not is the caller's error, and aborts. Without it the encoder
 /// writes no name, comment or extra field, MTIME 0 and OS 255 (unknown), so
 /// that the same input gives the same bytes on every target and every day,
-/// and XFL as zlib does: 4 at levels 0 and 1, 2 at level 9, 0 otherwise.
+/// and XFL as zlib does: 4 at levels 0 and 1, 2 at levels 9 to 12, 0 otherwise.
 pub fn Encoder::Encoder(level~ : Int32 = 6, header? : Header) -> Encoder {
   let header = match header {
     Some(h) => {

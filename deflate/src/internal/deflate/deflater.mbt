@@ -1,4 +1,4 @@
-// The raw DEFLATE encoder: libdeflate's levels 1 to 9 (1.24, deflate_compress.c)
+// The raw DEFLATE encoder: libdeflate's levels 1 to 12 (1.24, deflate_compress.c)
 // made streaming, with zlib's sync flush and preset dictionaries.
 //
 // Input is copied into `buf`, which holds the 32 KiB window, the block being
@@ -38,7 +38,9 @@
 // (`SOFT_MAX_BLOCK_LENGTH` and `FAST_SOFT_MAX_BLOCK_LENGTH`), 16,384
 // sequences (`SEQ_STORE_LENGTH`) and no 5,000-byte tail rule, but for the
 // empty stream, which libdeflate stores and this encoder writes as zlib
-// does. The SHA-256 that src/encode_wbtest.mbt pins were checked against it.
+// does. Levels 10 to 12 also use MATCH_CACHE_LENGTH=1280000, the smallest
+// upstream permits with MIN_BLOCK_LENGTH=5000. The raw-output oracle in
+// scripts/reference/libdeflate pins and reproduces these settings.
 
 ///|
 /// The window: how far back a match may reach.
@@ -99,6 +101,8 @@ priv enum Strategy {
   Lazy
   /// Levels 8 and 9: the next two positions are tried.
   Lazy2
+  /// Levels 10 to 12: binary trees and iterative minimum-cost parsing.
+  NearOptimal
 }
 
 ///|
@@ -140,6 +144,7 @@ pub struct Deflater {
   // block.
   priv hc : @lz77.HcMatchfinder?
   priv ht : @lz77.HtMatchfinder?
+  priv near : NearState?
   priv mut mf_ready : Bool
   // The parser in the current block.
   priv mut in_block : Bool
@@ -197,17 +202,18 @@ pub struct Deflater {
 ///|
 /// The level an encoder works at for `level`: -1, zlib's
 /// `Z_DEFAULT_COMPRESSION`, is the default 6, and any other level outside 0
-/// to 9 is the nearest of them.
+/// to 12 is the nearest of them.
 pub fn effective_level(level : Int32) -> Int32 {
   if level == -1 {
     6
   } else {
-    level.clamp(min=0, max=9)
+    level.clamp(min=0, max=12)
   }
 }
 
 ///|
-/// The bytes a `Deflater` of `level` holds, the same from the first step
+/// The upper bound on bytes a `Deflater` of `level` holds (a smaller window
+/// can reduce the binary tree), the same from the first step
 /// to the last, with a dictionary or without (RESOURCE_BOUNDS.md): its
 /// input buffer, its output buffer, the match finder's tables and the
 /// block's sequences, counts and codes. "a Deflater holds what memory_bound
@@ -217,7 +223,8 @@ pub fn memory_bound(level : Int32) -> Int64 {
     0 => 131077L
     1 => 361948L
     2 | 3 | 4 => 542172L
-    _ => 542516L
+    5 | 6 | 7 | 8 | 9 => 542516L
+    _ => 7056748L
   }
 }
 
@@ -263,7 +270,10 @@ pub fn Deflater::new(
     6 => (Lazy, 35, 65)
     7 => (Lazy, 100, 130)
     8 => (Lazy2, 300, MAX_MATCH_LEN)
-    _ => (Lazy2, 600, MAX_MATCH_LEN)
+    9 => (Lazy2, 600, MAX_MATCH_LEN)
+    10 => (NearOptimal, 35, 75)
+    11 => (NearOptimal, 100, 150)
+    _ => (NearOptimal, 300, MAX_MATCH_LEN)
   }
   let dictionary = match dictionary {
     Some(d) => d[(d.length() - WINDOW).max(0):]
@@ -272,6 +282,7 @@ pub fn Deflater::new(
   let seq_cap = match strategy {
     Stored => 0
     Fastest => FAST_SEQ_STORE_LENGTH
+    NearOptimal => (SOFT_MAX_BLOCK_LENGTH - 1 + MAX_MATCH_LEN) / 3
     _ => SEQ_STORE_LENGTH
   }
   let (buf_size, soft_max) = match strategy {
@@ -281,7 +292,7 @@ pub fn Deflater::new(
   }
   let max_block = match strategy {
     Stored => MAX_STORED_LENGTH
-    Fastest | Greedy => soft_max - 1 + MAX_MATCH_LEN
+    Fastest | Greedy | NearOptimal => soft_max - 1 + MAX_MATCH_LEN
     Lazy | Lazy2 => soft_max - 1 + MAX_OVERRUN
   }
   // A block's output costs no more than storing it: its bytes, 5 for each
@@ -314,6 +325,11 @@ pub fn Deflater::new(
     },
     ht: if strategy is Fastest {
       Some(@lz77.HtMatchfinder(max_distance~))
+    } else {
+      None
+    },
+    near: if strategy is NearOptimal {
+      Some(NearState::new(level, max_distance))
     } else {
       None
     },
@@ -424,6 +440,16 @@ pub fn Deflater::reset(self : Deflater) -> Unit {
   self.in_block = false
   self.block_ready = false
   self.block_stored = false
+  self.min_len = MIN_MATCH_LEN
+  self.next_recalc = 0
+  self.max_len = MAX_MATCH_LEN
+  self.nice_len = self.nice_match_length
+  // A new stream must not inherit the unfinished block's observations:
+  // near-optimal parsing gathers them directly, without begin_block.
+  self.observations.fill(0)
+  self.new_observations.fill(0)
+  self.num_observations = 0
+  self.num_new_observations = 0
   self.nseq = 0
   self.out_pos = 0
   self.out_drained = 0
@@ -435,6 +461,9 @@ pub fn Deflater::reset(self : Deflater) -> Unit {
   self.finished = false
   self.step_consumed = 0
   self.step_produced = 0
+  if self.near is Some(n) {
+    n.reset()
+  }
 }
 
 ///|
@@ -464,9 +493,14 @@ pub fn Deflater::memory_usage(self : Deflater) -> Int32 {
     self.len_full_lens.length() +
     self.observations.length() +
     self.new_observations.length()
+  let near = match self.near {
+    Some(n) => n.memory_usage()
+    None => 0
+  }
   self.buf.length() +
   self.out.length() +
   mf +
+  near +
   4 * ints +
   2 * self.seq_offset.length() +
   self.used_literals.length() +
@@ -610,6 +644,10 @@ fn Deflater::finish_step(
 ///|
 /// Writes the block the parser completed, and moves the window down.
 fn Deflater::write_block(self : Deflater) -> Unit {
+  if self.near is Some(n) && !self.block_stored {
+    self.near_write_block(n)
+    return
+  }
   let begin = self.block_begin
   let length = self.in_next - begin
   let is_final = self.finishing && self.in_next == self.end
@@ -645,6 +683,11 @@ fn Deflater::slide(self : Deflater) -> Unit {
     (Some(hc), _) => hc.move_down(delta)
     (_, Some(ht)) => ht.move_down(delta)
     _ => ()
+  }
+  if self.near is Some(n) {
+    n.finder.move_down(delta)
+    n.finder_next = (n.finder_next - delta).max(0)
+    n.scan_next -= delta
   }
 }
 

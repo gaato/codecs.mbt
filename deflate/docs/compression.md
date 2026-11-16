@@ -9,22 +9,51 @@ background, with measurements that hold for the versions named.
 
 The levels are libdeflate's: 0 stores the input; 1 finds matches in a hash
 table; 2 to 4 take the longest match at each position, and 5 to 9 look one or
-two positions ahead for a better one, over hash chains. Each block takes the
+two positions ahead for a better one, over hash chains. Levels 10 to 12 use
+binary trees and an iterative minimum-cost path through the matches: up to
+2, 4 and 10 optimization passes respectively. Each block takes the
 fixed Huffman code, a dynamic one or no code (stored), whichever is smallest,
 and ends where the data changes (libdeflate's block splitting) or after
 64 KiB. Inputs of a few dozen bytes or less are stored, as libdeflate stores
 them.
 
 With the same input, no dictionary and no flush, the streams are the bytes
-that libdeflate 1.24 writes when its blocks are limited to 64 KiB;
-`src/encode_wbtest.mbt` pins their SHA-256 at each level. They decode with
+that libdeflate 1.24 writes with the streaming limits below, apart from the
+empty stream: libdeflate stores it, while levels 1 to 12 write zlib's empty
+fixed block. `src/encode_wbtest.mbt` pins their SHA-256 at each level. They decode with
 zlib and the `gzip` command, whole and cut after every flush:
 [`scripts/crosscheck.mbtx`](../scripts/crosscheck.mbtx) checks that, and CI
 runs it. The same input gives the same bytes on every target, however it is
 split.
 
-libdeflate's levels 10 to 12, whose near-optimal parsing comes out about 3 %
-smaller than level 9 at several times the time, are not implemented.
+The reference build uses `SOFT_MAX_BLOCK_LENGTH=65535`,
+`FAST_SOFT_MAX_BLOCK_LENGTH=65535`, `SEQ_STORE_LENGTH=16384`, and
+`choose_max_block_end` capped at the soft limit without the 5,000-byte tail
+rule. `MIN_BLOCK_LENGTH=5000` still controls splitting and the encoded-size
+bound. Near-optimal parsing uses `MATCH_CACHE_LENGTH=1280000`, the upstream
+minimum `MIN_BLOCK_LENGTH * MAX_MATCHES_PER_POS`: a smaller cache could
+end a block before 5,000 bytes and invalidate `compress_bound`. Its 513
+overflow entries and 70,535 path nodes follow upstream's bounds. Everything
+is allocated when the encoder is made; the default-window payload bound is
+7,056,748 bytes at levels 10 to 12, and a smaller window reduces the tree.
+
+Level parameters (depth, nice length, passes, minimum improvement in bits,
+minimum saving to recover an earlier path, maximum block length to optimize
+with static codes) are exactly upstream's: `35/75/2/32/32/0` at 10,
+`100/150/4/16/16/1000` at 11 and `300/258/10/1/1/10000` at 12. The integer
+cost model uses `BIT_COST=16`, including upstream's default cost tables and
+adjustments between blocks. Dictionary and flush support extend this
+whole-buffer algorithm; identity with the oracle covers streams without them.
+
+The cache packs length/count into 9 bits and offset/literal above it, keeping
+entries within 24 bits. Forbidden path nodes use `2^29` rather than upstream's
+`2^31`: even 70,535 literals at the maximum cost of 224 total less than
+`2^29`, so no forbidden edge can win. Both choices keep these large JS arrays'
+values in the 31-bit Smi range without changing match or path choices.
+
+`scripts/reference/libdeflate/gen_vectors.mbtx` downloads the pinned release,
+checks its SHA-256, builds the patched C oracle and regenerates the raw-output
+digest tests for levels 0 to 12. Its `--check` mode runs in the gates.
 
 ## Ratio against zlib
 

@@ -15,7 +15,7 @@ fn encoder_inputs() -> Array[Bytes] {
 ///|
 test "compress round-trips through the decoder at every level" {
   let dictionary = @fixtures.sample(3, 40000)
-  for level in -1..<=10 {
+  for level in -1..<=13 {
     for input in encoder_inputs() {
       assert_eq(
         decompress(compress(input, level~)),
@@ -31,7 +31,7 @@ test "compress round-trips through the decoder at every level" {
 ///|
 test "a stream is the header, raw DEFLATE and the Adler-32" {
   let dictionary = @fixtures.sample(4, 1000)
-  for level in -1..<=10 {
+  for level in -1..<=13 {
     for input in encoder_inputs() {
       let raw = @deflate.compress(input, level~)
       let expected = @header.build(@deflater.effective_level(level), None) +
@@ -90,7 +90,7 @@ test "any input split and output size give the same stream" {
   let input = @fixtures.sample(5, 120000)
   let dictionary = @fixtures.sample(6, 5000)
   let flush_at = [0, 1, 1, 30000, 65537, 120000]
-  for level in 0..<=9 {
+  for level in 0..<=12 {
     let whole = compress(input, level~)
     let named = compress(input, level~, dictionary~)
     let plain = Encoder(level~)

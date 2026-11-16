@@ -59,7 +59,7 @@ fn decode(stream : Bytes) -> (Bytes, Header?) raise {
 
 ///|
 test "compress round-trips through the decoder at every level" {
-  for level in -1..<=10 {
+  for level in -1..<=13 {
     for input in encoder_inputs() {
       assert_eq(
         decompress(compress(input, level~)),
@@ -72,11 +72,11 @@ test "compress round-trips through the decoder at every level" {
 
 ///|
 test "the default header: no fields, MTIME 0, OS 255, XFL as zlib sets it" {
-  for level in -1..<=10 {
+  for level in -1..<=13 {
     let stream = compress(b"", level~)
     let xfl = match @deflater.effective_level(level) {
       0 | 1 => b'\x04'
-      9 => b'\x02'
+      9 | 10 | 11 | 12 => b'\x02'
       _ => b'\x00'
     }
     assert_eq(stream[:10], [0x1f, 0x8b, 0x08, 0x00, 0, 0, 0, 0, xfl, 0xff])
@@ -218,7 +218,7 @@ test "any input split and output size give the same stream" {
   let input = @fixtures.sample(5, 120000)
   let header = headers()[headers().length() - 1]
   let flush_at = [0, 1, 1, 30000, 65537, 120000]
-  for level in 0..<=9 {
+  for level in 0..<=12 {
     let whole = compress(input, level~)
     let named = compress(input, level~, header~)
     let plain = Encoder(level~)

@@ -13,10 +13,11 @@ pub fn compress_bound(n : Int64) -> Int64 {
 }
 
 ///|
-/// What `Encoder::memory_usage` reports for an encoder of `level` (as for
+/// An upper bound on `Encoder::memory_usage` for `level` (as for
 /// `Encoder`), the same from the first step to the last, with a dictionary
 /// or without: 542,516 bytes at levels 5 to 9, 542,172 at 2 to 4, 361,948 at
-/// 1 and 131,077 at 0.
+/// 1 and 131,077 at 0. Levels 10 to 12 hold at most 7,056,748 bytes; a smaller
+/// `window_bits` reduces their tree allocation.
 pub fn encoder_memory_bound(level~ : Int32 = 6) -> Int64 {
   @deflater.memory_bound(level)
 }

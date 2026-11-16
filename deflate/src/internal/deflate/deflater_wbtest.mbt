@@ -178,15 +178,20 @@ test "put writes the low bits of each value, least significant first, and align 
 
 ///|
 test "a Deflater holds what memory_bound says" {
-  for level in -2..<=10 {
+  for level in -2..<=13 {
     assert_eq(
       Deflater::new(level~).memory_usage(),
       memory_bound(level).to_int(),
       msg="level \{level}",
     )
+    let reduction = if effective_level(level) >= 10 {
+      8 * (32768 - 512)
+    } else {
+      0
+    }
     assert_eq(
       Deflater::new(level~, dictionary=b"abc", window_bits=9).memory_usage(),
-      memory_bound(level).to_int(),
+      memory_bound(level).to_int() - reduction,
     )
   }
 }

@@ -63,9 +63,9 @@ test "only the last 32 KiB of a dictionary are kept, by reference" {
 /// The input buffer and the output buffer at `level`: the window, a block
 /// and the look-ahead (a block and a byte at level 0); a block's stored size.
 fn encoder_buffers(level : Int32) -> (Int32, Int32) {
-  match level.clamp(min=0, max=9) {
+  match level.clamp(min=0, max=12) {
     0 => (65536, 65541)
-    1 | 2 | 3 | 4 => (32768 + 65535 + 6144, 65534 + 258 + 10 + 1)
+    1 | 2 | 3 | 4 | 10 | 11 | 12 => (32768 + 65535 + 6144, 65534 + 258 + 10 + 1)
     _ => (32768 + 65535 + 6144, 65534 + 602 + 10 + 1)
   }
 }
@@ -74,7 +74,7 @@ fn encoder_buffers(level : Int32) -> (Int32, Int32) {
 test "the encoder reports its bound after every step" {
   let input = @fixtures.sample(10, 150000)
   let dictionary = @fixtures.sample(11, 40000)
-  for level in 0..<=9 {
+  for level in 0..<=12 {
     let bound = encoder_memory_bound(level~).to_int()
     for encoder in [Encoder(level~), Encoder(level~, dictionary~)] {
       assert_eq(encoder.memory_usage(), bound, msg="level \{level}")
@@ -105,7 +105,7 @@ test "the encoder holds at most its input buffer and a block's output" {
   let rng = @fixtures.Rng::new(16)
   let noise = Bytes::makei(200000, _ => (rng.below(1 << 16) >> 8).to_byte())
   let dictionary = @fixtures.sample(17, 40000)
-  for level in 0..<=9 {
+  for level in 0..<=12 {
     let (in_size, out_size) = encoder_buffers(level)
     for data in [text, random, noise, Bytes::make(150000, b'\x00')] {
       for with_dictionary in [false, true] {

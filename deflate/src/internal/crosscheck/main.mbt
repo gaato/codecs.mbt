@@ -120,12 +120,12 @@ fn main {
   }
   for sample in samples() {
     let (name, input) = sample
-    for level in 0..<=9 {
+    for level in 0..<=12 {
       emit("raw \{name} l\{level}", input, @deflate.compress(input, level~))
       emit("zlib \{name} l\{level}", input, @zlib.compress(input, level~))
       emit("gzip \{name} l\{level}", input, @gzip.compress(input, level~))
     }
-    for level in [1, 6, 9] {
+    for level in [1, 6, 9, 10, 11, 12] {
       emit(
         "raw \{name} l\{level} dict",
         input,
@@ -143,7 +143,7 @@ fn main {
     // Smaller windows: the name's "w<bits>" has the decoder keep only that
     // much, so a match that reaches further fails.
     for bits in 8..<15 {
-      for level in [1, 6, 9] {
+      for level in [1, 6, 9, 10, 11, 12] {
         emit(
           "raw \{name} l\{level} w\{bits}",
           input,
@@ -159,7 +159,7 @@ fn main {
   }
   // Streams flushed as they go, cut after every flush.
   let flushed = text(100000) + @fixtures.sample(7, 60000) + text(40000)
-  for level in 0..<=9 {
+  for level in 0..<=12 {
     streamed(
       "raw flushed l\{level}",
       @deflate.Encoder(level~),

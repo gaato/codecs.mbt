@@ -15,7 +15,7 @@ pub fn compress_bound(n : Int64) -> Int64 {
 }
 
 ///|
-/// What `Encoder::memory_usage` reports for an encoder of `level`: the raw
+/// An upper bound on `Encoder::memory_usage` for `level`: the raw
 /// DEFLATE encoder's (`@deflate.encoder_memory_bound`), with a dictionary or
 /// without.
 pub fn encoder_memory_bound(level~ : Int32 = 6) -> Int64 {
