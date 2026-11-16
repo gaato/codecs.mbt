@@ -212,6 +212,20 @@ pub fn Inflater::reset(self : Inflater, dictionary? : BytesView) -> Unit {
 }
 
 ///|
+/// Whether the stream stands between two blocks on a byte boundary, with
+/// every decoded byte handed out: the next bits begin a block header, none
+/// of them is held yet, and the stream has not ended. A sync flush, the
+/// empty stored block that ends a zlib `Z_SYNC_FLUSH` or an RFC 7692
+/// message, leaves a stream here; the inside of any block never does.
+pub fn Inflater::at_block_boundary(self : Inflater) -> Bool {
+  self.state is BlockHeader &&
+  self.nbits == 0 &&
+  self.stash_pos >= self.stash_len &&
+  self.pending == 0 &&
+  self.failure is None
+}
+
+///|
 /// Bytes the decoder holds: the window, its tables and the scratch space it
 /// builds them with, the code lengths and the bytes kept for a unit cut short.
 /// All of it is allocated when the decoder is made, so this is the same from

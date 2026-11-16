@@ -14,6 +14,7 @@ import {
 pub struct Inflater {
   // private fields
 }
+pub fn Inflater::at_block_boundary(Self) -> Bool
 pub fn Inflater::dictionary(Self) -> BytesView
 pub fn Inflater::kept_bytes(Self) -> Int32
 pub fn Inflater::last_consumed(Self) -> Int32

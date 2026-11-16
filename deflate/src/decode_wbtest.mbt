@@ -309,3 +309,267 @@ test "a step that raises reports what it took and wrote" {
   assert_eq(decoder.last_consumed(), hello.length())
   assert_eq(decoder.last_produced(), 5)
 }
+
+///|
+/// `chunks` coded at `level` with a sync flush after each, unfinished, and
+/// where each flush ends.
+fn flushed(chunks : Array[Bytes], level : Int32) -> (Bytes, Array[Int32]) {
+  let encoder = Encoder(level~)
+  let buffer : Array[Byte] = []
+  let ends = []
+  let out = FixedArray::make(1 << 16, b'\x00')
+  for chunk in chunks {
+    let _ = encoder.step_into(chunk, out, action=Flush)
+    assert_eq(encoder.last_consumed(), chunk.length()) catch {
+      _ => abort("short flush")
+    }
+    buffer.append(out[:encoder.last_produced()])
+    ends.push(buffer.length())
+  }
+  (Bytes::from_array(buffer), ends)
+}
+
+///|
+/// Feeds `input` whole (end=false) to `decoder` and returns what it wrote.
+fn feed(decoder : Decoder, input : BytesView) -> Bytes raise {
+  let out = FixedArray::make(1 << 16, b'\x00')
+  let status = decoder.step_into(input, out, end=false)
+  assert_true(status is NeedMoreInput)
+  assert_eq(decoder.last_consumed(), input.length())
+  Bytes::from_array(out[:decoder.last_produced()])
+}
+
+///|
+test "at_block_boundary is true exactly where a sync flush ends" {
+  let chunks = [b"hello hello hello", b"", b"world, world", b"x"]
+  for level in [0, 1, 6, 9] {
+    let (stream, ends) = flushed(chunks, level)
+    for cut in 0..<=stream.length() {
+      let decoder = Decoder()
+      let _ = feed(decoder, stream[:cut])
+      // Every flush ends on one; the start of the stream is one too.
+      if cut == 0 || ends.contains(cut) {
+        assert_true(
+          decoder.at_block_boundary(),
+          msg="level \{level} cut \{cut}",
+        )
+      }
+      // RFC 7692 drops each flush's 00 00 ff ff: the cut before it is not.
+      if ends.contains(cut + 4) {
+        assert_false(
+          decoder.at_block_boundary(),
+          msg="level \{level} cut \{cut}",
+        )
+      }
+    }
+  }
+}
+
+///|
+test "at_block_boundary does not depend on how the input was split" {
+  let (stream, _) = flushed([b"abcabcabc", b"q", b"", b"the end of it"], 6)
+  let whole = []
+  for cut in 0..<=stream.length() {
+    let decoder = Decoder()
+    let _ = feed(decoder, stream[:cut])
+    whole.push(decoder.at_block_boundary())
+  }
+  for first in 0..<=stream.length() {
+    for second in first..<=stream.length() {
+      let decoder = Decoder()
+      let _ = feed(decoder, stream[:first])
+      let _ = feed(decoder, stream[first:second])
+      assert_eq(
+        decoder.at_block_boundary(),
+        whole[second],
+        msg="\{first} \{second}",
+      )
+    }
+  }
+  // A block ends inside the last byte, and the bits after it are the start
+  // of the next block's header: held, so not a boundary.
+  let decoder = Decoder()
+  let _ = feed(decoder, b"\x9a\x30\x61\xc2\x04\x00")
+  assert_false(decoder.at_block_boundary())
+}
+
+///|
+test "at_block_boundary is false inside a block, though the input adds nothing" {
+  // A fixed-code block (BFINAL 0, BTYPE 01) of five 9-bit literals ends on a
+  // byte with its end-of-block code still to come. RFC 7692's 00 00 ff ff
+  // then reads as that code (seven zeros), a non-final stored block and its
+  // LEN, and the decoder waits for NLEN: no output, and no boundary.
+  let bits = BitSink::new()
+  bits.put(0, 1)
+  bits.put(1, 2)
+  for _ in 0..<5 {
+    bits.put_code(0b110010000, 9) // the literal 144
+  }
+  let message = bits.to_bytes()
+  assert_eq(message.length(), 6)
+  let decoder = Decoder()
+  assert_eq(feed(decoder, message), b"\x90\x90\x90\x90\x90")
+  assert_false(decoder.at_block_boundary())
+  assert_eq(feed(decoder, b"\x00\x00\xff\xff"), b"")
+  assert_false(decoder.at_block_boundary())
+}
+
+///|
+test "at_block_boundary is false with output still held, after the end and after an error" {
+  let (stream, ends) = flushed([b"abcdefgh"], 0)
+  let decoder = Decoder()
+  let out = FixedArray::make(3, b'\x00')
+  let _ = decoder.step_into(stream[:ends[0]], out, end=false)
+  assert_false(decoder.at_block_boundary())
+  let _ = decoder.step_into(
+    stream[decoder.last_consumed():ends[0]],
+    out,
+    end=false,
+  )
+  assert_false(decoder.at_block_boundary())
+  let _ = decoder.step_into(b"", out, end=false)
+  assert_true(decoder.at_block_boundary())
+  let finished = Decoder()
+  let _ = feed(finished, compress(b"abc"))
+  assert_false(finished.at_block_boundary())
+  let failed = Decoder()
+  let _ = failed.step_into(b"\x07", out, end=false) catch { _ => NeedMoreInput }
+  assert_false(failed.at_block_boundary())
+}
+
+///|
+test "reset can change the dictionary, and later resets keep it" {
+  for entry in dictionary_vectors {
+    let (v, dictionary) = entry
+    let dictionary = @fixtures.decode64(dictionary)
+    let decoder = Decoder()
+    decoder.reset(dictionary~)
+    let (got, _) = @fixtures.drive(decoder, v.input(), next_in=() => 1000, next_out=() => {
+      4096
+    })
+    assert_eq(@fixtures.sha256(got), v.sha256, msg=v.name)
+    decoder.reset()
+    let (again, _) = @fixtures.drive(
+      decoder,
+      v.input(),
+      next_in=() => 1 << 20,
+      next_out=() => 1 << 16,
+    )
+    assert_eq(again, got, msg=v.name)
+    // Its last 32 KiB count, as for the constructor's: the stream never
+    // reaches past the dictionary into what comes before it.
+    let padded : Array[Byte] = Array::make(40000, b'z')
+    for b in dictionary {
+      padded.push(b)
+    }
+    decoder.reset(dictionary=Bytes::from_array(padded))
+    let (padded_got, _) = @fixtures.drive(
+      decoder,
+      v.input(),
+      next_in=() => 1 << 20,
+      next_out=() => 1 << 16,
+    )
+    assert_eq(padded_got, got, msg=v.name)
+  }
+}
+
+///|
+/// Bits, least significant first, as DEFLATE packs them.
+priv struct BitSink {
+  bytes : Array[Byte]
+  mut acc : Int32
+  mut n : Int32
+}
+
+///|
+fn BitSink::new() -> BitSink {
+  { bytes: [], acc: 0, n: 0, }
+}
+
+///|
+fn BitSink::put(self : BitSink, value : Int32, n : Int32) -> Unit {
+  self.acc = self.acc | (value << self.n)
+  self.n += n
+  while self.n >= 8 {
+    self.bytes.push((self.acc & 0xFF).to_byte())
+    self.acc = self.acc >> 8
+    self.n -= 8
+  }
+}
+
+///|
+/// A Huffman code, most significant bit first.
+fn BitSink::put_code(self : BitSink, code : Int32, n : Int32) -> Unit {
+  for i = n - 1; i >= 0; i = i - 1 {
+    self.put((code >> i) & 1, 1)
+  }
+}
+
+///|
+fn BitSink::to_bytes(self : BitSink) -> Bytes {
+  if self.n > 0 {
+    self.bytes.push((self.acc & 0xFF).to_byte())
+  }
+  Bytes::from_array(self.bytes)
+}
+
+///|
+test "RFC 7692's final-block message: Done, then a reset with the output so far" {
+  // Section 7.2.3.4: "Hello" in a final block, then the receiver's tail.
+  let input = b"\xf3\x48\xcd\xc9\xc9\x07\x00\x00\x00\x00\xff\xff"
+  let decoder = Decoder(until=EndOfMember)
+  let out = FixedArray::make(64, b'\x00')
+  let status = decoder.step_into(input, out, end=false)
+  assert_true(status is Done)
+  let hello = Bytes::from_array(out[:decoder.last_produced()])
+  assert_eq(hello, b"Hello")
+  assert_false(decoder.at_block_boundary())
+  let rest = input[decoder.last_consumed():]
+  assert_eq(rest.to_owned(), b"\x00\x00\x00\xff\xff")
+  // The next blocks go on with the same window: an empty stored block.
+  decoder.reset(dictionary=hello)
+  assert_eq(feed(decoder, rest), b"")
+  assert_true(decoder.at_block_boundary())
+}
+
+///|
+test "RFC 7692: a message that leaves a stored block open takes the tail as data" {
+  // A non-final stored block of 4 bytes with none of them sent: the
+  // receiver's 00 00 ff ff become its data, and the decoder then stands at
+  // a boundary. Only the output of the tail tells this from a sync flush.
+  let decoder = Decoder(until=EndOfMember)
+  assert_eq(feed(decoder, b"\x00\x04\x00\xfb\xff"), b"")
+  assert_false(decoder.at_block_boundary())
+  assert_eq(feed(decoder, b"\x00\x00\xff\xff"), b"\x00\x00\xff\xff")
+  assert_true(decoder.at_block_boundary())
+}
+
+///|
+test "a reset without a dictionary keeps the last one given; an empty one clears it" {
+  let dictionary = b"a dictionary to refer to"
+  let stream = compress(b"to refer to", dictionary~)
+  let decoder = Decoder()
+  decoder.reset(dictionary~)
+  decoder.reset()
+  let (got, _) = @fixtures.drive(decoder, stream, next_in=() => 1 << 10, next_out=() => {
+    1 << 10
+  })
+  assert_eq(got, b"to refer to")
+  decoder.reset(dictionary=b"")
+  let refused = try decompress_with(decoder, stream) catch {
+    CodecError(kind, _) => Some(kind)
+  } noraise {
+    _ => None
+  }
+  assert_true(refused is Some(_))
+}
+
+///|
+fn decompress_with(
+  decoder : Decoder,
+  input : BytesView,
+) -> Bytes raise @codec.CodecError {
+  let out = FixedArray::make(1 << 10, b'\x00')
+  let _ = decoder.step_into(input, out, end=true)
+  Bytes::from_array(out[:decoder.last_produced()])
+}

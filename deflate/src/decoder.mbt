@@ -31,7 +31,7 @@ pub struct Decoder {
   priv inflater : @inflate.Inflater
   // The last 32 KiB of the preset dictionary, all the window can use: a view
   // of the caller's bytes, which are immutable, for `reset`.
-  priv dictionary : BytesView?
+  priv mut dictionary : BytesView?
   priv until : @codec_bytes.Until
   priv mut state : State
   priv mut failure : @codec.CodecError?
@@ -72,14 +72,34 @@ pub fn Decoder::Decoder(
 }
 
 ///|
-/// Starts a new stream with the same options: the same dictionary, and the
-/// same `until`.
-pub fn Decoder::reset(self : Decoder) -> Unit {
+/// Starts a new stream with the same `until`, reusing the window and tables
+/// the decoder holds: no buffer is allocated, and a dictionary is not
+/// copied. With `dictionary`, the new
+/// stream and those after it start from that preset dictionary (its last 32
+/// KiB, kept by reference as `Decoder` keeps one); without, from the one the
+/// decoder already has.
+pub fn Decoder::reset(self : Decoder, dictionary? : BytesView) -> Unit {
+  if dictionary is Some(d) {
+    self.dictionary = Some(d[(d.length() - WINDOW_SIZE).max(0):])
+  }
   self.inflater.reset(dictionary?=self.dictionary)
   self.state = Running
   self.failure = None
   self.step_consumed = 0
   self.step_produced = 0
+}
+
+///|
+/// Whether the stream so far ends between two blocks on a byte boundary,
+/// with all its output handed out: what a sync flush leaves (the empty
+/// stored block `00 00 ff ff` after the padding, as zlib's `Z_SYNC_FLUSH`
+/// and RFC 7692's permessage-deflate end a flushed run). A format that cuts
+/// a stream at sync flushes, as RFC 7692 does, can check here that its
+/// input ended at one, and not inside a block whose remaining bits the next
+/// input would complete. False inside any block, after the final block and
+/// after an error.
+pub fn Decoder::at_block_boundary(self : Decoder) -> Bool {
+  self.state is Running && self.inflater.at_block_boundary()
 }
 
 ///|

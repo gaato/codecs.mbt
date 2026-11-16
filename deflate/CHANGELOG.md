@@ -7,6 +7,11 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+### Added
+
+- **`Decoder::at_block_boundary()`**: whether the input so far ends between two blocks on a byte boundary, with all the output handed out, where a sync flush leaves a stream. A format that cuts a stream at sync flushes and drops their `00 00 ff ff`, as WebSocket's permessage-deflate (RFC 7692) does, can check that a message ended at one: the four bytes appended back can also complete a message cut inside a block without any output.
+- **`Decoder::reset(dictionary?)`**: a reset may start the next stream, and those after it, from another preset dictionary. It reuses the window and tables, as a reset without one does, and keeps a view of the dictionary, not a copy.
+
 ## [0.2.0] - 2026-11-15
 
 ### Added
