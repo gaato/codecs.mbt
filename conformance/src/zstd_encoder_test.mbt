@@ -1,9 +1,4 @@
 ///|
-/// What gaato/zstd/RESOURCE_BOUNDS.md gives for an encoder's
-/// `memory_usage`.
-let zstd_encoder_memory : Int32 = 52460448
-
-///|
 /// Inputs for the encoder: empty, one byte, runs, text, random bytes, and
 /// sizes at the literals headers' size classes, the 128 KiB block limit and
 /// the parameter tables' 256 KiB class.
@@ -82,7 +77,12 @@ test "the zstd encoder keeps the byte-stream contract" {
         encoder,
         decoder,
         input,
-        encoder_memory_limit=Some(zstd_encoder_memory),
+        encoder_memory_limit=Some(
+          @zstd.encoder_memory_bound(
+            level~,
+            content_size?=if sized { Some(n.to_int64()) } else { None },
+          ).to_int(),
+        ),
         decoder_memory_limit=Some(zstd_memory(22)),
         small=20000,
       ) catch {
@@ -109,4 +109,53 @@ test "the zstd encoder keeps the byte-stream contract" {
       e => fail("zstd encoder checksum \{checksum} reset: \{e}")
     }
   }
+}
+
+///|
+test "the zstd tree encoder resets and its mutated frames keep typed outcomes" {
+  let rng = @codec_harness.Rng::new(71322)
+  let first = Bytes::makei(512, _ => rng.below(31).to_byte())
+  let second = b"the zstd optimal parser repeats. ".repeat(16)[:512].to_owned()
+  for level in 13..<=22 {
+    let make_encoder = () => {
+      @codec_harness.ByteEncoder::new(@zstd.Encoder(level~, content_size=512))
+    }
+    @codec_harness.check_reset(make_encoder, first, second)
+    if [13, 16, 19, 22].contains(level) {
+      let encoder = () => @zstd.Encoder(level~, content_size=512)
+      let _ = @codec_harness.check_roundtrip(
+        encoder,
+        () => @zstd.Decoder(),
+        second,
+      )
+      @codec_harness.check_flush(encoder, () => @zstd.Decoder(), second, flush_at=[
+        0, 1, 1, 170, 256, 512,
+      ])
+    }
+    let frame = @zstd.compress(second, level~)
+    let make_decoder = () => {
+      @codec_harness.ByteDecoder::new(@zstd.Decoder(max_window_bits=16))
+    }
+    let _ = @codec_harness.fuzz(
+      make_decoder,
+      frame,
+      seed=(71322 + level).reinterpret_as_uint(),
+      rounds=40,
+      memory_limit=Some(zstd_memory(16)),
+    )
+  }
+}
+
+///|
+test "the zstd btopt encoder preserves repeated multi-block flushes" {
+  // The smallest known size that selects btopt at level 13. Each distinct
+  // flush offset cuts a block, keeping prices and repeats across the cuts.
+  let input = b"the zstd optimal parser repeats. ".repeat(513)[:16385].to_owned()
+  assert_eq(input.length(), 16385)
+  @codec_harness.check_flush(
+    () => @zstd.Encoder(level=13, content_size=16385),
+    () => @zstd.Decoder(),
+    input,
+    flush_at=[0, 1, 4096, 4096, 8192, 12288, 16385, 16385],
+  )
 }

@@ -4,7 +4,9 @@ This is the implementation and measurement record for fast, double-fast,
 greedy, lazy and lazy2, measured on
 2026-11-13 (sizes again on 2026-11-14, after row search) with MoonBit
 0.10.20, Zstandard CLI 1.5.7 and Node 26.13.1.
-Binary-tree and optimal strategies are not implemented.
+Levels 13..22 additionally implement binary-tree lazy2, btopt, btultra and
+btultra2. The ratio and timing tables below remain the measurements for
+levels 1..12; new levels have not been benchmarked here.
 
 `internal/seqenc` owns `Distance`, `OffsetValue`, `Repeats`, `Block` and
 `Writer`. Raw distances are converted only by `Repeats::encode`, through
@@ -34,8 +36,8 @@ decoder's read order. Offset values and extras use UInt32, avoiding a
 signed `1 << 31`. Each offset extra write is at most 31 bits; BitPacker's
 JS implementation splits a write that would overflow its accumulator.
 Every partial-byte alignment is tested through a backward reader. Actual
-encoder windows need at most 22 offset extra bits (a new offset at the
-4 MiB window's full distance codes `2^22 + 3`), so external window
+encoder windows now need at most 27 offset extra bits (a new offset at the
+128 MiB window's full distance codes `2^27 + 3`), so external window
 fixtures exercise window minus one, while width 31 is a packing test.
 
 `internal/match/Fast` follows
@@ -65,16 +67,65 @@ rows use lazy2 with **all six adjusted numeric parameters unchanged**.
 Adjustment happens before mapping, retaining the tree cycle bit when
 shrinking chainLog. The affected rows are levels 9..12 at at most 16 KiB,
 and levels 11..12 above 16 KiB through 256 KiB. These approximations
-avoid introducing binary trees or optimal parsing into a hash-chain
-encoder; they need not match those strategies' compression.
+retain the bytes of the original levels; they need not match those
+strategies' compression. Only rows 13..22 use the new tree strategies.
+
+### Binary-tree and optimal levels (13..22)
+
+The four size-class tables transcribe all rows of
+[`clevels.h`, zstd 1.5.7](https://github.com/facebook/zstd/blob/v1.5.7/lib/compress/clevels.h).
+Known sizes shrink windows and tables with `ZSTD_adjustCParams` and the
+tree cycle bit before applying the minimum frame window. Unknown sizes
+use the large-input row. No encoder cap reduces its window: level 22
+advertises 2^27 bytes, accepted by the decoder's default `max_window_bits=27`.
+Known small inputs need much less memory; see RESOURCE_BOUNDS.md.
+
+`internal/match/tree.mbt` ports the tree from
+[`zstd_lazy.c`](https://github.com/facebook/zstd/blob/v1.5.7/lib/compress/zstd_lazy.c)
+and [`zstd_opt.c`](https://github.com/facebook/zstd/blob/v1.5.7/lib/compress/zstd_opt.c).
+The parts binary-tree finder is libdeflate's: it does not provide DUBT's
+unsorted insertion marks, reversed pending chain and deferred batch sort.
+The zstd-specific tree therefore lives here rather than changing the parts
+finder. Btlazy2 uses the lazy2 decision rules with `ZSTD_updateDUBT`,
+`ZSTD_insertDUBT1` and `ZSTD_DUBT_findBestMatch`; optimal modes use
+`ZSTD_insertBtAndGetAllMatches`, repcodes first, increasing match lengths,
+the three-byte hash and repetitive-region skipping.
+
+`prices.mbt` mirrors `ZSTD_rescaleFreqs`, `ZSTD_updateStats`, base prices,
+literal/LL/ML/offset prices and their integer or fractional weights.
+`optimal.mbt` ports the forward stretch DP of `ZSTD_compressBlock_opt_generic`,
+with three rep offsets per position, btopt's pruning, btultra's fractional
+prices and extra one-literal alternative. Btultra2 uses
+`ZSTD_initStats_ultra`'s first-block trial: keep its statistics, invalidate
+its tree and speculative repeat state, then parse the same input again.
+The trial is disabled with a dictionary and on inputs of at most eight bytes.
+
+Adaptations: retained history makes dictionary bytes contiguous, with no
+attached-dictionary tree; prices initialize from input frequencies rather
+than a formatted dictionary's entropy tables. There is no LDM, so
+`ZSTD_opt_getNextMatchAndUpdateSeqStore` and other LDM helpers are unnecessary.
+Position -1 is empty and -2 is unsorted, allowing buffer index zero and
+preserving JS small-integer arrays. Sliding preserves marks and tree slots.
+DP infinity is 2^30-1 rather than C's 2^30 for the same reason; every real
+price is below 10^9, so this does not change comparisons.
+Optional C prediction/prefetch paths are omitted. Backtracking uses a
+bounded separate sequence stack instead of overwriting the DP table.
+
+`Block.add` canonicalizes raw distances through `Repeats::encode`; the DP
+prices and propagates that same canonical value, even if a new-distance
+candidate equals a repeat or repeat slots contain duplicates. This keeps
+planned rep state identical to the writer and decoder, including the
+zero-literal shift and repeat-one-minus-one. Byte identity with zstd is
+not claimed. Levels 1..12 retain their existing SHA-256 pins unchanged;
+`tree_encode_wbtest.mbt` appends independent pins for 13..22.
 
 Literals choose raw, RLE, a new Huffman tree, or a valid previous tree
 (Treeless). A new tree replaces the previous one only when written into
 an accepted block. Raw/RLE blocks preserve it; reset invalidates it.
 Four Huffman streams now compute their jump-table sizes first and write
 directly to the block output, removing the private stream buffer and copy.
-Only the small Huffman weight scratch remains. The total conservative
-encoder bound, including match and sequence storage, is 52,460,456 bytes;
+Only the small Huffman weight scratch remains. For levels 1..12, the total
+conservative encoder bound, including match and sequence storage, is 52,460,456 bytes;
 the accounting and limit tests are in RESOURCE_BOUNDS.md.
 
 ## Double-fast matching
@@ -213,8 +264,8 @@ below that boundary. At levels 6..8 the at-most-16-KiB rows are lazy2,
 still HC. Level five's smallest row is lazy. Unknown sizes keep the
 large-input rows and use rows at every level 5..12.
 
-This implementation makes the same choice from the same adjusted row.
-Tree rows, mapped to lazy2, keep hash chains: the reference searches them
+For levels 1..12, this implementation makes the same choice from the same adjusted row.
+Their tree rows, mapped to lazy2, keep hash chains: the reference searches them
 harder than a row's at most 64 candidates, and a chain's `2^searchLog`
 attempts come closer. The tables below give both reference
 configurations: the default CLI (`zstd -N --check -c -q FILE`) uses rows
@@ -244,7 +295,7 @@ excluded from corpus totals.
 Reproduce from the repository root (substitute the corpus directories):
 
 ```sh
-moon run scripts/compare_codecs.mbtx -- ratio --format zstd --only gaato/zstd --time 0 --corpus /home/gaato/works/deflate-research/corpus/silesia --corpus /home/gaato/works/deflate-research/corpus/canterbury
+moon run scripts/compare_codecs.mbtx -- ratio --format zstd --only gaato/zstd --time 0 --corpus SILESIA_DIR --corpus CANTERBURY_DIR
 ```
 
 The driver prints both reference configurations. Δ is

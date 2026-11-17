@@ -171,7 +171,7 @@ fn main {
   }
   for sample in samples {
     let (name, input) = sample
-    for level in 1..<=12 {
+    for level in 1..<=22 {
       emit("\{name} l\{level}", input, @zstd.compress(input, level~))
     }
     // The negative levels, zstd's --fast=N.
@@ -230,7 +230,10 @@ fn main {
   let raw = @zstd.Dictionary::raw(dictionary)
   for n in [0, 1, 300, 4000, 100000, 300000] {
     let input = text(rng, n)
-    for level in [-5, -1, 1, 2, 3, 4, 5, 6, 8, 9, 12] {
+    for
+      level in [
+        -5, -1, 1, 2, 3, 4, 5, 6, 8, 9, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
+      ] {
       emit(
         "dict text\{n} l\{level}",
         input,

@@ -1,8 +1,8 @@
 // The encoder's parameters for each level, transcribed from the reference
 // implementation: facebook/zstd v1.5.7, lib/compress/clevels.h,
-// `ZSTD_defaultCParameters` (BSD license; see NOTICE), levels 1 to 12 of
-// its four tables and the row the negative levels start from. Tree rows use lazy2 with the same adjusted numbers:
-// binary trees and optimal parsing are outside this encoder's scope.
+// `ZSTD_defaultCParameters` (BSD license; see NOTICE), all four tables and
+// the row the negative levels start from. Existing levels 1..12 retain
+// their original strategy mapping; only levels 13..22 select tree parsers.
 
 ///|
 /// The match-finding strategy of a level, as `ZSTD_strategy` names it.
@@ -16,6 +16,8 @@ priv enum Strategy {
   Lazy2
   Btlazy2
   Btopt
+  Btultra
+  Btultra2
 }
 
 ///|
@@ -40,7 +42,7 @@ priv struct Params {
 
 ///|
 /// The highest level implemented; higher ones act as this one.
-const MAX_LEVEL : Int32 = 12
+const MAX_LEVEL : Int32 = 22
 
 ///|
 /// The level `Encoder` and `compress` use by default, as zstd's.
@@ -85,7 +87,7 @@ fn row(
 }
 
 ///|
-/// The four tables, each for levels 1 to 12 (index `level - 1`): for any
+/// The four tables, each for levels 1 to 22 (index `level - 1`): for any
 /// input larger than 256 KiB or of unknown size, and for inputs of at most
 /// 256 KiB, 128 KiB and 16 KiB.
 let level_tables : FixedArray[FixedArray[Params]] = [
@@ -102,6 +104,16 @@ let level_tables : FixedArray[FixedArray[Params]] = [
     row(22, 21, 22, 5, 5, 16, Lazy2),
     row(22, 21, 22, 6, 5, 16, Lazy2),
     row(22, 22, 23, 6, 5, 32, Lazy2),
+    row(22, 22, 22, 4, 5, 32, Btlazy2),
+    row(22, 22, 23, 5, 5, 32, Btlazy2),
+    row(22, 23, 23, 6, 5, 32, Btlazy2),
+    row(22, 22, 22, 5, 5, 48, Btopt),
+    row(23, 23, 22, 5, 4, 64, Btopt),
+    row(23, 23, 22, 6, 3, 64, Btultra),
+    row(23, 24, 22, 7, 3, 256, Btultra2),
+    row(25, 25, 23, 7, 3, 256, Btultra2),
+    row(26, 26, 24, 7, 3, 512, Btultra2),
+    row(27, 27, 25, 9, 3, 999, Btultra2),
   ],
   [
     row(18, 13, 14, 1, 6, 0, Fast),
@@ -116,6 +128,16 @@ let level_tables : FixedArray[FixedArray[Params]] = [
     row(18, 18, 19, 6, 4, 8, Lazy2),
     row(18, 18, 19, 5, 4, 12, Btlazy2),
     row(18, 19, 19, 7, 4, 12, Btlazy2),
+    row(18, 18, 19, 4, 4, 16, Btopt),
+    row(18, 18, 19, 4, 3, 32, Btopt),
+    row(18, 18, 19, 6, 3, 128, Btopt),
+    row(18, 19, 19, 6, 3, 128, Btultra),
+    row(18, 19, 19, 8, 3, 256, Btultra),
+    row(18, 19, 19, 6, 3, 128, Btultra2),
+    row(18, 19, 19, 8, 3, 256, Btultra2),
+    row(18, 19, 19, 10, 3, 512, Btultra2),
+    row(18, 19, 19, 12, 3, 512, Btultra2),
+    row(18, 19, 19, 13, 3, 999, Btultra2),
   ],
   [
     row(17, 12, 13, 1, 6, 0, Fast),
@@ -130,6 +152,16 @@ let level_tables : FixedArray[FixedArray[Params]] = [
     row(17, 16, 17, 6, 4, 8, Lazy2),
     row(17, 17, 17, 5, 4, 8, Btlazy2),
     row(17, 18, 17, 7, 4, 12, Btlazy2),
+    row(17, 18, 17, 3, 4, 12, Btopt),
+    row(17, 18, 17, 4, 3, 32, Btopt),
+    row(17, 18, 17, 6, 3, 256, Btopt),
+    row(17, 18, 17, 6, 3, 128, Btultra),
+    row(17, 18, 17, 8, 3, 256, Btultra),
+    row(17, 18, 17, 10, 3, 512, Btultra),
+    row(17, 18, 17, 5, 3, 256, Btultra2),
+    row(17, 18, 17, 7, 3, 512, Btultra2),
+    row(17, 18, 17, 9, 3, 512, Btultra2),
+    row(17, 18, 17, 11, 3, 999, Btultra2),
   ],
   [
     row(14, 14, 15, 1, 5, 0, Fast),
@@ -144,6 +176,16 @@ let level_tables : FixedArray[FixedArray[Params]] = [
     row(14, 15, 14, 9, 4, 8, Btlazy2),
     row(14, 15, 14, 3, 4, 12, Btopt),
     row(14, 15, 14, 4, 3, 24, Btopt),
+    row(14, 15, 14, 5, 3, 32, Btultra),
+    row(14, 15, 15, 6, 3, 64, Btultra),
+    row(14, 15, 15, 7, 3, 256, Btultra),
+    row(14, 15, 15, 5, 3, 48, Btultra2),
+    row(14, 15, 15, 6, 3, 128, Btultra2),
+    row(14, 15, 15, 7, 3, 256, Btultra2),
+    row(14, 15, 15, 8, 3, 256, Btultra2),
+    row(14, 15, 15, 8, 3, 512, Btultra2),
+    row(14, 15, 15, 9, 3, 512, Btultra2),
+    row(14, 15, 15, 10, 3, 999, Btultra2),
   ],
 ]
 
@@ -158,7 +200,7 @@ let negative_rows : FixedArray[Params] = [
 ]
 
 ///|
-/// The row of `table` for `level`, from `MIN_LEVEL` to 12 but not 0: a
+/// The row of `table` for `level`, from `MIN_LEVEL` to 22 but not 0: a
 /// negative level takes row 0 with its acceleration, `-level`, as the
 /// target length, as `ZSTD_getCParams_internal` does.
 fn level_row(table : Int32, level : Int32) -> Params {
@@ -233,7 +275,7 @@ fn params_for(level : Int32, size : Int64?, dict_size~ : Int32 = 0) -> Params {
     64 - (dict + (1L << window_log) - 1).clz()
   }
   let bt_scale = match params.strategy {
-    Btlazy2 | Btopt => 1
+    Btlazy2 | Btopt | Btultra | Btultra2 => 1
     _ => 0
   }
   let cycle_log = params.chain_log - bt_scale
@@ -251,10 +293,8 @@ fn params_for(level : Int32, size : Int64?, dict_size~ : Int32 = 0) -> Params {
 
 ///|
 /// Selects by the adjusted row's strategy, and for greedy, lazy and lazy2
-/// whether to search rows (windows over 2^14 bytes). Tree rows retain every numeric
-/// parameter and use Lazy2 because binary trees/optimal parsing are outside
-/// the supported strategies. Adjustment precedes mapping so the reference
-/// tree cycle bit still governs the table sizes.
+/// whether to search rows (windows over 2^14 bytes). Levels 1..12 retain
+/// their original Lazy2 mapping for tree rows, after reference table adjustment.
 fn encoder_params(
   level : Int32,
   size : Int64?,
@@ -262,7 +302,7 @@ fn encoder_params(
 ) -> Params {
   let params = params_for(level, size, dict_size~)
   match params.strategy {
-    Btlazy2 | Btopt => { ..params, strategy: Lazy2, }
+    Btlazy2 | Btopt if level <= 12 => { ..params, strategy: Lazy2, }
     // As ZSTD_resolveRowMatchFinderMode decides by default, from the
     // adjusted window. Tree rows keep hash chains: the reference searches
     // them harder than a row's at most 64 candidates.

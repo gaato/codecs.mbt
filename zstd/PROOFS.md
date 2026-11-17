@@ -52,6 +52,15 @@ against the code.
 
 ## Not proved
 
+- The binary-tree and optimal encoder (`src/internal/match/tree.mbt`,
+  `tree_lazy.mbt`, `prices.mbt`, `optimal.mbt`): tree insertion and deferred
+  sorting, adaptive prices, forward DP and repcode state, first-pass
+  statistics, window rebasing and memory bounds. `tree_wbtest.mbt` checks
+  independent RFC reconstruction, first-sequence repeats, reset and sliding;
+  `src/tree_encode_wbtest.mbt` checks all new levels, deterministic splits,
+  bounds and SHA-256 pins. The CLI cross-check and conformance mutation
+  harness check their frames. No proved functions changed.
+
 - `Fse::build` and `Fse::read` (`src/fse.mbt`), the decoder's FSE tables,
   and `spread` (`src/internal/fse`), where they and the encoder's tables
   put each symbol: that every state gets one symbol when the probabilities

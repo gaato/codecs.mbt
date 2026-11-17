@@ -199,11 +199,13 @@ test "the encoder's fixed tables and its memory bound" {
   inspect(
     largest_encoder_bound(),
     content=(
-      #|52460456
+      #|942375476
     ),
   )
-  // The public bound at level 12 for input of unknown size is the largest.
-  assert_eq(encoder_memory_bound(level=12), largest_encoder_bound())
+  // Level 22's unknown-size parameters have the largest bound. Keep the
+  // original level-12 bound pinned independently.
+  assert_eq(encoder_memory_bound(level=22), largest_encoder_bound())
+  assert_eq(encoder_memory_bound(level=12), 52460456L)
   // A new encoder holds fixed tables and its level's hash table.
   inspect(
     Encoder().memory_usage(),
@@ -395,6 +397,8 @@ test "double-fast memory reaches both tables and the full window slack and a blo
       match encoder.matcher {
         Fast(_) => assert_true(params.strategy is Fast)
         Dfast(_) => assert_true(params.strategy is Dfast)
+        Tree(_) =>
+          assert_true(params.strategy is (Btlazy2 | Btopt | Btultra | Btultra2))
         Lazy(_) =>
           assert_true(
             params.strategy is Greedy ||
@@ -424,14 +428,14 @@ test "lazy memory reaches the maximum row tables and full window slack and a blo
     // chain table.
     2 * (1 << 22) + MAX_BLOCK_SIZE + 4 * (1 << 23) + (1 << 23),
   )
-  assert_eq(largest_encoder_bound(), 52460456)
+  assert_eq(encoder_memory_bound(level=12), 52460456)
 }
 
 ///|
-/// The largest bound of any level's parameters: level 12's for input of
+/// The largest bound of any level's parameters: level 22's for input of
 /// unknown size (RESOURCE_BOUNDS.md).
 fn largest_encoder_bound() -> Int64 {
-  memory_bound_of(encoder_params(12, None), 0)
+  memory_bound_of(encoder_params(22, None), 0)
 }
 
 ///|

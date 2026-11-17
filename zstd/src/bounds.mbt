@@ -94,6 +94,13 @@ fn memory_bound_of(params : Params, dictionary_len : Int32) -> Int64 {
   } else {
     4L * (1L << params.chain_log)
   }) +
+  (match params.strategy {
+    Btlazy2 => 24L
+    Btopt | Btultra | Btultra2 =>
+      198284L +
+      (if params.min_match == 3 { 4L << params.window_log.min(17) } else { 0L })
+    _ => 0L
+  }) +
   block +
   12L * (block / 3L) +
   12L +

@@ -15,8 +15,9 @@
 /// frame: Raw, RLE or Compressed blocks of at most 128 KiB, whichever is
 /// smallest, and the XXH64 content checksum unless asked not to.
 ///
-/// Levels 1..12 select fast, double-fast, greedy, lazy or lazy2 from their
-/// size-class parameters. Tree rows use lazy2 with the same numeric row.
+/// Levels 1..22 select their size-class parameters. Levels 1..12 preserve
+/// their original fast/double-fast/greedy/lazy/lazy2 mapping; levels 13..22
+/// use binary-tree lazy2 or optimal parsing.
 pub struct Encoder {
   priv checksum : Bool
   priv content_size : Int64?
@@ -51,9 +52,9 @@ pub struct Encoder {
 ///|
 /// An encoder at the start of a frame.
 ///
-/// `level` is zstd's compression level: 1 to 12, 3 by default as in zstd,
-/// and 0 is the default too, as in zstd. Levels 13 to 22 are not
-/// implemented yet and act as 12. The negative levels, -1 down to -131072
+/// `level` is zstd's compression level: 1 to 22, 3 by default as in zstd,
+/// and 0 is the default too; higher levels act as 22.
+/// The negative levels, -1 down to -131072
 /// (lower ones act as that), are zstd's faster ones (`zstd --fast=N` is
 /// level -N): they skip ahead faster the lower they go, and leave literals
 /// uncoded, as zstd does.

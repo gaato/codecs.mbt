@@ -94,8 +94,9 @@ test "compress and decompress round-trip" {
   let text = b"Hello, zstd! ".repeat(8)
   let frame = @zstd.compress(text)
   assert_eq(@zstd.decompress(frame), text)
-  // Levels 1 to 12; others are clamped.
+  // Levels 13 to 22 use tree strategies; higher ones are clamped to 22.
   assert_eq(@zstd.decompress(@zstd.compress(text, level=19)), text)
+  assert_eq(@zstd.compress(text, level=40), @zstd.compress(text, level=22))
   // Without the checksum, 4 bytes shorter.
   let unchecked = @zstd.compress(text, checksum=false)
   assert_eq(@zstd.decompress(unchecked), text)

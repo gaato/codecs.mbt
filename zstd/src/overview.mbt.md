@@ -146,13 +146,13 @@ test "frames, read without decoding them" {
 
 ## Encoding
 
-`Encoder(level=n)` and `compress(level=n)` take zstd's levels 1 to 12, 3 by default as in zstd (0 is the default too), with zstd 1.5.7's parameters for each level and input size, and its negative levels, -1 down to -131072, the faster ones `zstd --fast=N` makes as level -N: they skip ahead faster the lower they go and leave literals uncoded. For large inputs, and those of unknown size, that is fast at 1 and 2, double-fast at 3 and 4, and greedy, lazy and lazy2 from 5 to 12; a smaller input can get another strategy, as in zstd. On the Silesia and Canterbury corpora, the totals come within 1 % of `zstd -N`'s at every level. The frame carries the XXH64 content checksum unless `checksum=false`. Its bytes do not depend on how the input or the output is split: only on the input, the options and where `Flush` falls.
+`Encoder(level=n)` and `compress(level=n)` take zstd's levels 1 to 22, 3 by default (0 is the default too), and its negative levels, -1 down to -131072, the faster ones `zstd --fast=N` makes as level -N: they skip ahead faster the lower they go and leave literals uncoded. Higher positive levels generally spend more time and memory searching for matches. Levels 13 to 22 add binary-tree lazy2 and optimal parsing; a smaller input can get another strategy, as in zstd. Give `content_size` when known so the encoder can shrink its window and tables; `encoder_memory_bound(level~, content_size?)` reports their bound before allocation. The largest unknown-size level-22 configuration has a 128 MiB window and a bound of about 899 MiB. The frame carries the XXH64 content checksum unless `checksum=false`. Its bytes do not depend on how the input or the output is split: only on the input, the options and where `Flush` falls. See [Compression levels and strategies](https://github.com/gaato/codecs.mbt/blob/main/zstd/docs/compression.md) for the algorithms and existing ratio measurements.
 
 `compress` and `Encoder(content_size=n)` write the size in the frame header and pick the parameters for it, as zstd does: a small input gets small tables and declares a window no larger than itself.
 
 `Encoder(dictionary=d)` and `compress(dictionary=d)` put a `Dictionary` before the frame as `zstd -D` does: the frame's matches may reach into it until the input is a window past it, and the parameters are chosen for the input and the dictionary together. With a formatted dictionary, the frame names it by its id, and its first block may code literals and sequences with the dictionary's tables and start from its repeat offsets. The frames decode with `zstd -d -D`, and on small inputs come out the size of zstd's or smaller.
 
-Not included: levels 13 to 22 (they act as 12), long-distance matching, multithreading, and training dictionaries (`zstd --train` makes them).
+Not included: long-distance matching, multithreading, and training dictionaries (`zstd --train` makes them).
 
 ## Memory
 

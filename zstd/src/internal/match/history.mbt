@@ -63,7 +63,10 @@ fn History::prepare(self : History, block_max : Int32) -> Int32 {
 ///|
 fn rebase_positions(table : FixedArray[Int32], cut : Int32) -> Unit {
   for i in 0..<table.length() {
-    table[i] = (table[i] - cut).max(-1)
+    // Negative values are sentinels; DUBT also uses -2 for unsorted nodes.
+    if table[i] >= 0 {
+      table[i] = (table[i] - cut).max(-1)
+    }
   }
 }
 

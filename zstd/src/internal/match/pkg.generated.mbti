@@ -55,6 +55,17 @@ pub fn Lazy::preload(Self, BytesView) -> Unit
 pub fn Lazy::prepare(Self, Int32) -> Unit
 pub fn Lazy::reset(Self) -> Unit
 
+pub struct Tree {
+  // private fields
+}
+pub fn Tree::Tree(hash_log~ : Int32, chain_log~ : Int32, min_match~ : Int32, search_log~ : Int32, target_length~ : Int32, window_log~ : Int32, opt_level~ : Int32, ultra2? : Bool) -> Self
+pub fn Tree::find_buffered(Self, Int32, @seqenc.Repeats, @seqenc.Block) -> Unit
+pub fn Tree::history(Self) -> History
+pub fn Tree::memory_usage(Self) -> Int32
+pub fn Tree::preload(Self, BytesView) -> Unit
+pub fn Tree::prepare(Self, Int32) -> Unit
+pub fn Tree::reset(Self) -> Unit
+
 // Type aliases
 
 // Traits

@@ -179,9 +179,11 @@ fn frame_blocks(
 }
 
 ///|
-test "compress round-trips through the decoder at every level" {
+test "compress round-trips through the decoder at every legacy level" {
   for sample in encoder_inputs() {
     let (name, input) = sample
+    // Keep the established legacy matrix; tree levels have small all-level
+    // smoke cases and representative streaming/boundary matrices next door.
     for level in 1..<=12 {
       for checksum in [true, false] {
         let compressed = compress(input, level~, checksum~)
@@ -196,6 +198,32 @@ test "compress round-trips through the decoder at every level" {
         assert_eq(after, if checksum { 4 } else { 0 }, msg=label)
       }
     }
+  }
+}
+
+///|
+test "new tree strategies omit both the checksum flag and trailer when disabled" {
+  let prefix = b"tree parsers retain their repeats across blocks. "
+  for
+    (level, n, strategy) in [
+      (14, 262145, "Btlazy2"),
+      (13, 16385, "Btopt"),
+      (13, 257, "Btultra"),
+      (16, 257, "Btultra2"),
+    ] {
+    assert_true(
+      complete_row(encoder_params(level, Some(n.to_int64()))).has_suffix(
+        "/" + strategy,
+      ),
+    )
+    let input = prefix.repeat((n + prefix.length() - 1) / prefix.length())[:n].to_owned()
+    let frame = compress(input, level~, checksum=false)
+    assert_eq(decompress(frame), input)
+    let header = frame_header_of(frame)
+    assert_false(header.has_checksum)
+    assert_eq(header.content_size, Some(n.to_uint64()))
+    let (_, after) = frame_blocks(frame)
+    assert_eq(after, 0, msg="\{strategy} has no checksum trailer")
   }
 }
 
@@ -404,7 +432,7 @@ test "frame headers: the window from the level, the content size when known" {
   // level 1 and for the negative levels (row 0), 1 MiB at level 2 and 2 MiB
   // for the double-fast rows, level 0 being the default 3.
   let windows = [
-    for level in [-5, 0, 1, 2, 3, 8, 9, 12, 13, 22] => {
+    for level in [-5, 0, 1, 2, 3, 8, 9, 12, 13] => {
       let fh = frame_header_of(stream(Encoder(level~), b"abc"))
       fh.window_size.to_string()
     }
@@ -412,7 +440,7 @@ test "frame headers: the window from the level, the content size when known" {
   inspect(
     windows.join(" "),
     content=(
-      #|524288 2097152 524288 1048576 2097152 2097152 4194304 4194304 4194304 4194304
+      #|524288 2097152 524288 1048576 2097152 2097152 4194304 4194304 4194304
     ),
   )
   inspect(
@@ -458,6 +486,8 @@ test "the parameters follow zstd's tables" {
       Lazy2 => "lazy2"
       Btlazy2 => "btlazy2"
       Btopt => "btopt"
+      Btultra => "btultra"
+      Btultra2 => "btultra2"
     }
     "\{p.window_log} \{p.chain_log} \{p.hash_log} \{p.search_log} \{p.min_match} \{p.target_length} \{strategy}"
   }
@@ -491,7 +521,7 @@ test "the parameters follow zstd's tables" {
   for table in level_tables {
     assert_eq(table.length(), MAX_LEVEL)
     for p in table {
-      assert_true(p.window_log >= 14 && p.window_log <= 22)
+      assert_true(p.window_log >= 14 && p.window_log <= 27)
     }
   }
 }

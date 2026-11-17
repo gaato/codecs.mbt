@@ -76,6 +76,8 @@ fn complete_row(p : Params) -> String {
     Lazy2 => "Lazy2"
     Btlazy2 => "Btlazy2"
     Btopt => "Btopt"
+    Btultra => "Btultra"
+    Btultra2 => "Btultra2"
   }
   "\{p.window_log}/\{p.chain_log}/\{p.hash_log}/\{p.search_log}/\{p.min_match}/\{p.target_length}/\{name}"
 }

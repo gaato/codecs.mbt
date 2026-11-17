@@ -7,6 +7,28 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+### Added
+
+- Compression levels **13 to 22**, with zstd 1.5.7's size-class parameters,
+  DUBT binary-tree lazy2 and adaptive optimal parsing (btopt, btultra and
+  btultra2), including the latter's statistics-priming first pass. Streaming,
+  dictionaries, flushes and bounded memory use the existing encoder API.
+
+### Changed
+
+- **Migration:** levels 13 to 22 previously acted as 12; they now select
+  their own strategy and can allocate considerably larger tables/windows.
+  Use level 12 explicitly to retain its previous output and memory use.
+  Levels above 22 now act as 22. Levels 1 to 12 retain every output byte,
+  including their small-input Lazy2 mappings. Known `content_size` shrinks
+  allocations; `encoder_memory_bound` reports the selected row's bound.
+
+### Fixed
+
+- Btlazy2 accepts its first short match at distant offsets, using zstd's
+  initial candidate cost. A five-byte match at 2 MiB was incorrectly
+  discarded, reducing compression at levels 13 to 15.
+
 ## [0.5.1] - 2026-11-17
 
 ### Fixed

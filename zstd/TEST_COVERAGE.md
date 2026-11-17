@@ -52,8 +52,8 @@ and corruptions.
 - moon's bundled tcc cannot link on some hosts (openSUSE); the script sets
   `MOON_CC=cc` unless it is already set.
 
-Snapshot at the last full measurement (2026-11-15): **94.7 %**
-(2563/2707 lines); the 144 uncovered lines are ledgered below, most of them
+Snapshot at the last full measurement (2026-11-17): **95.4 %**
+(2979/3124 lines); the 145 uncovered lines are ledgered below, most of them
 the JS and Wasm GC variants that native does not compile.
 
 ## Policy
@@ -213,10 +213,36 @@ external corpus includes the same input and repeated small-window cycles.
 Input splitting with identical flush positions is compared at all levels.
 No uncovered-line budget is added for shared history.
 
+Levels 13..22 add DUBT and sorted-tree insertion, repcode-first candidate
+search, a three-byte hash, adaptive integer/fractional prices and bounded
+forward DP. `src/internal/match/tree_wbtest.mbt` independently executes
+the produced RFC offsets, including a first-sequence repcode, the
+zero-literal shift and repeat-one-minus-one, then checks repeated slides
+and resets. It also checks dictionary expiry and the ultra alternative
+that preserves a match plus one literal when its LL symbol is cheaper.
+Small DUBT fixtures force both second-lookahead choices and an immediate
+repeat-two match; a sorted-tree fixture checks a skipped-position search.
+`prices_wbtest.mbt` checks predefined prices, fractional
+weights, adaptive-frequency sums, rescaling bounds and reset.
+`src/tree_encode_wbtest.mbt` checks the new levels' known-size streams,
+raw and formatted dictionaries, deterministic input/output splits, reset,
+memory after each step and SHA-256 pins on a small mixed input. Levels
+1..12 keep their existing pins and levels 9..12 their small-input mappings.
+Every new level has small round-trip, dictionary, reset and mutation cases;
+levels 13, 16, 19 and 22 carry the deeper split/flush matrices. A repeated
+512-byte sample expanded past 256 KiB selects the large-input rows and
+crosses two block boundaries without parsing unrelated large inputs repeatedly.
+This keeps the repository's 600-second native gate close to the original
+suite's runtime while retaining each strategy and the priming paths.
+The DUBT regression pins the first five-byte match at both 1 and 2 MiB.
+The CLI cross-check decodes every new level's output. Compressor benchmark
+tables remain unchanged.
+
 | File | Budget | Reason |
 | --- | --- | --- |
 | src/internal/blit/blit.mbt | 6 | `bytes` and `into_view` for JS (`#cfg(target="js")`), forward loops without index checks, and `forward` for JS and Wasm GC, a byte at a time where native and Wasm copy eight: the ledger measures native, which compiles the block copies and the eight-byte steps instead. The gates run the same tests on JS: `src/internal/blit/blit_test.mbt` and the decoder's tests, which write through both. |
 | src/internal/match/access.mbt | 37 | Checked `read`, `write`, `match_length` and `may_beat` for JS/Wasm GC, and `hash_bytes` for Wasm GC (64-bit) and JS (32-bit halves, with `mul_high`): excluded by native's cfg. The gates run the same matcher tests and unchanged SHA-256 pins on both checked targets, and `src/internal/match/hash_wbtest.mbt` compares `hash_bytes` with the 64-bit hashes for every width there. |
+| src/internal/match/tree.mbt | 1 | The checked JS/Wasm GC `hash_bytes_tree` wrapper, excluded by native's cfg. Tree reconstruction, dictionary, split and SHA-256 tests run on all four targets; native and Wasm compile the direct word-load hashes instead. |
 | src/dictionary.mbt | 1 | The `NeedInput` arm of `Dictionary::parse`'s catch: `Huffman::read` and `Fse::read` read a dictionary that is all in memory, so they raise `Fail` for a short one and never `NeedInput`; the arm keeps the match total. "formatted dictionaries that do not parse are Corrupt" cuts the tables at every kind of place. |
 | src/frame_info.mbt | 1 | `inspect_frame`'s `Err` from `parse_frame_header`, whose only refusal, the reserved bit, `frame_header_len` has made first. "a frame cut anywhere is Truncated, a bad one Corrupt" sets the reserved bit. |
 | src/internal/match/fast.mbt | 5 | Original JS/Wasm GC construction and byte-wise hash, excluded by native's cfg. The gates run the boundary round trips, width fingerprints and unchanged SHA-256 pins there. |
