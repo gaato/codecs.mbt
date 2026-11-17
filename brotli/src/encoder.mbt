@@ -13,12 +13,10 @@
 const INITIAL_BUFFER : Int32 = 1024
 
 ///|
-/// A streaming Brotli encoder (RFC 7932): greedy LZ77 with one prefix code
-/// per category, about the ratio of gzip. Feed it input in chunks of any
-/// size with `step` and collect output in slices of any size. It keeps the
-/// window of past input (`1 << window_bits` bytes, and no more than the
-/// input so far) plus at most a meta-block (64 KiB) of input and its
-/// output, and fixed-size tables.
+/// A streaming Brotli encoder (RFC 7932). Quality 4 uses lazy LZ77 and one
+/// prefix code per category. Qualities 5..9 use the reference's hashers,
+/// static dictionary and context modelling. Input and output chunks may
+/// have any size; memory stays within `encoder_memory_bound`.
 pub struct Encoder {
   // The LZ77 dictionary matches may copy from.
   priv dictionary : Dictionary?
@@ -48,12 +46,38 @@ pub struct Encoder {
   priv mut done : Bool
   priv mut step_consumed : Int32
   priv mut step_produced : Int32
+  // Keep quality 4's hot fields at their existing offsets.
+  priv quality : Int32
+  priv size_hint : Int64
+  priv mut ref_hint : Int64
+  priv mut ref_hasher : RefHasher?
+  priv ref_commands : Array[RefCommand]?
+  priv ref_distances : FixedArray[Int32]
+  priv ref_saved_distances : FixedArray[Int32]
+  priv mut ref_batch : FixedArray[Byte]
+  priv mut ref_ring : FixedArray[Byte]
+  priv mut ref_batch_len : Int32
+  priv mut ref_batch_pos : Int32
+  priv mut ref_processed : Int32
+  priv mut ref_offset : Int64
+  priv mut ref_insert : Int32
+  priv mut ref_literals : Int32
 }
 
 ///|
 /// An encoder at the start of a stream, with a window of
 /// `1 << window_bits` bytes (clamped to 10..24). The default 22 is the
 /// reference encoder's; a decoder needs up to that much memory.
+/// `quality` defaults to 4 and is clamped to 0..11; 0..3 use 4, and
+/// 10..11 use 9.
+///
+/// `size_hint` steers parameter selection at qualities 5..9. It is not
+/// written to the stream or checked: a wrong hint still produces valid
+/// output, which may differ. It is clamped to 0..1 GiB; zero, like an
+/// omitted hint, uses the reference CLI's stdin mode. With a positive
+/// known size, output matches its named-file mode at the same window.
+/// Without a hint, input is processed on a fixed 512 KiB read schedule,
+/// independent of caller chunks. Quality 4 ignores the hint.
 ///
 /// With `dictionary`, a match may copy from it as RFC 9841 section 3.2 has
 /// it, as `brotli -D` writes and RFC 9842's `dcb` coding reads: at a
@@ -62,21 +86,61 @@ pub struct Encoder {
 /// encoder searches it with, built the first time and shared by every
 /// encoder given it (`Dictionary::memory_usage`).
 pub fn Encoder::Encoder(
+  quality~ : Int32 = 4,
+  size_hint? : Int64,
   window_bits~ : Int32 = 22,
   dictionary? : Dictionary,
 ) -> Encoder {
   let window_bits = window_bits.clamp(min=10, max=24)
   let window = 1 << window_bits
+  let quality = quality.clamp(min=0, max=11)
+  let quality = if quality < 4 { 4 } else { quality.min(9) }
+  let size_hint = if quality == 4 {
+    0L
+  } else {
+    size_hint.unwrap_or(0L).clamp(min=0L, max=1073741824L)
+  }
   // Room to slide by at least a quarter window (or a meta-block) at a time.
   let slack = (window >> 2).max(BLOCK_SIZE)
   {
+    quality,
+    size_hint,
+    ref_hint: size_hint,
+    ref_hasher: None,
+    ref_commands: if quality == 4 {
+      None
+    } else {
+      Some(Array())
+    },
+    ref_distances: if quality == 4 {
+      []
+    } else {
+      [4, 11, 15, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    },
+    ref_saved_distances: if quality == 4 {
+      []
+    } else {
+      [4, 11, 15, 16]
+    },
+    ref_batch: [],
+    ref_ring: [],
+    ref_batch_len: 0,
+    ref_batch_pos: 0,
+    ref_processed: 0,
+    ref_offset: 0L,
+    ref_insert: 0,
+    ref_literals: 0,
     window_bits,
     dictionary,
     max_distance: window - 16,
     data: FixedArray::make(0, b'\x00'),
     data_len: 0,
     block_start: 0,
-    data_max: window - 16 + slack + BLOCK_SIZE,
+    data_max: if quality == 4 {
+      window - 16 + slack + BLOCK_SIZE
+    } else {
+      window - 16 + ref_max_meta(quality, window_bits) + 524288 + 8
+    },
     matcher: @lz77.Matcher(hash_bits=window_bits.min(15)),
     found_dist: 0,
     meta_block: MetaBlock::new(),
@@ -94,9 +158,28 @@ pub fn Encoder::Encoder(
 }
 
 ///|
-/// Starts a new stream, keeping the tables' memory. The input buffer is
-/// released.
+/// Starts a new stream with the same quality, window, dictionary and hint.
+/// Releases input and reference-matcher buffers; quality 4 keeps its tables.
 pub fn Encoder::reset(self : Encoder) -> Unit {
+  self.ref_hint = self.size_hint
+  self.ref_hasher = None
+  if self.ref_commands is Some(commands) {
+    commands.clear()
+  }
+  if self.quality != 4 {
+    for i, d in [4, 11, 15, 16] {
+      self.ref_distances[i] = d
+      self.ref_saved_distances[i] = d
+    }
+  }
+  self.ref_batch = []
+  self.ref_ring = []
+  self.ref_batch_len = 0
+  self.ref_batch_pos = 0
+  self.ref_processed = 0
+  self.ref_offset = 0L
+  self.ref_insert = 0
+  self.ref_literals = 0
   self.data = FixedArray::make(0, b'\x00')
   self.data_len = 0
   self.block_start = 0
@@ -135,22 +218,22 @@ pub fn Encoder::last_produced(self : Encoder) -> Int32 {
 }
 
 ///|
-/// Bytes the encoder holds: the input buffer (the window and at most a
-/// meta-block not encoded yet) and the output waiting for the caller, which
-/// grow with the stream, and what is allocated with the encoder: the hash
-/// table, `16 << min(window_bits, 15)` bytes (512 KiB from 15 up), and a
-/// meta-block's commands with their histograms, codes and scratch space
-/// and the distance ring, 351,628 bytes. At most `(1 << window_bits) - 16`, plus
-/// `max(1 << (window_bits - 2), 64 KiB)`, plus 64 KiB, plus 131,200 bytes,
-/// plus those (see RESOURCE_BOUNDS.md). `reset` releases the input buffer.
+/// Bytes in owned input and output buffers, hash tables, retained commands
+/// and coding tables; runtime object headers and garbage collection are
+/// excluded. `encoder_memory_bound` bounds these buffers and coding scratch
+/// before construction (see RESOURCE_BOUNDS.md). `reset` releases input.
 /// A dictionary's index is shared by the encoders given it and counted by
 /// `Dictionary::memory_usage`, not here.
+/// At qualities 5..9 this also counts the read buffer, retained commands,
+/// reference hash tables and the ring used after the first window wrap;
+/// `encoder_memory_bound` includes their worst case and coding scratch.
 pub fn Encoder::memory_usage(self : Encoder) -> Int32 {
   self.data.length() +
   self.writer.capacity() +
   self.matcher.memory_usage() +
   self.meta_block.memory_usage() +
-  4 * self.dist_ring.length()
+  4 * self.dist_ring.length() +
+  self.ref_memory_usage()
 }
 
 ///|
@@ -195,6 +278,9 @@ fn Encoder::step_with(
   fixed_output : FixedArray[Byte]?,
   action : EncodeAction,
 ) -> Status {
+  if self.quality != 4 {
+    return self.ref_step(input, output, fixed_output, action)
+  }
   self.step_consumed = 0
   self.step_produced = 0
   if self.done {

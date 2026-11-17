@@ -7,6 +7,15 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+### Added
+
+- `quality` on `Encoder`, `compress` and `encoder_memory_bound`, defaulting to 4 and clamped to 0..11. Qualities 5..9 port google/brotli 1.2.1's hashers, static dictionary search, greedy block splitting, histogram merging and context models; 0..3 select 4 and 10..11 select 9. Quality 4 retains its output and memory bounds.
+- `Encoder(size_hint=n)` steers reference parameter choices without recording or checking the length. An incorrect hint still produces a valid stream. `compress` passes the input length and retains the requested window at qualities 5..9, matching a streaming encoder given the same hint and window. Without a hint, the encoder follows the CLI's stdin mode on a fixed 512 KiB read schedule. `encoder_memory_bound` also accepts the hint because it can select larger tables.
+
+### Fixed
+
+- `Decoder(until=EndOfMember)` returns whole bytes prefetched from the current input before suspending for output. Bytes belonging to a following member remain unconsumed even with one-byte output buffers; completing a stream no longer tries to return bytes counted by an earlier step.
+
 ## [0.5.0] - 2026-11-15
 
 ### Added

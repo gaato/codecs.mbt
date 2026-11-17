@@ -81,7 +81,7 @@ let node_encoder : String =
 
 ///|
 /// 1 GiB: more than the crosscheck tool prints and any stream decodes to.
-let max_output : Int = 1 << 30
+let max_output : Int32 = 1 << 30
 
 ///|
 fn[T] setup_failure(message : String) -> T {
@@ -92,7 +92,7 @@ fn[T] setup_failure(message : String) -> T {
 ///|
 struct Stream {
   name : String
-  size : Int
+  size : Int32
   digest : String
   data : Bytes
   /// The LZ77 dictionary the stream needs, or empty.
@@ -110,7 +110,7 @@ fn sha256_hex(data : Bytes) -> String {
 
 ///|
 /// `n / d` with three decimals.
-fn ratio(n : Int, d : Int) -> String {
+fn ratio(n : Int32, d : Int32) -> String {
   let thousandths = (n.to_int64() * 1000 + (d / 2).to_int64()) / d.to_int64()
   let frac = (thousandths % 1000).to_string()
   "\{thousandths / 1000}.\{"0".repeat(3 - frac.length())}\{frac}"
@@ -144,6 +144,14 @@ async fn main {
     setup_failure("run from the repository root")
     return
   }
+  for script in ["reference/gen_tables.mbtx", "reference/gen_vectors.mbtx"] {
+    @shell.Cmd("moon", ["run", "brotli/scripts/\{script}", "--check"])
+    .output(max_output_bytes=max_output)
+    .check()
+  }
+  @shell.Cmd("moon", ["run", "brotli/scripts/conformance.mbtx", target])
+  .output(max_output_bytes=max_output)
+  .check()
   for tool in ["brotli", "node"] {
     @shell.Cmd(tool, ["--version"]).output().check() catch {
       _ => {
@@ -216,6 +224,8 @@ async fn main {
   }
   let mut failures = 0
   let mut checked = 0
+  let identity_work = @fs.tmpdir(prefix="brotli-quality-crosscheck.")
+  defer @fs.rmdir(identity_work, recursive=true)
   for n, s in streams {
     let result = node_results[n]
     if result.strip_prefix("error ") is Some(err) {
@@ -238,9 +248,11 @@ async fn main {
       @fs.write_binary(dict_file, s.dictionary)
       ["-D", dict_file]
     }
-    let output = @shell.Cmd("brotli", ["-d", "-c", ..dict_args], stdin=Binary(s.data)).output(
-      max_output_bytes=max_output,
-    )
+    let output = @shell.Cmd(
+      "brotli",
+      ["-d", "-c", ..dict_args],
+      stdin=Binary(s.data),
+    ).output(max_output_bytes=max_output)
     if output.exit_code() != 0 {
       println("FAIL \{s.name}: \{output.stderr().trim()}")
       failures += 1
@@ -253,6 +265,28 @@ async fn main {
       continue
     }
     checked += 1
+    if s.name.has_prefix("q") &&
+      !s.name.contains("dict") &&
+      !s.name.contains("flushed") {
+      let words = s.name.split(" ").collect()
+      let quality = words[0][1:].to_owned()
+      let window = s.name.split(" w").collect()[1].split(" ").collect()[0].to_owned()
+      let args = ["-q", quality, "-w", window, "-c"]
+      let reference = if words[1] == "named" {
+        let file = "\{identity_work}/input"
+        @fs.write_binary(file, decoded)
+        @shell.Cmd("brotli", [..args, file]).output(max_output_bytes=max_output)
+      } else {
+        @shell.Cmd("brotli", args, stdin=Binary(decoded)).output(
+          max_output_bytes=max_output,
+        )
+      }
+      reference.check()
+      if reference.stdout_bytes() != s.data {
+        println("FAIL \{s.name}: output differs from brotli 1.2.1")
+        failures += 1
+      }
+    }
     println(
       "ok   \{s.name}: \{s.size} -> \{s.data.length()} bytes (\{ratio(s.data.length(), s.size.max(1))})",
     )

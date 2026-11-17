@@ -107,6 +107,12 @@ trusted, like the bridges, to say what the Why3 symbols are.
 
 ## Trusted bridges
 
+The quality 5..9 port (`src/reference_*.mbt`) is tested, not proved. Its
+parsing, greedy histogram merges, context maps, Huffman construction and
+bitstream writer are held to the pinned reference bytes in
+`src/reference_vectors_wbtest.mbt`, plus decoder crosschecks and the shared
+byte-stream conformance harness. It introduces no trusted proof bridge.
+
 | Bridge | Package | Claim | Backing test |
 | --- | --- | --- | --- |
 | `shr` | `src/internal/proof_bits` | `x >> k` is `x / 2^k` for `x >= 0`, `0 <= k <= 30` | `src/internal/proof_bits/shifts_test.mbt`: "shr and low_bits are division and remainder by 2^k" |

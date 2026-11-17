@@ -52,8 +52,8 @@ streams built bit by bit, and seeded pseudo-random splits and corruptions.
 - moon's bundled tcc cannot link on some hosts (openSUSE); the script sets
   `MOON_CC=cc` unless it is already set.
 
-Snapshot at the last full measurement (2026-11-15): **97.6 %** (1332/1365
-lines); the 33 uncovered lines are ledgered below, most of them the JS and
+Snapshot at the last full measurement (2026-11-17): **98.4 %** (2339/2377
+lines); the 38 uncovered lines are ledgered below, most of them the JS and
 Wasm GC variants that native does not compile.
 
 ## Policy
@@ -99,6 +99,7 @@ Budgets are the exact uncovered counts: the script fails on any difference.
 | File | Budget | Reason |
 | --- | --- | --- |
 | src/decoder.mbt | 1 | In `next_aligned_byte`, loading a byte from `stash`: uncompressed and metadata bytes would come from it only if `stash` held bytes there, and it never does. A unit leaves bytes in `stash` only when they fall short of what it needs, so when it completes it has consumed them all; the byte-aligned loops start after that unit. |
+| src/meta_block_writer.mbt | 1 | The `cached_match_prefix` fallback for Wasm, JS and Wasm GC returns true, leaving prefix comparison to their match-length routine. Native compiles the four-byte rejection instead. The same quality-4 SHA-256 pins run on all four targets. |
 | src/internal/bits/bit_packer.mbt | 10 | `BitPacker::write`, `BitPacker::write_fitting` and `BitPacker::flush` for JS (`#cfg(target="js")`), the 32-bit accumulator moved a byte at a time: the ledger measures native, which compiles the 64-bit `write` and the eight-byte `flush` instead. The gates run the same tests on JS: `src/internal/bits/bit_packer_test.mbt` and the encoder's, including the SHA-256 of its output. |
 | src/internal/blit/blit.mbt | 6 | `bytes` and `into_view` for JS (`#cfg(target="js")`), forward loops without index checks, and `forward` for JS and Wasm GC, a byte at a time where native and Wasm copy eight: the ledger measures native, which compiles the block copies and the eight-byte steps instead. The gates run the same tests on JS: `src/internal/blit/blit_test.mbt` and the decoder's tests, which write through both. |
 | src/internal/huffman/decode_table.mbt | 3 | The `abort`s of `Builder::Builder` (a root outside 1 to 15 bits, an alphabet past 4096 symbols) and of `Builder::build` (a table without room): the `panic` tests of `src/internal/huffman/decode_table_spec_test.mbt` run them, but the abort ends the test before its coverage counts are written. |
@@ -107,3 +108,5 @@ Budgets are the exact uncovered counts: the script fails on any difference.
 | src/internal/huffman/code_maker.mbt | 1 | The `abort` of `CodeMaker::CodeMaker` for an alphabet outside 2 to 1,024 symbols: the `panic` test of `src/internal/huffman/code_maker_test.mbt` runs it, but the abort ends the test before its coverage counts are written. |
 | src/internal/lz77/hash.mbt | 6 | `load4`, `read` and `write` for JS and Wasm GC (`#cfg(not(any(target="native", target="wasm")))`), which read a byte at a time and check every index: the ledger measures native, which compiles the one-load and unchecked ones instead. The gates run the same tests on JS and Wasm GC: the match finders' tests and the encoder's, including the SHA-256 of its output. |
 | src/internal/match_length_fast/length.mbt | 2 | The checked JS/Wasm GC `length`, excluded by native's cfg. The package's alignment, exact-end, mismatch and overlap tests run on all four targets. |
+| src/reference_encoder.mbt | 2 | `ref_process`'s no-input, no-action guard: its scheduler calls only with a nonempty input block or `Flush`/`Finish`. And the dictionary-search stop past 67,108,860 coded distance bytes, which requires a large dictionary index as described for `src/lz77_dictionary.mbt`; the same static-dictionary distance cap is tested directly in "reference helpers: position wraps, capped distances and ring-edge matches". |
+| src/reference_bitstream.mbt | 2 | The capped-zero-run continuation in `ref_write_map`, for runs of at least 128 zeros. The reference's fixed two-, three- and thirteen-context maps have shorter zero runs; the one-context case uses its specialized trivial map writer. Both context map encodings are checked by pinned CLI byte identity and decoder round trips. |

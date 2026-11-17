@@ -7,7 +7,7 @@ import {
 }
 
 // Values
-pub fn compress(BytesView, window_bits? : Int32, dictionary? : Dictionary) -> Bytes
+pub fn compress(BytesView, quality? : Int32, window_bits? : Int32, dictionary? : Dictionary) -> Bytes
 
 pub fn compress_bound(Int64) -> Int64
 
@@ -15,7 +15,7 @@ pub fn decoder_memory_bound(max_window_bits? : Int32) -> Int64
 
 pub fn decompress(BytesView, max_output? : Int32, max_window_bits? : Int32, dictionary? : Dictionary) -> Bytes raise @codec.CodecError
 
-pub fn encoder_memory_bound(window_bits? : Int32) -> Int64
+pub fn encoder_memory_bound(window_bits? : Int32, quality? : Int32, size_hint? : Int64) -> Int64
 
 // Errors
 
@@ -44,7 +44,7 @@ pub fn Dictionary::memory_usage(Self) -> Int32
 pub struct Encoder {
   // private fields
 }
-pub fn Encoder::Encoder(window_bits? : Int32, dictionary? : Dictionary) -> Self
+pub fn Encoder::Encoder(quality? : Int32, size_hint? : Int64, window_bits? : Int32, dictionary? : Dictionary) -> Self
 pub fn Encoder::is_finished(Self) -> Bool
 pub fn Encoder::last_consumed(Self) -> Int32
 pub fn Encoder::last_produced(Self) -> Int32

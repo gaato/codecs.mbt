@@ -76,17 +76,28 @@ fn streamed(
   chunk : Int32,
   flush_every : Int32,
   dictionary? : BytesView,
+  quality~ : Int32 = 4,
+  size_hint? : Int64,
 ) -> Unit {
   let encoder = match dictionary {
-    Some(d) => @brotli.Encoder(window_bits~, dictionary=@brotli.Dictionary(d))
-    None => @brotli.Encoder(window_bits~)
+    Some(d) =>
+      @brotli.Encoder(
+        quality~,
+        size_hint?,
+        window_bits~,
+        dictionary=@brotli.Dictionary(d),
+      )
+    None => @brotli.Encoder(quality~, size_hint?, window_bits~)
   }
   let out = Buffer()
   let buffer = FixedArray::make(1000, b'\x00')
   let mut pos = 0
   let mut flushes = 0
+  let rng = Rng::{ state: 1951U, }
   for ;; {
-    let end = (pos + chunk).min(input.length())
+    let end = (pos + (if chunk < 0 { 1 + rng.below(-chunk) } else { chunk })).min(
+      input.length(),
+    )
     let at_flush = flush_every > 0 && end / flush_every > pos / flush_every
     let action : @brotli.EncodeAction = if end == input.length() {
       Finish
@@ -130,6 +141,7 @@ fn streamed(
 
 ///|
 fn main {
+  quality_streams()
   let rng = Rng::{ state: 7932, }
   let samples = [
     ("empty", b""),
@@ -237,5 +249,58 @@ fn main {
         dictionary=dict_bytes,
       )
     }
+  }
+}
+
+///|
+fn quality_streams() -> Unit {
+  for quality in 5..<=9 {
+    for
+      (name, input, window_bits) in [
+        ("empty", b"", 22),
+        ("text", text(Rng::{ state: 1951U, }, 1200000), 22),
+        (
+          "mixed",
+          text(Rng::{ state: 1951U, }, 100000) +
+          random(Rng::{ state: 17U, }, 70000),
+          16,
+        ),
+        ("edge", text(Rng::{ state: 19U, }, 524288), 18),
+      ] {
+      emit(
+        "q\{quality} named \{name} w\{window_bits}",
+        input,
+        @brotli.compress(input, quality~, window_bits~),
+      )
+      streamed(
+        "q\{quality} named \{name}",
+        input,
+        window_bits,
+        -16000,
+        0,
+        quality~,
+        size_hint=input.length().to_int64(),
+      )
+      streamed(
+        "q\{quality} stdin \{name}",
+        input,
+        window_bits,
+        -16000,
+        0,
+        quality~,
+      )
+    }
+    let input = text(Rng::{ state: 2000U, }, 20000)
+    let dict = text(Rng::{ state: 9841U, }, 60000)
+    streamed(
+      "q\{quality} dict",
+      input,
+      22,
+      -2000,
+      5000,
+      quality~,
+      dictionary=dict,
+    )
+    streamed("q\{quality} flushed", input, 16, -2000, 5000, quality~)
   }
 }

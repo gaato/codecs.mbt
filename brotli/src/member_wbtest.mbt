@@ -125,3 +125,24 @@ test "after EndOfMember's Done, steps take nothing and answer Done" {
   debug_inspect(decoder.step_into(b"\x06\x06", out, end=true), content="Done")
   inspect(decoder.last_consumed(), content="1")
 }
+
+///|
+test "EndOfMember returns prefetched bytes before suspending for output" {
+  let input = b"dictionary compression \xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e ".repeat(
+    60,
+  )
+  let stream = compress(input, quality=5, window_bits=10)
+  let (decoded, rest) = drive_member(stream + stream, next_in=() => 1 << 20, next_out=() => {
+    1
+  })
+  assert_eq(decoded, input)
+  assert_eq(rest, stream)
+  for v in vectors.filter(v => v.name == "gen/quality4") {
+    let stream = v.input()
+    let (decoded, rest) = drive_member(stream + stream, next_in=() => 7, next_out=() => {
+      3
+    })
+    assert_eq(@checksum.sha256(decoded), v.sha256)
+    assert_eq(rest, stream)
+  }
+}

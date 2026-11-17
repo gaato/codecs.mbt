@@ -1,4 +1,5 @@
 import {
+  "moonbitlang/core/math",
   "gaato/brotli/internal/blit",
   "gaato/codec",
   "gaato/codec_bytes",

@@ -141,8 +141,11 @@ fn Encoder::longest_match(self : Encoder, pos : Int32, end : Int32) -> Int32 {
   let reach = pos.min(self.max_distance)
   let limit = end - pos
   let mut best = 0
-  let last = self.dist_ring[(self.dist_ring_index - 1) & 3]
-  if last <= reach && limit >= @lz77.MIN_MATCH {
+  // The distance ring always has four entries; the mask is in 0..3.
+  let last = self.dist_ring.unsafe_get((self.dist_ring_index - 1) & 3)
+  if last <= reach &&
+    limit >= @lz77.MIN_MATCH &&
+    cached_match_prefix(data, pos - last, pos) {
     let len = @lz77.match_length(data, pos - last, pos, limit)
     if len >= @lz77.MIN_MATCH {
       best = len
@@ -155,6 +158,28 @@ fn Encoder::longest_match(self : Encoder, pos : Int32, end : Int32) -> Int32 {
     self.found_dist = self.matcher.distance()
   }
   best
+}
+
+///|
+/// Only matches of at least four bytes affect the parse. On native,
+/// reject a different prefix before the wider match-length load. Both
+/// four-byte ranges fit because the caller has checked reach and limit.
+#cfg(target="native")
+#inline
+fn cached_match_prefix(data : FixedArray[Byte], a : Int32, b : Int32) -> Bool {
+  let bytes = data.unsafe_reinterpret_as_bytes()
+  bytes.unsafe_read_uint32_le(a) == bytes.unsafe_read_uint32_le(b)
+}
+
+///|
+#cfg(not(target="native"))
+#inline
+fn cached_match_prefix(
+  _data : FixedArray[Byte],
+  _a : Int32,
+  _b : Int32,
+) -> Bool {
+  true
 }
 
 ///|
@@ -219,14 +244,15 @@ fn Encoder::parse(self : Encoder, start : Int32, end : Int32) -> Unit {
     }
     let mut code = -1
     for k in 0..<4 {
-      if ring[(self.dist_ring_index - 1 - k) & 3] == dist {
+      // The mask indexes the four-entry distance ring.
+      if ring.unsafe_get((self.dist_ring_index - 1 - k) & 3) == dist {
         code = k
         break
       }
     }
     mb.push(pos - lit_start, len, code, dist)
     if code != 0 {
-      ring[self.dist_ring_index & 3] = dist
+      ring.unsafe_set(self.dist_ring_index & 3, dist)
       self.dist_ring_index += 1
     }
     pos += len
@@ -280,14 +306,15 @@ fn Encoder::parse_with_dictionary(
     }
     let mut code = -1
     for k in 0..<4 {
-      if ring[(self.dist_ring_index - 1 - k) & 3] == dist {
+      // The mask indexes the four-entry distance ring.
+      if ring.unsafe_get((self.dist_ring_index - 1 - k) & 3) == dist {
         code = k
         break
       }
     }
     mb.push(pos - lit_start, len, code, dist)
     if code != 0 {
-      ring[self.dist_ring_index & 3] = dist
+      ring.unsafe_set(self.dist_ring_index & 3, dist)
       self.dist_ring_index += 1
     }
     pos += len

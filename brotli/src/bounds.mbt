@@ -33,7 +33,37 @@ pub fn decoder_memory_bound(max_window_bits~ : Int32 = 24) -> Int64 {
 /// buffer at its largest, twice the most output that waits (the buffer
 /// doubles), and what it allocates when it is made. A dictionary's index
 /// is counted by `Dictionary::memory_usage`, not here.
-pub fn encoder_memory_bound(window_bits~ : Int32 = 22) -> Int64 {
+/// `quality` and `size_hint` follow `Encoder`; a hint can select larger
+/// hash tables at qualities 5 and 6. The reference path also reserves for
+/// delayed commands, a 512 KiB read buffer, the reference ring, output and
+/// 8 MiB of histogram and Huffman scratch. The bound is computed without
+/// allocating these buffers.
+pub fn encoder_memory_bound(
+  window_bits~ : Int32 = 22,
+  quality~ : Int32 = 4,
+  size_hint? : Int64,
+) -> Int64 {
+  let quality = quality.clamp(min=0, max=11)
+  if quality > 4 {
+    let q = quality.min(9)
+    let w = window_bits.clamp(min=10, max=24)
+    let m = ref_max_meta(q, w).to_int64()
+    let block = ref_input_block(q, w).to_int64()
+    // Commands may exceed the delayed-command threshold by one input block.
+    let ring = 1L << (w.max(if q == 9 { w.min(18).max(16) } else { 16 }) + 1)
+    return (1L << w) -
+      16L +
+      m +
+      524296L +
+      524288L +
+      ring +
+      4L * (m + 512L) +
+      ref_hasher_bound(q, w, size_hint.unwrap_or(0L)).to_int64() +
+      80L * (m / 8L + block / 2L + 2L) +
+      encoder_fixed_memory(w).to_int64() +
+      80L +
+      8388608L
+  }
   let w = window_bits.clamp(min=10, max=24)
   ((1 << w) - 16).to_int64() +
   (1 << (w - 2)).max(BLOCK_SIZE).to_int64() +

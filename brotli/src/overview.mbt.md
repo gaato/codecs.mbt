@@ -1,6 +1,6 @@
 # gaato/brotli
 
-A streaming Brotli (RFC 7932) decoder and encoder in pure MoonBit, for Native, JS, Wasm and Wasm GC. Both take input in chunks of any size, write output into slices of any size, and keep their memory within a window you set, so they fit an HTTP client's or server's `br` content coding as well as a whole file.
+A streaming Brotli (RFC 7932) decoder and encoder in pure MoonBit, for Native, JS, Wasm and Wasm GC. Both take input in chunks of any size, write output into slices of any size, and have memory bounds you can query before construction. They fit an HTTP client's or server's `br` content coding as well as a whole file.
 
 ## Install
 
@@ -123,15 +123,19 @@ Not included: the rest of Shared Brotli (RFC 9841): serialized shared dictionari
 
 ## Encoding
 
-The encoder uses greedy LZ77 (lazy by one byte) and one prefix code per meta-block: about google/brotli's quality 4, and close to gzip -6. Higher-quality encoding (context modeling, block splitting, static dictionary references) is not included. The encoder never raises.
+`Encoder(quality=4)` and `compress(input, quality=4)` trade encoding time for size. Quality 4 is the default: lazy LZ77 and one prefix code per meta-block. Qualities 5 through 9 use google/brotli's hashers, static dictionary, block splitting and context models. Values are clamped to 0..11; 0..3 select 4, and 10..11 select 9. The encoder never raises.
 
-`Encoder(dictionary=d)` and `compress(dictionary=d)` let matches copy from an LZ77 dictionary as `brotli -D` writes them, for RFC 9842's `dcb` coding: at a distance past the window's reach, however far into the stream. A record of 314 bytes that shares words with a 50,000-byte dictionary compresses to 100 bytes with it and 201 without (`brotli -q 5 -D`: 95). The dictionary builds the index encoders search it with once, the first time, and every encoder given it shares that (`Dictionary::memory_usage`).
+At qualities 5..9, when the length is known, pass `Encoder(size_hint=n)` to obtain the same output as `compress` at the same quality and window. `compress` supplies its input length automatically. The hint steers parameter choices; it is neither written into the stream nor checked, so a wrong hint still produces a valid stream whose bytes may differ. Hints are clamped to 0..1 GiB; zero selects the same mode as an omitted hint. Quality 4 ignores hints.
+
+Without a hint, qualities 5..9 follow the reference CLI's stdin mode, processing input on a fixed 512 KiB read schedule. Output is independent of caller input and output splits in either mode. Qualities 5..9 keep the requested `window_bits`; quality 4 reduces a one-shot stream's declared window to what the input needs, preserving its default output.
+
+`Encoder(dictionary=d)` and `compress(dictionary=d)` let matches copy from an LZ77 dictionary as `brotli -D` writes them, for RFC 9842's `dcb` coding: at a distance past the window's reach, however far into the stream. The dictionary builds the index encoders search it with once, the first time, and every encoder given it shares that (`Dictionary::memory_usage`).
 
 ## Memory
 
 The decoder's memory is the window (at most 16 MiB, and no more than the output so far) plus tables of at most 1.3 MiB; `memory_usage()` reports it, and `decoder_memory_bound(max_window_bits~)` gives its most before you make a decoder. `Decoder(max_window_bits=n)` refuses streams that need a window over `2^n - 16` bytes with `LimitExceeded`, saying how much the stream needs.
 
-The encoder's memory is its window (`Encoder(window_bits=n)`, 22 by default: 4 MiB, growing with the input to at most twice what it has taken, and up to a quarter more before it slides) plus a 64 KiB meta-block, its output and 855 KiB of fixed tables (the hash table and the meta-block's commands); `memory_usage()` reports all of it, within `encoder_memory_bound(window_bits~)`. `compress_bound(n)` is the most `compress` writes for `n` bytes.
+At quality 4 the encoder holds its window (`Encoder(window_bits=n)`, 22 by default: 4 MiB, growing with input) plus a 64 KiB meta-block, its output and 855 KiB of fixed tables. Qualities 5..9 also hold delayed commands, larger hash tables, a 512 KiB input buffer and a reference ring after its first wrap. `memory_usage()` reports owned buffers; `encoder_memory_bound(quality~, window_bits~, size_hint?)` bounds them and coding scratch. Higher qualities can use substantially more memory; see [resource bounds](https://github.com/gaato/codecs.mbt/blob/main/brotli/RESOURCE_BOUNDS.md). `compress_bound(n)` bounds whole-stream output.
 
 ## Errors
 
@@ -141,19 +145,21 @@ A step that raises first hands out the output that comes before the error (answe
 
 ## When to use it
 
-gaato/brotli fits Brotli that arrives in pieces or comes from anyone. `Decoder` takes input in pieces down to one byte, writes into your slices and holds its window and at most 1.3 MiB of tables (a process decoding 256 MiB of output in 64 KiB pieces peaks at 20.1 MiB, most of it the runtime). It agreed with `brotli -d` on all 81 valid and 359 invalid streams of the comparison, and its decoding rules are proved against RFC 7932. It runs on Native, JS, Wasm and Wasm GC; its encoder has one quality, about google/brotli's 4.
+gaato/brotli fits Brotli that arrives in pieces or comes from anyone. `Decoder` takes input in pieces down to one byte, writes into your slices and holds its window and at most 1.3 MiB of tables. Its decoding rules are proved against RFC 7932. Both codecs run on Native, JS, Wasm and Wasm GC.
 
-On Wasm, a decoder that takes the whole stream at once can be faster: hustcer/fbr's takes about 0.77 times as long as gaato/brotli on the benchmarks' text there, and 1.3 (Native), 1.6 (Wasm GC) and 1.6 (JS) times as long on the other targets. Its encoder at quality 11 writes 17 % less on that text and takes 142 to 386 times as long as ours.
+The [comparison](https://github.com/gaato/codecs.mbt/blob/main/bench/README.md#compression-codecs-against-other-implementations) gives decoding and default-encoding measurements against other MoonBit implementations; the [encoding notes](https://github.com/gaato/codecs.mbt/blob/main/brotli/docs/compression.md) compare qualities with the reference.
 
 ## Links
 
 - [Changelog](https://github.com/gaato/codecs.mbt/blob/main/brotli/CHANGELOG.md)
 - [Repository](https://github.com/gaato/codecs.mbt)
+- [Changelog](https://github.com/gaato/codecs.mbt/blob/main/brotli/CHANGELOG.md)
 - [Comparison with other MoonBit implementations](https://github.com/gaato/codecs.mbt/blob/main/bench/README.md#compression-codecs-against-other-implementations): what each supports, checks and holds, and how fast it decodes and encodes
 - [The byte-stream codec contract](https://github.com/gaato/codecs.mbt/blob/main/CONTRACT.md) that `Decoder` and `Encoder` keep
 - [Resource bounds](https://github.com/gaato/codecs.mbt/blob/main/brotli/RESOURCE_BOUNDS.md): every limit and the tests that hold it
+- [Encoding comparison](https://github.com/gaato/codecs.mbt/blob/main/brotli/docs/compression.md): quality settings, reference output and measurements
 - [Proofs](https://github.com/gaato/codecs.mbt/blob/main/brotli/PROOFS.md) and [test coverage](https://github.com/gaato/codecs.mbt/blob/main/brotli/TEST_COVERAGE.md)
 
 ## License
 
-Apache-2.0. The static dictionary in `src/static_data.mbt` comes from [google/brotli](https://github.com/google/brotli) under the MIT license; see `LICENSE-dictionary`.
+Apache-2.0, with the quality 5..9 encoder port from [google/brotli](https://github.com/google/brotli) under MIT (`LICENSE-encoder`). The static dictionary in `src/static_data.mbt` is also MIT; see `LICENSE-dictionary`.

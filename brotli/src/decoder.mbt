@@ -435,6 +435,16 @@ fn Decoder::step_with(
       )
     }
     NeedMoreOutput => {
+      if self.until is EndOfMember {
+        // Return bytes read ahead before this step's consumed count becomes
+        // final. This belongs only to output suspension: NeedMoreInput has
+        // already copied the unprocessed view into stash, whose bytes must
+        // not also be returned to the caller.
+        let returned = (self.nbits / 8).min(self.in_pos)
+        self.in_pos -= returned
+        self.nbits -= 8 * returned
+        self.acc = (self.acc.reinterpret_as_uint() & ((1U << self.nbits) - 1U)).reinterpret_as_int()
+      }
       self.drain()
       self.finish_step(status)
     }

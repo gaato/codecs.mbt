@@ -1,0 +1,50 @@
+----
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/core/env",
+}
+----
+
+// End-to-end native process times, including startup and named-file I/O on
+// both sides. Run pinned to one CPU, under the shared gates lock.
+async fn measure(program : String, args : Array[String]) -> (Bytes, Double) {
+  let warm = @shell.Cmd(program, args).output(max_output_bytes=4000000)
+  warm.check()
+  let mut elapsed = 0.0
+  for _ in 0..<15 {
+    let start = @env.now()
+    let run = @shell.Cmd(program, args).output(max_output_bytes=4000000)
+    run.check()
+    elapsed += (@env.now() - start).to_double()
+    assert_eq(run.stdout_bytes(), warm.stdout_bytes())
+  }
+  (warm.stdout_bytes(), elapsed / 15.0)
+}
+
+async fn main {
+  @shell.Cmd("moon", ["build", "--release", "--target", "native", "brotli/src/internal/quality_compare"]).output().check()
+  let executable = "_build/native/release/build/gaato/brotli/internal/quality_compare/quality_compare.exe"
+  let work = @fs.tmpdir(prefix="brotli-quality-comparison.")
+  defer @fs.rmdir(work, recursive=true)
+  let text = b"The quick brown fox jumps over the lazy dog. Brotli dictionary compression and context modelling.\n"
+  println("| Input | Quality | MoonBit bytes | CLI bytes | MoonBit ms | CLI ms |")
+  println("|---|---:|---:|---:|---:|---:|")
+  for kind in ["text", "mixed"] {
+    let mut rng = 1951U
+    let input = Bytes::makei(1200000, i => {
+      rng = rng * 1664525U + 1013904223U
+      if kind == "text" || i % 10000 < 7000 { text[i % text.length()] }
+      else { (rng >> 24).to_byte() }
+    })
+    let file = "\{work}/input"
+    @fs.write_file(file, input)
+    for quality in 4..=9 {
+      let (ours, ours_ms) = measure(executable, [quality.to_string(), file])
+      let (reference, ref_ms) = measure("brotli", ["-q", quality.to_string(), "-w", "22", "-c", file])
+      if quality != 4 { assert_eq(ours, reference) }
+      println("| \{kind} | \{quality} | \{ours.length()} | \{reference.length()} | \{ours_ms} | \{ref_ms} |")
+    }
+  }
+}

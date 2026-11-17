@@ -30,6 +30,63 @@ reaches the bound is checked in review. The other tables are prose.
 | Encoder memory (`Encoder::memory_usage`) | The input buffer and the waiting output above, which grow with the stream, and what is allocated with the encoder (below): at most `(1 << window_bits) - 16 + max(1 << (window_bits - 2), 64 KiB) + 64 KiB + 131,200` bytes (the output buffer doubles, so it holds up to twice one meta-block's output) plus `(16 << min(window_bits, 15)) + 351,628`: 6,315,516 bytes at the default `window_bits` 22, 22,044,156 at 24, what `encoder_memory_bound(window_bits~)` returns. `reset` releases the input buffer. A dictionary's index is counted by `Dictionary::memory_usage` | Cannot overflow: the input buffer and the waiting output are bounded above | `src/bounds_wbtest.mbt`: "memory_usage stays within its bound after every step", "the encoder's input buffer grows only with input, then slides", "with a dictionary, the encoder's memory stays within its bound after every step" |
 | Encoder commands (`src/meta_block_writer.mbt`, `MetaBlock`) | 16,385 per meta-block: one per 4-byte match in 64 KiB, and one for the literals at the end. Five arrays of that, allocated once | Cannot overflow: matches are at least 4 bytes | `src/bounds_wbtest.mbt`: "the encoder's input buffer grows only with input, then slides", "the encoder's waiting output is at most a meta-block" |
 
+## Encoder qualities
+
+`quality` is clamped to 0..11. The current mappings and bounds below are
+`encoder_memory_bound(quality~, window_bits=22, size_hint?)`, in bytes.
+The large-hint column uses `size_hint=1048576L`; hints below 1 MiB select
+the same table sizes as an omitted hint. A dictionary index is separate.
+
+| Quality | Effective encoder | No hint / small hint | Hint at least 1 MiB | Backing test |
+|---:|---|---:|---:|---|
+| 0 | 4 | 6,315,516 | 6,315,516 | `src/reference_quality_wbtest.mbt`: "reference qualities: clamping and quality four ignores size hint" |
+| 1 | 4 | 6,315,516 | 6,315,516 | `src/reference_quality_wbtest.mbt`: "reference qualities: clamping and quality four ignores size hint" |
+| 2 | 4 | 6,315,516 | 6,315,516 | `src/reference_quality_wbtest.mbt`: "reference qualities: clamping and quality four ignores size hint" |
+| 3 | 4 | 6,315,516 | 6,315,516 | `src/reference_quality_wbtest.mbt`: "reference qualities: clamping and quality four ignores size hint" |
+| 4 | 4 | 6,315,516 | 6,315,516 | `src/bounds_wbtest.mbt`: "memory_usage stays within its bound after every step" |
+| 5 | Reference 5 | 152,790,644 | 154,134,132 | `src/reference_quality_wbtest.mbt`: "reference qualities: random splits, flushes, dictionaries, reset and memory bounds" |
+| 6 | Reference 6 | 154,101,364 | 156,755,572 | `src/reference_quality_wbtest.mbt`: "reference qualities: random splits, flushes, dictionaries, reset and memory bounds" |
+| 7 | Reference 7 | 159,901,300 | 159,901,300 | `src/reference_quality_wbtest.mbt`: "reference qualities: random splits, flushes, dictionaries, reset and memory bounds" |
+| 8 | Reference 8 | 168,289,908 | 168,289,908 | `src/reference_quality_wbtest.mbt`: "reference qualities: random splits, flushes, dictionaries, reset and memory bounds" |
+| 9 | Reference 9 | 192,931,444 | 192,931,444 | `src/reference_quality_wbtest.mbt`: "reference qualities: random splits, flushes, dictionaries, reset and memory bounds" |
+| 10 | 9 | 192,931,444 | 192,931,444 | `src/reference_quality_wbtest.mbt`: "reference qualities: clamping and quality four ignores size hint" |
+| 11 | 9 | 192,931,444 | 192,931,444 | `src/reference_quality_wbtest.mbt`: "reference qualities: clamping and quality four ignores size hint" |
+
+For qualities 5..9, let `w` be the window bits, `B` the input block size
+(64 KiB, or at quality 9 `1 << min(18, w)` when `w > 16`),
+`R = 2 * max(1 << w, B)`, and `M = min(R, 1 << 24)`. The bound sums:
+
+- Input/history storage: `(1 << w) - 16 + M + 524,296` bytes, including
+  padding and room for the 512 KiB read schedule. It grows with input and
+  slides while retaining the window and the unfinished meta-block.
+- Read staging: 524,288 bytes. The caller's split never selects parameters.
+- A ring of `R` bytes, allocated when the first ring wrap needs old padding
+  bytes, so reference match rejection and tail bytes agree with the CLI.
+- Output capacity: `4 * (M + 512)` bytes, allowing doubling during coding.
+- Commands: at most `2 * (M / 8 + B / 2 + 2)` capacity slots, charged at
+  40 bytes each for fields, alignment and an array slot. The delayed-command
+  threshold can be exceeded by at most one input block; doubling accounts
+  for the retained capacity.
+- Reference hasher buffers: `2 * (1 << bucket_bits)` bytes of counters and
+  `4 * (1 << (bucket_bits + quality - 1))` bytes of positions, plus one tag
+  byte per position for qualities 5 and 6. `bucket_bits` is 14 for qualities
+  5 and 6 with small hints, otherwise 15; the large-hint choice requires
+  `w >= 19`. Windows up to 16 use the reference's forgetful chains:
+  524,290 bytes at qualities 5..8, 1,311,744 at quality 9.
+  Every reference hasher also owns 98,304 bytes of static-dictionary hash
+  words and lengths, initialized only for a reference-quality encoder.
+- The quality-4 fixed tables below, 80 bytes for distance caches, and an
+  8 MiB allowance for transient histograms, context maps, Huffman codes,
+  merge candidates and coding scratch. Transient coding buffers are
+  released before `step` returns; `memory_usage` reports retained buffers,
+  not garbage awaiting runtime collection or runtime object headers.
+
+The logarithm lookup is compiled as constants; it has no table allocation.
+Quality 4 does not initialize the reference hash tables or context maps.
+No dictionary index is charged twice. The rows for encoder input,
+pending output, commands and fixed tables elsewhere in this document give
+the quality-4 layout; the formula above covers the reference qualities.
+
 ## Fixed per decoder
 
 Allocated when the decoder is made and counted by `Decoder::memory_usage`,

@@ -116,3 +116,31 @@ test "the codecs implement gaato/codec_bytes" {
   assert_eq(encode_with(encoder, text), stream)
   assert_eq(@brotli.decompress(stream), text)
 }
+
+///|
+test "quality and size hint work through the public byte-stream API" {
+  let input = b"Brotli dictionary compression: known sizes and streaming.\n".repeat(
+    80,
+  )
+  for quality in 5..<=9 {
+    let encoder = @brotli.Encoder(
+      quality~,
+      window_bits=22,
+      size_hint=input.length().to_int64(),
+    )
+    let stream = encode_with(encoder, input)
+    assert_eq(stream, @brotli.compress(input, quality~, window_bits=22))
+    assert_true(
+      @codec_bytes.Encode::memory_usage(encoder).to_int64() <=
+      @brotli.encoder_memory_bound(
+        quality~,
+        size_hint=input.length().to_int64(),
+      ),
+    )
+    assert_eq(decode_with(@brotli.Decoder(), stream), input)
+    @codec_bytes.Encode::reset(encoder)
+    assert_eq(encode_with(encoder, input), stream)
+    let wrong_hint = @brotli.Encoder(quality~, size_hint=1L)
+    assert_eq(@brotli.decompress(encode_with(wrong_hint, input)), input)
+  }
+}

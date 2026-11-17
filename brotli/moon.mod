@@ -1,4 +1,6 @@
-// Apache-2.0, except the static dictionary data in src/static_data.mbt,
+// Apache-2.0, except the MIT reference encoder port in src/reference_*.mbt
+// (google/brotli v1.2.1, Copyright Google Inc.; LICENSE-encoder) and the
+// static dictionary data in src/static_data.mbt,
 // which is google/brotli's c/common/dictionary.bin under the MIT license
 // (Copyright (c) 2009, 2010, 2013-2016 by the Brotli Authors); its notice is
 // in LICENSE-dictionary. Depends only on gaato/codec and gaato/codec_bytes,
