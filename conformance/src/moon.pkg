@@ -9,6 +9,7 @@ import {
   "gaato/deflate",
   "gaato/deflate/zlib",
   "gaato/deflate/gzip",
+  "gaato/deflate/deflate64",
   "gaato/codec_image",
   "gaato/png",
   "gaato/snappy",

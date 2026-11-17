@@ -48,6 +48,7 @@ fn Inflater::unit(self : Inflater) -> @codec_bytes.Status? raise Stop {
       }
       self.codes_unit()
     }
+    Copy64 => return self.copy64()
     Done => return Some(Done)
   }
   None
@@ -61,8 +62,8 @@ fn Inflater::block_header(self : Inflater) -> Unit raise Stop {
   match v >> 1 {
     0 => self.state = StoredHeader
     1 => {
-      self.lit = fixed_literal_table
-      self.dist = fixed_distance_table
+      self.lit = self.fixed_lit
+      self.dist = self.fixed_dist
       self.state = Codes
     }
     2 => self.state = TableSizes
@@ -94,7 +95,9 @@ fn Inflater::stored(self : Inflater) -> @codec_bytes.Status? {
     if !self.ensure_space(1) {
       return Some(NeedMoreOutput)
     }
-    let room = (WINDOW_SIZE - self.pending).min(WINDOW_SIZE - self.wpos)
+    let room = (self.window_size - self.pending).min(
+      self.window_size - self.wpos,
+    )
     let n = self.stored_left.min(room).min(self.view.length() - self.in_pos)
     if n == 0 {
       return Some(NeedMoreInput)
@@ -105,9 +108,9 @@ fn Inflater::stored(self : Inflater) -> @codec_bytes.Status? {
     )
     self.in_pos += n
     self.stored_left -= n
-    self.wpos = (self.wpos + n) & WINDOW_MASK
+    self.wpos = (self.wpos + n) & self.window_mask
     self.pending += n
-    self.filled = (self.filled + n).min(WINDOW_SIZE)
+    self.filled = (self.filled + n).min(self.window_size)
   }
   self.end_block()
   None
@@ -132,10 +135,14 @@ fn Inflater::table_sizes(self : Inflater) -> Unit raise Stop {
   self.nlen = (v & 31) + 257
   self.ndist = ((v >> 5) & 31) + 1
   self.ncode = (v >> 10) + 4
-  if self.nlen > 286 || self.ndist > 30 {
+  if self.nlen > 286 || self.ndist > self.distance_symbols {
     raise Fail(
       Corrupt,
-      "a dynamic header counts more than 286 literal/length codes or 30 distance codes",
+      if self.deflate64 {
+        "a dynamic header counts more than 286 literal/length codes"
+      } else {
+        "a dynamic header counts more than 286 literal/length codes or 30 distance codes"
+      },
     )
   }
   self.cl_lengths.fill(0)
@@ -248,7 +255,13 @@ fn Inflater::build_tables(self : Inflater) -> Unit raise Stop {
     self.nlen,
     invalid=unused_entry,
   )
-  decorate(self.raw, size, LITERAL_ROOT_BITS, self.own_lit, LiteralLength)
+  decorate(
+    self.raw,
+    size,
+    LITERAL_ROOT_BITS,
+    self.own_lit,
+    self.literal_alphabet,
+  )
   let size = self.dist_builder.build(
     self.raw,
     0,
@@ -256,7 +269,13 @@ fn Inflater::build_tables(self : Inflater) -> Unit raise Stop {
     self.ndist,
     invalid=unused_entry,
   )
-  decorate(self.raw, size, DISTANCE_ROOT_BITS, self.own_dist, Distance)
+  decorate(
+    self.raw,
+    size,
+    DISTANCE_ROOT_BITS,
+    self.own_dist,
+    self.distance_alphabet,
+  )
   self.lit = self.own_lit
   self.dist = self.own_dist
   self.state = Codes

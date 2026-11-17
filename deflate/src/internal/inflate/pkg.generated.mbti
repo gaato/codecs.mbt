@@ -20,7 +20,7 @@ pub fn Inflater::kept_bytes(Self) -> Int32
 pub fn Inflater::last_consumed(Self) -> Int32
 pub fn Inflater::last_produced(Self) -> Int32
 pub fn Inflater::memory_usage(Self) -> Int32
-pub fn Inflater::new() -> Self
+pub fn Inflater::new(deflate64? : Bool) -> Self
 pub fn Inflater::reset(Self, dictionary? : BytesView) -> Unit
 pub fn Inflater::step(Self, BytesView, MutArrayView[Byte], end~ : Bool) -> @codec_bytes.Status raise @codec.CodecError
 pub fn Inflater::step_into(Self, BytesView, FixedArray[Byte], end~ : Bool) -> @codec_bytes.Status raise @codec.CodecError

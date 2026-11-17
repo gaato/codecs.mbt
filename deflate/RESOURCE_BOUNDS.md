@@ -1,6 +1,6 @@
 # Resource bounds
 
-What the decoders and the encoders of the three packages hold, and what keeps
+What the four packages' decoders and the three encoders hold, and what keeps
 each structure from growing without limit. The rule: **every structure that grows with the
 input is listed here with its bound**. A new one needs a row before it ships.
 
@@ -16,6 +16,11 @@ three packages' decoders hold. It allocates everything when it is made, so
 `memory_usage` is the same from the first step to the last, and the tests
 check each array and the sum.
 
+Deflate64 selects a 64 KiB window and 32 distance symbols in the same internal
+inflater. Its separate public decoder has no dictionary. Its reported memory
+counts array element payload, like the other decoders; object headers, scalar
+fields and shared fixed tables are not included.
+
 The raw DEFLATE encoder is this module's too, `src/internal/deflate/`, with the
 match finders of `src/internal/lz77/`; the three packages' encoders hold one.
 It allocates everything when it is made, in sizes fixed by the level, so
@@ -27,6 +32,9 @@ check each array and the sum. Sizes count 4 bytes for an `Int`, 2 for an
 
 | Structure | Bound | On overflow | Tests |
 |---|---|---|---|
+| Deflate64 window and pending match (`src/internal/inflate/inflater.mbt`, `ring`, `copy_left`) | 65,536 window bytes. Length code 285 permits 65,538 bytes, so a fully read match is copied in chunks that fit the ring and resumes after draining; only its remaining length and distance are kept | A distance beyond the available output raises `Corrupt`; a full ring answers `NeedMoreOutput` without replaying match input | `src/deflate64/crafted_wbtest.mbt`: "Deflate64 length 285 uses all sixteen extra bits and can exceed the window", "Deflate64 distances span both extra codes and the exact 64 KiB edge" |
+| Deflate64 unfinished unit (`src/internal/inflate/inflater.mbt`, `stash`) | The same 8-byte allocation as DEFLATE, at most 7 used: a match needs at most 15 + 16 + 15 + 14 = 60 bits, at most 8 input bytes beyond the held bits, and only an incomplete unit is stashed | Cannot overflow; the longest 15-bit length and distance codes and their extras are tested byte by byte | `src/deflate64/crafted_wbtest.mbt`: "Deflate64 dynamic distance 31 and maximal match preserve seven input bytes" |
+| Deflate64 memory (`@deflate64.Decoder::memory_usage`) | 79,384 bytes, allocated at construction: the raw decoder's 46,592 plus 32,768 window bytes, 8 bytes for the 402-entry distance table (32 symbols), 8 for two more distance code lengths and 8 for two more builder scratch entries. Fixed tables are shared. Constant across steps and reset | Cannot overflow: fixed array sizes and a bounded ring; `decoder_memory_bound()` returns the same payload sum | `src/deflate64/crafted_wbtest.mbt`: "Deflate64 length 285 uses all sixteen extra bits and can exceed the window", "Deflate64 distances span both extra codes and the exact 64 KiB edge", "Deflate64 dynamic distance 31 and maximal match preserve seven input bytes"; `src/deflate64/decode_wbtest.mbt`: "Deflate64 memory bound", "Deflate64 reset forgets a suspended long match and deferred errors drain first" |
 | Window (`src/internal/inflate/inflater.mbt`, `ring`) | 32 KiB, the most RFC 1951 lets a distance reach, allocated when the decoder is made: decoded bytes wait there until the caller's slice takes them, and a match reads them back. A zlib header's smaller window (CINFO) is checked to be at most 32 KiB and not used to limit distances, as zlib does | A distance before the start of the output (or of the dictionary) raises `Corrupt`; output waits in the window, and a unit starts only when it has room for a match (258 bytes), else `NeedMoreOutput` | `src/internal/inflate/inflater_wbtest.mbt`: "memory: the window, the tables and what builds them"; `src/bounds_wbtest.mbt`: "output slices and reported memory stay within their bounds"; `src/reference_wbtest.mbt`: "crafted streams: the decoder answers as zlib does" |
 | Huffman tables (`src/internal/inflate/inflater.mbt`, `own_lit`, `own_dist`, `raw`) | A dynamic block's literal/length table, at most 1,334 entries of 4 bytes (zlib's `enough` for 288 symbols and a 10-bit root), its distance table, at most 400 (30 symbols, an 8-bit root), which holds the code-length code's 256 while the code lengths are read, and the 1,334 entries of 2 bytes they are built in before they are decorated: 10,604 bytes. Rebuilt for every dynamic block; the fixed codes' tables are shared by every decoder | Cannot overflow: an over-subscribed or incomplete code is refused before a table is built, and `enough` bounds every code that is not | `src/internal/huffman/enough_test.mbt`: "max_entries: the largest tables are zlib's bounds"; `src/internal/inflate/inflater_wbtest.mbt`: "memory: the window, the tables and what builds them"; `src/fuzz_wbtest.mbt`: "corrupted streams raise errors or decode, within bounds, never abort" |
 | Unfinished unit (`src/internal/inflate/inflater.mbt`, `stash`) | 8 bytes, of which at most 5 are used: the bytes of one unit the input cut short. The longest unit, a match, needs at most 48 bits beyond the fewer than 8 the bit reader holds between units, 6 bytes, so fewer are kept. Every other input byte is decoded or given back | Cannot overflow: a unit that has its bytes completes; more would abort | `src/bounds_wbtest.mbt`: "output slices and reported memory stay within their bounds"; `src/fuzz_wbtest.mbt`: "corrupted streams raise errors or decode, within bounds, never abort" |

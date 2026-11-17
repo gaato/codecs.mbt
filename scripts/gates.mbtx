@@ -122,6 +122,9 @@ async fn main {
   run("moon", [
     "run", "scripts/reference/libdeflate/gen_vectors.mbtx", "--", "--check",
   ])
+  run("moon", [
+    "run", "deflate/scripts/gen_deflate64_vectors.mbtx", "--", "--check",
+  ])
   // The streams the snap crate writes, which the decoder is held to and the
   // encoder matches.
   run("moon", ["run", "snappy/scripts/gen_vectors.mbtx", "--", "--check"])

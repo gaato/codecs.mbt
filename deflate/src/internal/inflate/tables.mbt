@@ -11,8 +11,9 @@
 // - bits 4 to 7: the extra bits of a length or a distance, or a link's
 //   second-level index bits;
 // - bits 8 to 10: the kind;
-// - bits 16 to 30: the literal byte, the length or distance base, or a
-//   link's offset from the start of the table.
+// - bits 16 to 31: the literal byte, the length or distance base, or a
+//   link's offset from the start of the table. Deflate64's extended distance
+//   bases use bit 31 and must be extracted unsigned.
 
 ///|
 const KIND_MASK : Int32 = 0x700
@@ -106,6 +107,8 @@ priv enum Alphabet {
   LiteralLength
   Distance
   CodeLength
+  LiteralLength64
+  Distance64
 }
 
 ///|
@@ -135,6 +138,18 @@ fn symbol_entry(alphabet : Alphabet, symbol : Int32, length : Int32) -> Int32 {
         KIND_INVALID | length
       }
     CodeLength => (symbol << 16) | KIND_LITERAL | length
+    LiteralLength64 =>
+      if symbol == 285 {
+        (3 << 16) | KIND_LONG_LENGTH | length
+      } else {
+        symbol_entry(LiteralLength, symbol, length)
+      }
+    Distance64 =>
+      if symbol >= 30 && symbol < 32 {
+        (distance_base64[symbol] << 16) | KIND_BASE | (14 << 4) | length
+      } else {
+        symbol_entry(Distance, symbol, length)
+      }
   }
 }
 

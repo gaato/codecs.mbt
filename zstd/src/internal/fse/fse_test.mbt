@@ -128,8 +128,10 @@ test "accuracy_log: within its bounds, and room for every symbol" {
 test "spread: each symbol on as many states as it has, and -1 at the top" {
   let symbols = FixedArray::make(32, b'\xff')
   assert_true(@fse.spread([-1, 20, 0, 10, -1], 5, 5, symbols))
-  inspect(symbols[31], content="b'\\x00'")
-  inspect(symbols[30], content="b'\\x04'")
+  // Compared as values: how `inspect` shows a Byte changed in MoonBit's
+  // nightly toolchain.
+  assert_eq(symbols[31], b'\x00')
+  assert_eq(symbols[30], b'\x04')
   let counts = FixedArray::make(5, 0)
   for b in symbols {
     counts[b.to_int()] += 1

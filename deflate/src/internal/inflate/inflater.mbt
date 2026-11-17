@@ -1,17 +1,18 @@
-// The raw DEFLATE decoder.
+// The raw DEFLATE and explicitly selected Deflate64 decoder.
 //
 // The stream is decoded in small atomic units, as the Brotli decoder does: a
 // block header, the stored block's lengths, the counts of a dynamic header,
 // one code-length code length, one code length (or repeat), one literal, one
 // match. A unit reads all its bits before it changes any state; when the input
 // runs out inside one, it raises `NeedInput`, the bit reader rewinds to the
-// unit's start, and the few bytes of the unfinished unit (at most 5) are kept
+// unit's start, and the few bytes of the unfinished unit (at most 5 for
+// DEFLATE, 7 for Deflate64) are kept
 // in `stash` so that the caller may drop the whole chunk. The bit reader takes
 // a byte only when a unit needs its bits, so between units it holds fewer
 // than 8: it never takes a whole byte past the end of the stream, and what
 // follows the stream is `input[last_consumed():]`.
 //
-// Decoded bytes go to a 32 KiB ring, the window, and are copied out to the
+// Decoded bytes go to a 32 KiB (Deflate64: 64 KiB) ring and are copied out to the
 // caller's slice, so that output can be handed out in slices of any size and
 // the fast path (fast.mbt) runs whatever their size. A preset dictionary is a
 // view of the caller's bytes, read where a distance reaches before the
@@ -41,6 +42,8 @@ priv enum State {
   CodeLengths
   /// Literals and matches, up to the end of the block.
   Codes
+  /// Deflate64: a fully read match, copied in pieces as output allows.
+  Copy64
   /// The final block has ended.
   Done
 }
@@ -72,10 +75,21 @@ priv suberror Stop {
 }
 
 ///|
-/// A streaming raw DEFLATE decoder (RFC 1951) that ends right after the final
-/// block. It holds the 32 KiB window and the tables of the current block,
+/// A streaming raw DEFLATE decoder (RFC 1951), or explicitly selected
+/// Deflate64 decoder, that ends right after the final block. It holds the
+/// 32 KiB or 64 KiB window and the tables of the current block,
 /// never the whole input or output.
 pub struct Inflater {
+  priv deflate64 : Bool
+  priv window_size : Int32
+  priv window_mask : Int32
+  priv distance_symbols : Int32
+  priv literal_alphabet : Alphabet
+  priv distance_alphabet : Alphabet
+  priv fixed_lit : FixedArray[Int32]
+  priv fixed_dist : FixedArray[Int32]
+  priv mut copy_left : Int32
+  priv mut copy_distance : Int32
   // Bit reader. `acc` holds `nbits` unread bits, least significant first,
   // and zeros above them; they come from `stash` and then from `view`.
   priv mut acc : Int32
@@ -97,7 +111,7 @@ pub struct Inflater {
   priv empty_out : FixedArray[Byte]
   // The window: `pending` bytes before `wpos` are not handed out yet, and
   // `filled` is how far back a distance may reach into the output,
-  // min(output, 32 KiB). Until 32 KiB are out, `wpos` is the output so far.
+  // min(output, window_size). Before the window wraps, `wpos` is output so far.
   priv ring : FixedArray[Byte]
   priv mut wpos : Int32
   priv mut pending : Int32
@@ -133,12 +147,49 @@ pub struct Inflater {
 }
 
 ///|
-/// A decoder at the start of a stream without a dictionary.
-pub fn Inflater::new() -> Inflater {
+/// A decoder at the start of a stream without a dictionary. `deflate64`
+/// explicitly selects ZIP method 9's 64 KiB window and extended codes;
+/// the default remains RFC 1951 and refuses those distance codes.
+pub fn Inflater::new(deflate64~ : Bool = false) -> Inflater {
   let empty_out = FixedArray::make(0, b'\x00')
   let own_lit = FixedArray::make(literal_table_size, 0)
-  let own_dist = FixedArray::make(distance_table_size, 0)
+  let own_dist = FixedArray::make(
+    if deflate64 {
+      distance_table_size64
+    } else {
+      distance_table_size
+    },
+    0,
+  )
+  let window_size = if deflate64 { 65536 } else { WINDOW_SIZE }
+  let distance_symbols = if deflate64 { 32 } else { 30 }
   {
+    deflate64,
+    window_size,
+    window_mask: window_size - 1,
+    distance_symbols,
+    literal_alphabet: if deflate64 {
+      LiteralLength64
+    } else {
+      LiteralLength
+    },
+    distance_alphabet: if deflate64 {
+      Distance64
+    } else {
+      Distance
+    },
+    fixed_lit: if deflate64 {
+      fixed_literal_table64
+    } else {
+      fixed_literal_table
+    },
+    fixed_dist: if deflate64 {
+      fixed_distance_table64
+    } else {
+      fixed_distance_table
+    },
+    copy_left: 0,
+    copy_distance: 0,
     acc: 0,
     nbits: 0,
     stash: FixedArray::make(STASH_SIZE, b'\x00'),
@@ -154,7 +205,7 @@ pub fn Inflater::new() -> Inflater {
     fixed_out: None,
     out_pos: 0,
     empty_out,
-    ring: FixedArray::make(WINDOW_SIZE, b'\x00'),
+    ring: FixedArray::make(window_size, b'\x00'),
     wpos: 0,
     pending: 0,
     filled: 0,
@@ -172,10 +223,10 @@ pub fn Inflater::new() -> Inflater {
     lit_builder: @huffman.Builder(root_bits=LITERAL_ROOT_BITS, max_alphabet=286),
     dist_builder: @huffman.Builder(
       root_bits=DISTANCE_ROOT_BITS,
-      max_alphabet=30,
+      max_alphabet=distance_symbols,
     ),
     lit_lengths: FixedArray::make(286, 0),
-    dist_lengths: FixedArray::make(30, 0),
+    dist_lengths: FixedArray::make(distance_symbols, 0),
     cl_lengths: FixedArray::make(19, 0),
     counts: FixedArray::make(16, 0),
     nlen: 0,
@@ -188,9 +239,9 @@ pub fn Inflater::new() -> Inflater {
 }
 
 ///|
-/// Starts a new stream, whose matches may reach back into `dictionary`, at
-/// most its last 32 KiB, as if it had been decoded just before the stream.
-/// The decoder keeps a view of those bytes, not a copy.
+/// Starts a new stream. RFC 1951 matches may reach into `dictionary`'s last
+/// 32 KiB as if decoded before the stream; it is kept by view, not copied.
+/// The Deflate64 facade always resets without a dictionary.
 pub fn Inflater::reset(self : Inflater, dictionary? : BytesView) -> Unit {
   self.acc = 0
   self.nbits = 0
@@ -200,8 +251,10 @@ pub fn Inflater::reset(self : Inflater, dictionary? : BytesView) -> Unit {
   self.wpos = 0
   self.pending = 0
   self.filled = 0
+  self.copy_left = 0
+  self.copy_distance = 0
   self.dictionary = match dictionary {
-    Some(d) => d[(d.length() - WINDOW_SIZE).max(0):]
+    Some(d) => d[(d.length() - self.window_size).max(0):]
     None => b""[:]
   }
   self.state = BlockHeader
@@ -249,8 +302,8 @@ pub fn Inflater::memory_usage(self : Inflater) -> Int32 {
 }
 
 ///|
-/// The view of the dictionary the decoder reads: the last 32 KiB of the
-/// one `reset` was given, empty without one.
+/// The dictionary view kept by `reset`, limited to the configured window;
+/// empty for a stream without one, including every Deflate64 stream.
 pub fn Inflater::dictionary(self : Inflater) -> BytesView {
   self.dictionary
 }
@@ -317,7 +370,15 @@ fn Inflater::step_with(
     self.drain()
     return self.finish_failed(err)
   }
-  let status = self.run() catch { err => return self.fail(err) }
+  let status = try {
+    if self.deflate64 {
+      self.run64()
+    } else {
+      self.run()
+    }
+  } catch {
+    err => return self.fail(err)
+  }
   match status {
     NeedMoreInput => {
       // Keep the unfinished unit's bytes; the caller may drop the chunk.
@@ -333,7 +394,14 @@ fn Inflater::step_with(
       self.in_pos = self.view.length()
       if end {
         return self.fail(
-          @codec.CodecError(Truncated, "the input ends inside the DEFLATE data"),
+          @codec.CodecError(
+            Truncated,
+            if self.deflate64 {
+              "the input ends inside the Deflate64 data"
+            } else {
+              "the input ends inside the DEFLATE data"
+            },
+          ),
         )
       }
       self.drain()
@@ -493,20 +561,20 @@ fn Inflater::align(self : Inflater) -> Unit {
 /// Makes room for `k` more bytes in the window, handing out pending output;
 /// false when the caller's slice is full first.
 fn Inflater::ensure_space(self : Inflater, k : Int32) -> Bool {
-  if WINDOW_SIZE - self.pending >= k {
+  if self.window_size - self.pending >= k {
     return true
   }
   self.drain()
-  WINDOW_SIZE - self.pending >= k
+  self.window_size - self.pending >= k
 }
 
 ///|
 /// Writes one byte; `ensure_space` has made room.
 fn Inflater::put(self : Inflater, b : Byte) -> Unit {
   self.ring[self.wpos] = b
-  self.wpos = (self.wpos + 1) & WINDOW_MASK
+  self.wpos = (self.wpos + 1) & self.window_mask
   self.pending += 1
-  if self.filled < WINDOW_SIZE {
+  if self.filled < self.window_size {
     self.filled += 1
   }
 }
@@ -524,13 +592,13 @@ fn Inflater::copy_match(
   }
   let dictionary = self.dictionary
   for _ in 0..<length {
-    // Before 32 KiB are out, the window has not wrapped and the output so
+    // Before the window fills, it has not wrapped and the output so
     // far starts at 0.
     let back = distance - self.filled
     let b = if back > 0 {
       dictionary[dictionary.length() - back]
     } else {
-      self.ring[(self.wpos - distance) & WINDOW_MASK]
+      self.ring[(self.wpos - distance) & self.window_mask]
     }
     self.put(b)
   }
@@ -541,8 +609,8 @@ fn Inflater::copy_match(
 fn Inflater::drain(self : Inflater) -> Unit {
   let n = self.pending.min(self.out.length() - self.out_pos)
   guard n > 0 else { return }
-  let read = (self.wpos - self.pending) & WINDOW_MASK
-  let first = n.min(WINDOW_SIZE - read)
+  let read = (self.wpos - self.pending) & self.window_mask
+  let first = n.min(self.window_size - read)
   self.write_out(read, first)
   self.write_out(0, n - first)
   self.pending -= n
@@ -558,7 +626,7 @@ fn Inflater::write_out(self : Inflater, start : Int32, n : Int32) -> Unit {
 }
 
 ///|
-/// The input bytes kept aside for a unit the input cut short: at most 5.
+/// Input bytes kept for a unit cut short: at most 5 for DEFLATE, 7 for Deflate64.
 pub fn Inflater::kept_bytes(self : Inflater) -> Int32 {
   self.stash_len - self.stash_pos
 }

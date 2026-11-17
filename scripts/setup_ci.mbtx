@@ -15,7 +15,7 @@ async fn main {
   @shell.Cmd("apt-get", [
     "install", "-y", "--no-install-recommends", "zstd", "brotli", "gzip", "lz4",
     "ncompress", "unzip", "python3", "python3-png", "cargo", "build-essential", "curl",
-    "ca-certificates",
+    "ca-certificates", "7zip",
   ]).run()
   @shell.Cmd("scripts/install-z3.sh", []).run()
 }

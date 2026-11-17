@@ -17,7 +17,10 @@ concurrency:
 jobs:
   gates:
     runs-on: ubuntu-26.04
-    timeout-minutes: 30
+    # Tests, the coverage ledger, the cross-checks and the proofs take about
+    # 30 minutes since deflate's levels 10 to 12; the margin keeps a slow
+    # runner from cancelling them.
+    timeout-minutes: 45
     container:
       # The toolchain moonbit-version pins; moved by hand with the proofs and
       # benchmarks (renovate.json).

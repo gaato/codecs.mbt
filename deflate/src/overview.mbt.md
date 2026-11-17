@@ -118,8 +118,35 @@ Each `Decoder` implements `gaato/codec_bytes`'s `Decode`, and each `Encoder` its
 | Package | Format | Use it for |
 |---|---|---|
 | `gaato/deflate` | raw DEFLATE | ZIP entries, WebSocket `permessage-deflate`, formats that frame DEFLATE themselves |
+| `gaato/deflate/deflate64` | raw Deflate64 (decode only) | ZIP method 9 entries |
 | `gaato/deflate/zlib` | zlib | HTTP's `deflate` coding, PNG, Discord's `zlib-stream` |
 | `gaato/deflate/gzip` | gzip | `.gz` files, HTTP's `gzip` coding |
+
+## Deflate64
+
+`gaato/deflate/deflate64` decodes ZIP method 9 (Enhanced Deflating), used by
+Windows Explorer and 7-Zip. Select it explicitly: the ordinary DEFLATE
+decoder keeps RFC 1951's codes. This package has no encoder or preset
+dictionary. A ZIP reader supplies the raw member data and checks the ZIP
+CRC itself; this package does not parse ZIP headers.
+
+```mbt check
+///|
+test "decode a Deflate64 long match" {
+  let raw = b"\x4b\x1c\xfd\xff\x07\x00"
+  assert_eq(
+    @deflate64.decompress(raw, max_output=1 << 20),
+    Bytes::make(65539, b'a'),
+  )
+}
+```
+
+`@deflate64.Decoder(until~)` has the same streaming methods and end policies
+as the raw DEFLATE decoder. Its fixed element-payload memory is **79,384
+bytes**, including a 64 KiB window, as `@deflate64.decoder_memory_bound()`
+reports. Output chunks may have any size, even for a match longer than the
+window. See [Deflate64](https://github.com/gaato/codecs.mbt/blob/main/deflate/docs/deflate64.md)
+for format sources and interoperability checks.
 
 ## gzip
 
@@ -317,6 +344,7 @@ The one-shot decoder of moonbit-community/flate 0.10.0, its latest release befor
 - [Comparison with other MoonBit implementations](https://github.com/gaato/codecs.mbt/blob/main/bench/README.md#compression-codecs-against-other-implementations): what each supports, checks and holds, and how fast it decodes and encodes
 - [The byte-stream codec contract](https://github.com/gaato/codecs.mbt/blob/main/CONTRACT.md) that every `Decoder` and `Encoder` keeps
 - [Compression levels and ratio](https://github.com/gaato/codecs.mbt/blob/main/deflate/docs/compression.md): how the levels work, and sizes against zlib
+- [Deflate64](https://github.com/gaato/codecs.mbt/blob/main/deflate/docs/deflate64.md): format differences, decoder bounds and interoperability checks
 - [Moving from MoonBit's core library or moonbit-community/flate](https://github.com/gaato/codecs.mbt/blob/main/deflate/docs/migrating.md): the names, errors and behaviour that differ
 - [Resource bounds](https://github.com/gaato/codecs.mbt/blob/main/deflate/RESOURCE_BOUNDS.md): every limit and the tests that hold it
 - [Proofs](https://github.com/gaato/codecs.mbt/blob/main/deflate/PROOFS.md) and [test coverage](https://github.com/gaato/codecs.mbt/blob/main/deflate/TEST_COVERAGE.md)

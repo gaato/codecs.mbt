@@ -68,6 +68,17 @@ trusted, like the bridges, to say what the Why3 symbols are.
 
 ## Not proved
 
+- Deflate64's table extensions and resumable long-match copy
+  (`src/internal/inflate/deflate64.mbt`, `symbol_entry` in `tables.mbt`),
+  its mode-specific window sizing, and `src/deflate64/`: the proved `shape`
+  function is unchanged and applies to any number of code lengths, including
+  the 32 distance codes. It does not prove the decorated bases, extra-bit
+  counts, ring access or table-size bounds. `crafted_wbtest.mbt` pins those
+  differences, the 64 KiB distance edge, maximum match, seven-byte input
+  stash and continued refusal by ordinary DEFLATE. `vectors_check_wbtest.mbt`
+  checks 7-Zip output, `decode_wbtest.mbt` checks bounds and error lifecycles,
+  and `conformance/src/deflate64_test.mbt` uses the common fuzz harness.
+
 - `near_parse.mbt`, `near_cost.mbt` and `near_default_costs.mbt`
   (`src/internal/deflate/`), and the binary-tree finder copied from
   `parts/lz77/bt_matchfinder.mbt`: resumable caching, block rewinding,

@@ -61,6 +61,7 @@
       "src/internal/crc32",
       "src/internal/huffman",
       "src/internal/inflate",
+      "src/deflate64",
       "src/internal/lz77",
       "src/internal/deflate",
       "src/internal/proof_bits",

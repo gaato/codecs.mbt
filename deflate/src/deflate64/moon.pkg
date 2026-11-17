@@ -1,0 +1,13 @@
+import {
+  "gaato/codec",
+  "gaato/codec_bytes",
+  "gaato/deflate/internal/inflate",
+}
+
+import {
+  "gaato/deflate",
+  "gaato/deflate/internal/fixtures",
+  "gaato/deflate/internal/huffman",
+} for "wbtest"
+
+supported_targets = "js + native + wasm + wasm-gc"

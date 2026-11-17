@@ -9,6 +9,10 @@ never does. Every breaking change is listed with a migration note.
 
 ### Added
 
+- **`gaato/deflate/deflate64`**, a decode-only package for ZIP method 9:
+  `Decoder(until?)`, `decompress(input, max_output?)` and
+  `decoder_memory_bound()`. It keeps a fixed 64 KiB window and 79,384 bytes
+  of element payload. The ordinary DEFLATE decoder remains RFC 1951.
 - **Levels 10 to 12** in the raw DEFLATE, zlib and gzip encoders: libdeflate
   1.24's near-optimal parsing, with binary-tree matches and iterative
   minimum-cost paths. Output is byte-identical to the reference with the
