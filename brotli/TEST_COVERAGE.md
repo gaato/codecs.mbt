@@ -52,6 +52,48 @@ streams built bit by bit, and seeded pseudo-random splits and corruptions.
 - moon's bundled tcc cannot link on some hosts (openSUSE); the script sets
   `MOON_CC=cc` unless it is already set.
 
+### HQ tests by target
+
+All four targets check qualities 10 and 11 against SHA-256 pins from the
+google/brotli 1.2.1 CLI in `src/reference_hq_vectors_wbtest.mbt`, in both
+size-hint modes. The common inputs are at most 8,192 bytes: tiny and repeated
+text, random and mixed bytes, UTF-8 dictionary text, and changing literal
+alphabets, including windows 10 and 24. They keep the Float32/Double cost
+model under byte-identity checks on every backend. Small vectors finish
+their input in one call so window 24 uses a short forest rather than a
+128 MiB streaming forest.
+
+Every target also runs the reference command traces (tree and dictionary
+matches), dictionary guards, distance coding, histogram-cap/tie-order and
+context-map checks. The phase observer on 8,192 bytes asserts both actual
+cost-pass counts and multiple blocks/clusters, as well as the memory bound.
+
+The private native conformance package at
+`../conformance/src/brotli_hq_native/` runs every original large
+input/quality/window CLI pin, through 2,100,000 bytes, and the full window
+matrix, in the workspace's regular native test phase. It is a separate
+executable that Moon can schedule alongside the codec's tests. Large cases
+check two encodes for every quality: whole-input `compress` with known size
+against the named-file CLI pin, and unhinted split-input streaming against
+the stdin CLI pin, even when those pins agree. This keeps both paths under
+large-input checks, including block and 512 KiB read-schedule boundaries.
+Hinted streaming versus `compress` equivalence remains checked by the small
+cases on every target; the native streaming matrix also retains hint-mode
+equality checks.
+Coverage measures the codec's branch tests and common pins; the private
+conformance matrix belongs to the regular test phase. This keeps large
+byte-identity encodes from being repeated for line coverage while the exact
+ledger still rejects any lost executable line.
+Small tree layout, preparation, position-wrap and reset checks, the public
+bound constants, and split-input streams at window 10 with correct, missing
+and wrong hints, including flushes with a raw LZ77 dictionary, also run on
+every target. The
+streaming/hint/dictionary/reset matrix, full window-24 allocation and
+growth checks, maximum parser capacities and archive-growth peak
+regression in `src/reference_hq_wbtest.mbt` run on native only. These remain
+part of native coverage; moving them does not relax any uncovered-line
+budget.
+
 Snapshot at the last full measurement (2026-11-18): **96.5 %** (3340/3460
 lines); the 120 uncovered lines are ledgered below, most of them the Wasm, JS and
 Wasm GC variants that native does not compile.
