@@ -15,12 +15,37 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  gates:
+  parts:
+    name: part (${{ matrix.part }})
     runs-on: ubuntu-26.04
-    # Tests, the coverage ledger, the cross-checks and the proofs take about
-    # 30 minutes since deflate's levels 10 to 12; the margin keeps a slow
-    # runner from cancelling them.
-    timeout-minutes: 45
+    # CI timings on 2026-11-17, before the HQ test reduction:
+    # f56efe80 (run 44159293290) for checks/tests/coverage, and 88a9a529
+    # (run 44086050510) for crosschecks/proofs/fmt. Budgets include the
+    # measured ~30 s setup and margin for cold builds and slower runners.
+    # Independent jobs make wall time follow the longest part.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - part: checks
+            timeout: 5 # measured 58 s
+          - part: test-native
+            timeout: 12 # measured 8 m 9 s, check + test
+          - part: test-js
+            timeout: 12 # measured 7 m 11 s, check + test
+          - part: test-wasm
+            timeout: 15 # measured 9 m 39 s, check + test
+          - part: test-wasm-gc
+            timeout: 8 # measured 3 m 4 s, check + test
+          - part: coverage
+            timeout: 20 # measured 14 m 7 s
+          - part: crosscheck
+            timeout: 10 # measured 2 m 9 s; margin also covers HQ qualities
+          - part: prove
+            timeout: 12 # measured 5 m 13 s with Z3
+          - part: fmt
+            timeout: 5 # measured 4 s, fmt + interfaces
+    timeout-minutes: ${{ matrix.timeout }}
     container:
       # The toolchain moonbit-version pins; moved by hand with the proofs and
       # benchmarks (renovate.json).
@@ -50,11 +75,42 @@ jobs:
         run: moon run scripts/setup_ci.mbtx
 
       - name: Docs audit
-        # Also run by the gates; here first, so that a documentation failure
-        # shows before the long build and test steps.
+        # Also in checks; fail each part early on documentation errors.
         run: moon run scripts/docs_audit.mbtx --self-test
 
-      - name: Gates
-        # With the coverage ledgers, and with --full the crosschecks of the
-        # encoders against the reference decoders, as one local run does.
-        run: moon run scripts/gates.mbtx -- --full
+      - name: Run part
+        env:
+          GATES_PART: ${{ matrix.part }}
+        run: moon run scripts/gates.mbtx -- --only "$GATES_PART"
+
+  gates:
+    # Main's ruleset requires this exact check name. An always-running
+    # aggregate checks individual jobs: a leg cancelled before getting a
+    # runner can leave needs.parts.result reporting success.
+    name: gates
+    if: ${{ always() }}
+    needs: [parts]
+    runs-on: ubuntu-26.04
+    timeout-minutes: 2
+    permissions:
+      actions: read
+    steps:
+      - name: Require every part to succeed
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          GH_RUN_ID: ${{ github.run_id }}
+          GH_RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          gh api --paginate --slurp \
+            "repos/$GH_REPO/actions/runs/$GH_RUN_ID/attempts/$GH_RUN_ATTEMPT/jobs?per_page=100" |
+            jq -e '
+              [.[].jobs[] | select(.name | startswith("part ("))] as $parts |
+              ($parts | map(.name) | sort) == ([
+                "part (checks)", "part (test-native)", "part (test-js)",
+                "part (test-wasm)", "part (test-wasm-gc)", "part (coverage)",
+                "part (crosscheck)", "part (prove)", "part (fmt)"
+              ] | sort) and
+              all($parts[]; .conclusion == "success")
+            '

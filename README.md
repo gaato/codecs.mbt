@@ -30,9 +30,39 @@ repository is laid out.
 
 ```sh
 moon run scripts/gates.mbtx                     # check, test on every target, coverage ledgers, proofs, format, interfaces
-moon run scripts/gates.mbtx -- --full           # the same and the encoders' crosschecks, as CI runs
+moon run scripts/gates.mbtx -- --full           # include the encoders' reference crosschecks
+moon run scripts/gates.mbtx -- --only checks   # one part, for a focused local check
 moon run scripts/coverage_report.mbtx -- zstd   # one module's coverage against its ledger
 ```
+
+Without `--only`, gates run sequentially in the same order. `--no-js` and
+`--no-wasm` skip those targets; `--no-prove` skips proving while the checks
+still validate proof ledgers. `--second-solver` adds CVC5 after Z3.
+`--full` adds reference crosschecks; `--only crosscheck` selects them directly.
+
+CI runs these parts in parallel, with a timeout for each based on measured
+CI times and margin in [ci.yml](.github/workflows/ci.yml):
+
+| Part | Work |
+| --- | --- |
+| `checks` | Release metadata, docs, bounds and proof ledgers, registry, generated sources and vectors |
+| `test-native` | Native `moon check --deny-warn` and `moon test` |
+| `test-js` | JS `moon check --deny-warn` and `moon test` |
+| `test-wasm` | Wasm `moon check --deny-warn` and `moon test` |
+| `test-wasm-gc` | Wasm GC `moon check --deny-warn` and `moon test` |
+| `coverage` | Instrumented native tests and exact coverage-ledger checks |
+| `crosscheck` | The six encoders against their reference decoders |
+| `prove` | Z3 proofs; CVC5 too when `--second-solver` is passed |
+| `fmt` | Format check, interface generation and CI's interface-drift check |
+
+Each part uses the pinned MoonBit container and shared setup. Matrix
+failures leave the other parts running. The final job is named `gates`,
+the required check in main's ruleset, and queries the current run attempt's
+jobs to require exactly the nine expected parts, all successful. CI runs on
+pushes to main, pull requests targeting main and manual
+dispatch; a newer run cancels the older run for the same ref. The canary
+continues to use the complete local sequence. CVC5 also has its separate
+weekly/manual [proof workflow](.github/workflows/proofs.yml).
 
 ## License
 
