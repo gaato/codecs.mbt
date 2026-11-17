@@ -1,4 +1,51 @@
 ///|
+// A small window keeps split-input lifecycle checks cheap on all backends;
+// the native matrix below also exercises large inputs and full forests.
+test "HQ small split streams preserve bytes across hints and reset" {
+  let input = ref_quality_sample(3, 4096)
+  let reset_input = b"reset dictionary compression"
+  for quality in [10, 11] {
+    let expected = compress(input, quality~, window_bits=10)
+    let reset_expected = compress(reset_input, quality~, window_bits=10)
+    for hint in [None, Some(4096L), Some(1L), Some(9223372036854775807L)] {
+      let e = Encoder(quality~, window_bits=10, size_hint?=hint)
+      let bound = encoder_memory_bound(
+        quality~,
+        window_bits=10,
+        size_hint?=hint,
+      )
+      let encoded = encode_drive(e, input, next_in=() => 17, next_out=() => 7, check=(
+        e,
+        _,
+      ) => assert_true(e.memory_usage().to_int64() <= bound))
+      assert_eq(encoded, expected)
+      assert_eq(decompress(encoded), input)
+      e.reset()
+      assert_true(e.hq_tree is None)
+      assert_eq(
+        encode_drive(e, reset_input, next_in=() => 3, next_out=() => 1),
+        reset_expected,
+      )
+    }
+    let dictionary = Dictionary(input)
+    let e = Encoder(quality~, window_bits=10, dictionary~)
+    let bound = encoder_memory_bound(quality~, window_bits=10)
+    let encoded = encode_drive(
+      e,
+      input,
+      next_in=() => 127,
+      next_out=() => 7,
+      flush=_ => true,
+      check=(e, _) => assert_true(e.memory_usage().to_int64() <= bound),
+    )
+    assert_eq(decompress(encoded, dictionary~), input)
+  }
+}
+
+///|
+// The full streaming/hint matrix belongs on native; small pinned vectors
+// and the split/cluster observer below exercise HQ on every target.
+#cfg(target="native")
 test "HQ streaming splits, wrong hints, flushes, dictionaries and reset stay bounded" {
   for quality in [10, 11] {
     let input = ref_quality_sample(2, 70000)
@@ -49,7 +96,7 @@ test "HQ streaming splits, wrong hints, flushes, dictionaries and reset stay bou
 
 ///|
 test "H10 tree allocation, preparation and position wrap retain their layout" {
-  for bits in [10, 16, 24] {
+  for bits in [10, 16] {
     let tree = HqTree::new(bits, 7, false)
     assert_eq(tree.memory_usage().to_int64(), hq_tree_bound(bits))
     assert_eq(tree.forest.length(), 2 << bits)
@@ -61,27 +108,8 @@ test "H10 tree allocation, preparation and position wrap retain their layout" {
     assert_true(tree.forest.all(x => x == 19U))
     assert_eq(HqTree::new(bits, 7, true).forest.length(), 14)
   }
+  assert_eq(HqTree::new(24, 7, true).forest.length(), 14)
   for quality in [10, 11] {
-    let large = Encoder(quality~, window_bits=24, size_hint=1L)
-    let large_bound = encoder_memory_bound(
-      quality~,
-      window_bits=24,
-      size_hint=1L,
-    )
-    let input = Bytes::make(270000, b'A')
-    let encoded = encode_drive(
-      large,
-      input,
-      next_in=() => 17001,
-      next_out=() => 127,
-      check=(e, _) => assert_true(e.memory_usage().to_int64() <= large_bound),
-    )
-    assert_eq(decompress(encoded), input)
-    assert_eq(large.hq_tree.unwrap().forest.length(), 2 << 24)
-    assert_eq(
-      large.hq_tree.unwrap().memory_usage().to_int64(),
-      hq_tree_bound(24),
-    )
     let e = Encoder(quality~, window_bits=10, size_hint=1L)
     e.data = FixedArray::make(512, b'\x00')
     e.data_len = 256
@@ -107,11 +135,56 @@ test "H10 tree allocation, preparation and position wrap retain their layout" {
 }
 
 ///|
-test "HQ allocation bounds use packed nodes and capacity ceilings" {
+// Full window-24 forests exercise allocation growth, not target arithmetic.
+#cfg(target="native")
+test "H10 full window-24 forests retain their layout and grow within the bound" {
+  let tree = HqTree::new(24, 7, false)
+  assert_eq(tree.memory_usage().to_int64(), hq_tree_bound(24))
+  assert_eq(tree.forest.length(), 2 << 24)
+  tree.buckets.fill(7U)
+  tree.forest.fill(19U)
+  tree.prepared = false
+  tree.prepare()
+  assert_true(tree.buckets.all(x => x == tree.invalid))
+  assert_true(tree.forest.all(x => x == 19U))
   for quality in [10, 11] {
-    // Pin the documented public bounds, including values beyond Int32.
+    let large = Encoder(quality~, window_bits=24, size_hint=1L)
+    let large_bound = encoder_memory_bound(
+      quality~,
+      window_bits=24,
+      size_hint=1L,
+    )
+    let input = Bytes::make(270000, b'A')
+    let encoded = encode_drive(
+      large,
+      input,
+      next_in=() => 17001,
+      next_out=() => 127,
+      check=(e, _) => assert_true(e.memory_usage().to_int64() <= large_bound),
+    )
+    assert_eq(decompress(encoded), input)
+    assert_eq(large.hq_tree.unwrap().forest.length(), 2 << 24)
+    assert_eq(
+      large.hq_tree.unwrap().memory_usage().to_int64(),
+      hq_tree_bound(24),
+    )
+  }
+}
+
+///|
+test "HQ public bounds stay fixed on every target" {
+  for quality in [10, 11] {
     assert_eq(encoder_memory_bound(quality~, window_bits=22), 27197068000L)
     assert_eq(encoder_memory_bound(quality~, window_bits=24), 54464238304L)
+  }
+}
+
+///|
+// Allocate the largest parser capacities once; the phase observer below
+// checks real parser and coding accounting on all targets with small input.
+#cfg(target="native")
+test "HQ allocation bounds use packed nodes and capacity ceilings" {
+  for quality in [10, 11] {
     for bits in [10, 16, 18, 22, 24] {
       let block = ref_input_block(quality, bits)
       let dp = HqDp::new(block, quality)
@@ -156,6 +229,9 @@ fn HqPeak::new() -> HqPeak {
 }
 
 ///|
+// The large binary-alphabet corpus forces archive growth. Native retains
+// this capacity regression; every target still checks both cost passes.
+#cfg(target="native")
 test "HQ real parser peaks include archive growth and both cost passes" {
   for quality in [10, 11] {
     let length = if quality == 10 { 32768 } else { 262144 }
@@ -233,6 +309,7 @@ fn hq_measure(input : Bytes, quality : Int32, window : Int32) -> HqPeak raise {
 test "HQ phase accounting observes splitting and clustering below the bound" {
   for quality in [10, 11] {
     let peak = hq_measure(ref_quality_sample(4, 8192), quality, 18)
+    assert_eq(peak.passes, quality - 9)
     assert_true(peak.blocks > 1)
     assert_true(peak.clusters > 1)
     assert_true(peak.trees_upper > 0L)

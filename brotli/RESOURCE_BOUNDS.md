@@ -120,6 +120,10 @@ enable that optimization. Preparation clears buckets while retaining the
 forest, including across position wraps. The test
 `src/reference_hq_wbtest.mbt`: "H10 tree allocation, preparation and position wrap retain their layout"
 checks the exact byte count, shortened forest and reset lifecycle.
+The full window-24 forest and streaming growth checks are in
+`src/reference_hq_wbtest.mbt`: "H10 full window-24 forests retain their layout and grow within the bound"
+on native; smaller layouts, a short window-24 forest and position wraps run
+on every target, avoiding repeated 128 MiB allocations on the other backends.
 
 The bound adds the larger of parsing and coding scratch, which have separate
 lifetimes. Parsing uses four 32-bit node arrays of `B+1` entries, `B+2`
