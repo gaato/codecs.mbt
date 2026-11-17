@@ -1,5 +1,6 @@
 // Wasm's payload loop uses the producer's fixed-alphabet invariants to
-// avoid repeated range checks. The other targets retain their standard loop.
+// avoid repeated range checks. It pairs literal codes (at most 30 bits)
+// and skips zero-width extras, preserving the same bit sequence.
 
 ///|
 #cfg(target="wasm")
@@ -56,20 +57,34 @@ fn Encoder::write_compressed(
     let cell = sym >> 6
     let ic = cell_insert_base.unsafe_get(cell) + ((sym >> 3) & 7)
     let cc = cell_copy_base.unsafe_get(cell) + (sym & 7)
-    w.write(
-      insert_length_extra.unsafe_get(ic),
-      mb.inserts.unsafe_get(i) - insert_length_base.unsafe_get(ic),
-    )
-    w.write(
-      copy_length_extra.unsafe_get(cc),
-      mb.copies.unsafe_get(i) - copy_length_base.unsafe_get(cc),
-    )
+    let insert_bits = insert_length_extra.unsafe_get(ic)
+    if insert_bits > 0 {
+      w.write(
+        insert_bits,
+        mb.inserts.unsafe_get(i) - insert_length_base.unsafe_get(ic),
+      )
+    }
+    let copy_bits = copy_length_extra.unsafe_get(cc)
+    if copy_bits > 0 {
+      w.write(
+        copy_bits,
+        mb.copies.unsafe_get(i) - copy_length_base.unsafe_get(cc),
+      )
+    }
     let inserts = mb.inserts.unsafe_get(i)
     if w.position() + inserts * MAX_CODE_LENGTH <= budget {
       // The literals' codes, at most 15 bits each, all fit the budget: no
       // check between them can fail.
-      for p in pos..<(pos + inserts) {
-        // p < end, within `data`; a byte indexes the 256 entries.
+      let stop = pos + inserts
+      let mut p = pos
+      while p + 1 < stop {
+        let first = lit.unsafe_get(data.unsafe_get(p).to_int())
+        let second = lit.unsafe_get(data.unsafe_get(p + 1).to_int())
+        let width = first & 15
+        w.write(width + (second & 15), (first >> 4) | (second >> 4 << width))
+        p += 2
+      }
+      if p < stop {
         let e = lit.unsafe_get(data.unsafe_get(p).to_int())
         w.write(e & 15, e >> 4)
       }

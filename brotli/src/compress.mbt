@@ -1,8 +1,8 @@
 ///|
 /// Compresses `input` into a whole Brotli stream. `window_bits` is as for
 /// `Encoder`. At quality 4 the window declared is reduced to what the input
-/// needs (at least 64 KiB), preserving its default output. Qualities 5..11
-/// keep the requested window and pass the input length as `size_hint`, so
+/// needs (at least 64 KiB), preserving its default output. Other qualities
+/// pass the input length as `size_hint` and follow `Encoder`'s window rules, so
 /// an `Encoder` given that hint and window produces the same stream.
 /// `quality` and `dictionary` are as for `Encoder`.
 pub fn compress(
@@ -12,7 +12,7 @@ pub fn compress(
   dictionary? : Dictionary,
 ) -> Bytes {
   let mut wbits = window_bits.clamp(min=10, max=24)
-  let reference = quality.clamp(min=0, max=11) > 4
+  let reference = quality.clamp(min=0, max=11) != 4
   while !reference && wbits > 16 && (1 << (wbits - 1)) - 16 >= input.length() {
     wbits -= 1
   }

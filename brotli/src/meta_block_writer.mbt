@@ -161,10 +161,10 @@ fn Encoder::longest_match(self : Encoder, pos : Int32, end : Int32) -> Int32 {
 }
 
 ///|
-/// Only matches of at least four bytes affect the parse. On native,
+/// Only matches of at least four bytes affect the parse. On native and Wasm,
 /// reject a different prefix before the wider match-length load. Both
 /// four-byte ranges fit because the caller has checked reach and limit.
-#cfg(target="native")
+#cfg(any(target="native", target="wasm"))
 #inline
 fn cached_match_prefix(data : FixedArray[Byte], a : Int32, b : Int32) -> Bool {
   let bytes = data.unsafe_reinterpret_as_bytes()
@@ -172,7 +172,7 @@ fn cached_match_prefix(data : FixedArray[Byte], a : Int32, b : Int32) -> Bool {
 }
 
 ///|
-#cfg(not(target="native"))
+#cfg(not(any(target="native", target="wasm")))
 #inline
 fn cached_match_prefix(
   _data : FixedArray[Byte],

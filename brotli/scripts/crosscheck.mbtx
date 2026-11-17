@@ -154,6 +154,7 @@ async fn main {
     script in [
       "reference/gen_tables.mbtx", "reference/gen_vectors.mbtx", "reference/gen_hq_tables.mbtx",
       "reference/gen_hq_vectors.mbtx",
+      "reference/gen_low_tables.mbtx", "reference/gen_low_vectors.mbtx",
     ] {
     @shell.Cmd("moon", ["run", "brotli/scripts/\{script}", "--check"])
     .output(max_output_bytes=max_output)

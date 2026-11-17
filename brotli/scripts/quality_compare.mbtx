@@ -24,6 +24,9 @@ async fn measure(program : String, args : Array[String]) -> (Bytes, Double) {
 }
 
 async fn main {
+  let cli = @shell.Cmd("moon", ["run", "brotli/scripts/reference/cli.mbtx"]).output()
+  cli.check()
+  let brotli = cli.stdout().trim().to_owned()
   @shell.Cmd("moon", ["build", "--release", "--target", "native", "brotli/src/internal/quality_compare"]).output().check()
   let executable = "_build/native/release/build/gaato/brotli/internal/quality_compare/quality_compare.exe"
   let work = @fs.tmpdir(prefix="brotli-quality-comparison.")
@@ -40,9 +43,9 @@ async fn main {
     })
     let file = "\{work}/input"
     @fs.write_file(file, input)
-    for quality in 4..=11 {
+    for quality in 0..=11 {
       let (ours, ours_ms) = measure(executable, [quality.to_string(), file])
-      let (reference, ref_ms) = measure("brotli", ["-q", quality.to_string(), "-w", "22", "-c", file])
+      let (reference, ref_ms) = measure(brotli, ["-q", quality.to_string(), "-w", "22", "-c", file])
       if quality != 4 { assert_eq(ours, reference) }
       println("| \{kind} | \{quality} | \{ours.length()} | \{reference.length()} | \{ours_ms} | \{ref_ms} |")
     }

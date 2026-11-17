@@ -39,10 +39,10 @@ the same table sizes as an omitted hint. A dictionary index is separate.
 
 | Quality | Effective encoder | No hint / small hint | Hint at least 1 MiB | Backing test |
 |---:|---|---:|---:|---|
-| 0 | 4 | 6,315,516 | 6,315,516 | `src/reference_quality_wbtest.mbt`: "reference qualities: clamping and quality four ignores size hint" |
-| 1 | 4 | 6,315,516 | 6,315,516 | `src/reference_quality_wbtest.mbt`: "reference qualities: clamping and quality four ignores size hint" |
-| 2 | 4 | 6,315,516 | 6,315,516 | `src/reference_quality_wbtest.mbt`: "reference qualities: clamping and quality four ignores size hint" |
-| 3 | 4 | 6,315,516 | 6,315,516 | `src/reference_quality_wbtest.mbt`: "reference qualities: clamping and quality four ignores size hint" |
+| 0 | Reference 0 | 5302407 | 5302407 | `src/reference_low_wbtest.mbt`: "low qualities streaming, flush, dictionary, reset and memory bounds" |
+| 1 | Reference 1 | 6350983 | 6350983 | `src/reference_low_wbtest.mbt`: "low qualities streaming, flush, dictionary, reset and memory bounds" |
+| 2 | Reference 2 | 75326664 | 75326664 | `src/reference_low_wbtest.mbt`: "low qualities streaming, flush, dictionary, reset and memory bounds" |
+| 3 | Reference 3 | 75210808 | 75210808 | `src/reference_low_wbtest.mbt`: "low qualities streaming, flush, dictionary, reset and memory bounds" |
 | 4 | 4 | 6,315,516 | 6,315,516 | `src/bounds_wbtest.mbt`: "memory_usage stays within its bound after every step" |
 | 5 | Reference 5 | 152,790,644 | 154,134,132 | `src/reference_quality_wbtest.mbt`: "reference qualities: random splits, flushes, dictionaries, reset and memory bounds" |
 | 6 | Reference 6 | 154,101,364 | 156,755,572 | `src/reference_quality_wbtest.mbt`: "reference qualities: random splits, flushes, dictionaries, reset and memory bounds" |
@@ -51,6 +51,43 @@ the same table sizes as an omitted hint. A dictionary index is separate.
 | 9 | Reference 9 | 192,931,444 | 192,931,444 | `src/reference_quality_wbtest.mbt`: "reference qualities: random splits, flushes, dictionaries, reset and memory bounds" |
 | 10 | Reference 10 | 27,197,068,000 | 27,197,068,000 | `src/reference_hq_wbtest.mbt`: "HQ streaming splits, wrong hints, flushes, dictionaries and reset stay bounded", "HQ allocation bounds use packed nodes and capacity ceilings", "HQ real parser peaks include archive growth and both cost passes", "HQ phase accounting observes splitting and clustering below the bound" |
 | 11 | Reference 11 | 27,197,068,000 | 27,197,068,000 | `src/reference_hq_wbtest.mbt`: "HQ streaming splits, wrong hints, flushes, dictionaries and reset stay bounded", "HQ allocation bounds use packed nodes and capacity ceilings", "HQ real parser peaks include archive growth and both cost passes", "HQ phase accounting observes splitting and clustering below the bound" |
+
+### Qualities 0 through 3
+
+`src/reference_low_bounds.mbt` enumerates their backing storage. These
+qualities ignore size hints, so both columns coincide. For 0..1, let
+`F = min(1 << w, 524288)`. The encoder retains `F+8` input bytes,
+524,288 read-staging bytes, pending output capacity at most `4*(F+512)`,
+and a fragment-local rewrite buffer of `2*F+511` bytes. The hash table
+has `1 << (min(w,15) | 1)` Int32 entries at q0, or `1 << min(w,17)` at q1.
+The arena also holds 17,552 bytes of constant coding tables, 4,096 bytes
+of command/literal depths, bits, counts and extras, and a 520-byte cached
+command-code buffer. Quality 1 adds command and literal buffers of
+`5*min(F,131072)` bytes. Tables retain their largest allocation until reset.
+
+For 2..3, the input block is 16 KiB, the ring is
+`R = 2*max(1 << w,16384)` and the meta-block limit is `M = min(R,1 << 24)`.
+Input/history, read staging and pending output use the reference formula
+below. The delayed-command threshold is 12,287, so at most
+`2*(min(M/8,12287)+8192+2)` retained command slots are charged at 40 bytes.
+H2/H3 own 262,144 bucket bytes; H2 adds 98,304 bytes of static-dictionary
+lookup tables and 17,552 coding-table bytes. The local coding buffer uses
+`2*M+4104` bytes. Both bounds retain the quality-4 constructor allocations
+and 80 bytes of reference distance caches. A separate Huffman scratch
+envelope enumerates the tree arrays, sorting leaves, traversal stacks,
+run vectors, final codes, histograms and header staging; it does not scale
+with the stream. `memory_usage` reports retained buffers, excluding
+transient phase scratch, runtime headers and garbage awaiting collection.
+The backing test checks its bound after every step at windows 10 and 24
+with wrong hints, random splits, flushes, dictionaries and reset.
+
+`compress_bound(n, quality~, window_bits~)` uses the corresponding fragment
+or input-block unit. At q0/window 10, 65,536 seeded random bytes produce
+65,729 bytes, exceeding the default quality-4 bound of 65,548;
+`src/reference_low_wbtest.mbt`: "low compressed size bounds account for small-window fragments"
+checks this regression and both input distributions and window limits.
+
+### Qualities 5 through 9
 
 For qualities 5..9, let `w` be the window bits, `B` the input block size
 (64 KiB, or at quality 9 `1 << min(18, w)` when `w > 16`),

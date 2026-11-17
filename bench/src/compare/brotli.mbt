@@ -58,15 +58,14 @@ pub fn brotli_pieces() -> Array[Pieces] {
 }
 
 ///|
-/// The Brotli encoders. gaato/brotli has no quality levels: it is called
-/// with its defaults at every level.
+/// The Brotli encoders. gaato/brotli exposes qualities 0 through 11.
 pub fn brotli_compress() -> Array[Compress] {
   [
     {
       name: "gaato/brotli",
-      default_level: 0,
-      max_level: 0,
-      encode: (input, _) => @brotli.compress(input),
+      default_level: 4,
+      max_level: 11,
+      encode: (input, quality) => @brotli.compress(input, quality~),
     },
     {
       name: "hustcer/fbr 0.8.2",

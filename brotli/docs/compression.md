@@ -1,8 +1,8 @@
 # Encoding qualities
 
 Quality 4 is the lazy encoder with one Huffman code per category. Its
-default output and memory bounds are unchanged. Values 0..3 select 4.
-Qualities 5..11 port google/brotli 1.2.1's encoder under
+default output and memory bounds are unchanged, preserving this module's
+original encoder and pinned streams. Qualities 0..3 and 5..11 port google/brotli 1.2.1's encoder under
 MIT; `LICENSE-encoder` contains its notice. The release archive is pinned
 by `scripts/reference/SOURCE.sha256`, cached under the reference script's
 `target/`, and verified before extraction by `source.mbtx`.
@@ -13,7 +13,41 @@ uses the independently installed PATH `brotli` and Node.
 
 ## Reference parameters and output
 
-The port uses H40/H41/H42 for windows up to 16 bits, and H5/H6 or the tagged
+Qualities 0 and 1 port `compress_fragment.c` and
+`compress_fragment_two_pass.c`: one pass with cached command codes, or two
+passes with a 128 KiB literal/command program. The pinned source's stored
+command-code arena is 512 bytes (448 initial bits).
+The fast Huffman builder preserves its count-only Shell-sort ties.
+Qualities 2 and 3 select H2 and H3 at every supported window and size hint,
+with reference greedy parsing and 16 KiB input blocks; H4/H54 are the
+reference's quality 4, which this module deliberately does not select.
+Quality 2 uses shallow static-dictionary search and fixed command/distance
+codes for small command sets; quality 3 uses ordinary dynamic trees.
+
+The q0/q1 encoders reproduce the CLI's 512 KiB read schedule in both modes.
+This schedule matches the pinned CLI in 360 C API probes over windows 10,
+16, 18, 22 and 24, read edges and two output sizes. A full
+512 KiB batch uses `PROCESS`, even when `Finish` is already known; an exact
+multiple ends with an empty `FINISH`. The requested window can split each
+batch further. The declared fast-path window is at least 18 bits.
+Qualities 0..3 ignore the hint. Caller splits therefore do not change output.
+
+Raw dictionaries do not raise the quality in the pinned 1.2.1 implementation.
+Its q0/q1 fragment paths ignore them; H2/H3 have no compound-dictionary
+search. Quality 2 still shifts static-word distances past the raw dictionary,
+so decoding requires that dictionary. Quality 3 ignores it. Flushes terminate
+the current fragment or meta-block and emit byte-aligned metadata. Dictionary
+and flush streams at qualities 0..3 undergo CLI decoder interoperability.
+The native low-quality pins cover 120 CLI digests in both hint modes, including
+fragment/block/read edges, small windows, ring wraps, input-buffer slides,
+random and multilingual
+input. Tests also check wrong hints, random splits, reset and allocation
+bounds after each step. JS, Wasm and Wasm GC run 64 small CLI digests and
+the branch, streaming, flush, dictionary and reset checks on inputs up to
+35 KiB. The larger identity matrix, distant matches and fragment-size bound
+matrix run only on native, keeping portable-target CI time bounded.
+
+Qualities 5..9 use H40/H41/H42 for windows up to 16 bits, and H5/H6 or the tagged
 H58/H68 hashers for larger windows, selected by quality and size hint.
 The tagged search is evaluated with scalar comparisons in the reference's
 visit order. The selector matches the Linux reference: tagged hashers at
@@ -25,8 +59,8 @@ search, command extension, UTF8 contexts, greedy histogram merging,
 block switches, Huffman ties and code-length runs follow the reference.
 Input blocks are 64 KiB at qualities 5..8, up to 256 KiB at 9..11. Several input
 blocks can share a meta-block, up to `min(2 * max(window, input block), 16 MiB)`.
-Reference dictionary hash tables are initialized with the reference hasher;
-quality 4 does not allocate them. The logarithm lookup uses compiled
+Reference dictionary hash tables are initialized only by the qualities that
+search them; quality 4 does not allocate them. The logarithm lookup uses compiled
 constants, preserving the reference's float-to-double rounding.
 
 Qualities 10 and 11 use Brotli's H10 tree directly. It has one 17-bit hash,
@@ -58,8 +92,9 @@ The pinned CLI vectors cover both hint modes, small windows, both hash
 families, multilingual contexts, mixed input, 512 KiB edges and long streams
 through meta-block boundaries and input-buffer slides. The crosscheck
 compares whole streams byte for byte and decodes them with the CLI and
-Node. Dictionary and flush streams require decoder agreement; they use the
-module's dictionary index and do not promise reference encoder identity.
+Node. Dictionary and flush streams require decoder agreement and do not
+promise reference encoder identity. Qualities 4..11 use the module's raw
+dictionary index; the low-quality limitations are described above.
 The shared conformance harness is run from a disposable consumer by
 `scripts/conformance.mbtx`, keeping it outside published dependencies.
 
@@ -72,6 +107,101 @@ with a wrong size hint; only an actual final first input block permits the
 reference's smaller forest allocation.
 
 ## Ratio and time
+
+### All qualities, P8c
+
+Measured on 2026-11-18 from the P8c working sources, Intel Core i5-10400F,
+Linux x86_64, MoonBit 0.10.20+65efd5b93 and the pinned brotli 1.2.1 CLI.
+Both inputs have 1,200,000 bytes and request window 22. `text` repeats a
+sentence; `mixed` replaces 30% of each 10,000-byte region with seeded random
+bytes. Percentages are output/input. Times are means of 15 native process
+runs after warmup, including startup and named-file I/O on both sides,
+under the shared lock and pinned to CPU 2. `scripts/quality_compare.mbtx`
+asserts byte identity for 0..3 and 5..11.
+
+| Input | Quality | MoonBit bytes (%) | CLI bytes (%) | MoonBit ms | CLI ms |
+|---|---:|---:|---:|---:|---:|
+| text | 0 | 673 (0.056%) | 673 (0.056%) | 4.40 | 1.80 |
+| text | 1 | 599 (0.050%) | 599 (0.050%) | 4.80 | 1.33 |
+| text | 2 | 110 (0.009%) | 110 (0.009%) | 5.40 | 2.40 |
+| text | 3 | 90 (0.008%) | 90 (0.008%) | 5.33 | 3.00 |
+| text | 4 | 296 (0.025%) | 86 (0.007%) | 6.47 | 3.80 |
+| text | 5 | 134 (0.011%) | 134 (0.011%) | 5.73 | 3.00 |
+| text | 6 | 134 (0.011%) | 134 (0.011%) | 6.67 | 2.93 |
+| text | 7 | 134 (0.011%) | 134 (0.011%) | 8.00 | 2.60 |
+| text | 8 | 134 (0.011%) | 134 (0.011%) | 10.53 | 2.53 |
+| text | 9 | 134 (0.011%) | 134 (0.011%) | 16.13 | 2.47 |
+| text | 10 | 79 (0.007%) | 79 (0.007%) | 33.80 | 14.87 |
+| text | 11 | 79 (0.007%) | 79 (0.007%) | 38.20 | 17.80 |
+| mixed | 0 | 397453 (33.121%) | 397453 (33.121%) | 15.93 | 9.87 |
+| mixed | 1 | 363449 (30.287%) | 363449 (30.287%) | 15.27 | 9.27 |
+| mixed | 2 | 362930 (30.244%) | 362930 (30.244%) | 22.07 | 11.80 |
+| mixed | 3 | 362264 (30.189%) | 362264 (30.189%) | 23.73 | 12.20 |
+| mixed | 4 | 361212 (30.101%) | 361298 (30.108%) | 20.80 | 16.40 |
+| mixed | 5 | 362446 (30.204%) | 362446 (30.204%) | 31.00 | 13.80 |
+| mixed | 6 | 362446 (30.204%) | 362446 (30.204%) | 39.47 | 15.27 |
+| mixed | 7 | 362446 (30.204%) | 362446 (30.204%) | 48.27 | 16.73 |
+| mixed | 8 | 362446 (30.204%) | 362446 (30.204%) | 67.67 | 21.07 |
+| mixed | 9 | 361899 (30.158%) | 361899 (30.158%) | 122.33 | 35.20 |
+| mixed | 10 | 361068 (30.089%) | 361068 (30.089%) | 474.80 | 294.27 |
+| mixed | 11 | 360938 (30.078%) | 360938 (30.078%) | 1310.87 | 869.73 |
+
+The general ratio adapter also accepts `--qualities 0,1,...,11` (the
+default is all qualities):
+
+```sh
+flock "$GATES_LOCK" taskset -c 2 moon run scripts/compare_codecs.mbtx -- ratio --format brotli --qualities 0,1,2,3,4,5,6,7,8,9,10,11
+```
+
+It measures the selected gaato qualities, compares sizes with the same
+pinned CLI and checks dumped streams using the independently installed
+decoder. Other MoonBit encoders retain their own supported levels.
+
+### P8c quality-4 speed
+
+Measured on 2026-11-18 against the P8b baseline captured before this stage,
+with the same CPU, toolchain and benchmark fixtures described below,
+Node 26.13.1 and moonrun 0.1.20261104 (940aa18).
+All runs use the release profile, hold the shared lock and use CPU 2.
+Four alternating before/after pairs warm both inputs for at least one
+second and discard five text samples. Wasm uses 40 measured samples per
+process; the other targets use 100. Values compare means; negative is
+faster. Every result is within the 1% regression limit. Quality-4 SHA-256
+pins stay unchanged.
+
+| Target | Text change | Binary change |
+|---|---:|---:|
+| Native | -0.55% | 0.35% |
+| JS | -0.34% | 0.26% |
+| Wasm | -7.35% | -2.70% |
+| Wasm GC | -0.37% | -0.96% |
+
+### Brotli test cost
+
+Measured on 2026-11-18 with `moon test --target TARGET brotli/src` in
+the default test profile, excluding compilation (both versions were
+prebuilt), with the versions above. Each before/after batch runs the four
+targets concurrently on separate physical cores 2, 3, 4 and 5 under the
+shared lock. The same target uses the same core in both batches. These
+are single-run local wall times, not CI timings; elapsed differences also
+include scheduling and clock variation. The baseline is the committed P8b
+source saved before P8c. The last column measures only the two new low-quality
+test files, separately on CPU 2 with prebuilt binaries, including launcher
+and process startup; it gives a conservative view of their additional cost.
+
+| Target | Before P8c (s) | After P8c (s) | Change (s) | q0..3 files (s) |
+|---|---:|---:|---:|---:|
+| Native | 269.8 | 298.8 | 29.0 | 2.8 |
+| JS | 328.9 | 338.2 | 9.3 | 1.2 |
+| Wasm | 440.8 | 442.2 | 1.4 | 1.1 |
+| Wasm GC | 119.8 | 121.8 | 2.0 | 0.7 |
+
+The large q0..3 identity and fragment matrices are native-only. Other
+targets retain small branch-covering pins and streaming checks, with inputs
+up to 35 KiB, to keep the stage's portable test cost small.
+
+### Historical P8a and P8b measurements
+
 
 The quality 4..9 table was measured at `6090cb02` on 2026-11-17 on an
 Intel Core i5-10400F, Linux x86_64, MoonBit
@@ -111,7 +241,7 @@ window, versions and 15-run native process method:
 Quality is a tuning preset, so a higher value does not guarantee a smaller
 stream on every input. The CLI itself shows that on these inputs.
 
-An A/B on 2026-11-18 compares the current encoder with `6090cb02`, using
+An A/B on 2026-11-18 compares the P8b encoder with `6090cb02`, using
 the same toolchain and CPU above. The fixtures from
 `bench/src/compare_speed/data_test.mbt` contain 512 KiB of text and 128 KiB
 of binary data. Runs hold the shared lock and use CPU 2. Four alternating
@@ -132,9 +262,11 @@ Native and Wasm reject regular-hasher candidates with the reference's
 unaligned four-byte comparison. GC and JS retain ordered byte comparisons
 and use UInt32 for bounded distances and ring sums, avoiding JS BigInt:
 the ring mask is below 2^25 and match lengths are at most 256 KiB.
-Quality 4 uses its standard writer on native, omits redundant command-table
-range checks on Wasm, and pairs literal codes and skips zero-bit extras on
-GC/JS. These choices preserve the pinned stream and its memory bounds.
+Quality 4 uses its standard writer on native. The Wasm writer uses
+unchecked command-table accesses, pairs literal codes and skips zero-width
+extras, as GC/JS already do. Native and Wasm also reject a different
+four-byte cached-match prefix before the wider match-length load. These
+choices preserve the pinned stream and its memory bounds.
 
 Reproduce from the repository root, with `GATES_LOCK` set to the host's
 shared gate lock to keep concurrent work from skewing the timings:

@@ -46,6 +46,20 @@ fn main {
       [
         for n in [1, 3, 5, 10, 100] => ("fast\{n}", -n)
       ]
+    } else if format == "brotli" && e.name == "gaato/brotli" {
+      @env.get_env_var("BROTLI_QUALITIES")
+      .unwrap_or("0,1,2,3,4,5,6,7,8,9,10,11")
+      .split(",")
+      .map(s => {
+        let q = @string.parse_int(s) catch {
+          _ => fail_with("bad Brotli quality")
+        }
+        guard q >= 0 && q <= 11 else {
+          fail_with("Brotli quality outside 0..11")
+        }
+        ("quality\{q}", q)
+      })
+      .collect()
     } else if e.default_level == e.max_level {
       [("default", e.default_level)]
     } else {

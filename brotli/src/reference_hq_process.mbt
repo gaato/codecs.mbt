@@ -13,7 +13,7 @@ fn Encoder::hq_process(self : Encoder, is_last : Bool, flush : Bool) -> Unit {
   if self.ref_hint == 0L {
     self.ref_hint = self.ref_batch_len.to_int64()
   }
-  let tree = match self.hq_tree {
+  let tree = match self.hq_tree() {
     Some(h) => h
     None => {
       let h = HqTree::new(
@@ -21,7 +21,7 @@ fn Encoder::hq_process(self : Encoder, is_last : Bool, flush : Bool) -> Unit {
         length,
         self.ref_offset + start.to_int64() == 0L && is_last,
       )
-      self.hq_tree = Some(h)
+      self.arena = Some(Hq(h))
       h
     }
   }

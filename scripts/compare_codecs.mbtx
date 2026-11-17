@@ -41,7 +41,7 @@ import {
 //   moon run scripts/compare_codecs.mbtx -- stream [--timeout S] [--only NAME]
 //   moon run scripts/compare_codecs.mbtx -- memory [--timeout S] [--only NAME]
 //   moon run scripts/compare_codecs.mbtx -- claims [--fixtures FILE] [--limit MIB] [--timeout S] [--only NAME]
-//   moon run scripts/compare_codecs.mbtx -- ratio --format zstd|brotli|deflate [--time MS] [--corpus DIR]...
+//   moon run scripts/compare_codecs.mbtx -- ratio --format zstd|brotli|deflate [--qualities 0,1,...,11] [--time MS] [--corpus DIR]...
 //   moon run scripts/compare_codecs.mbtx -- speed [--runs N] [--out DIR]
 // check   (the default) as above; with --pieces, the decoders that take
 //         input in pieces run over the valid streams fed P bytes at a time,
@@ -1222,15 +1222,17 @@ async fn memory(dir : String, timeout_s : Int32, only : String) -> Unit {
 }
 
 ///|
-/// `ratio`: each encoder at its default and highest level over the bench
-/// text and binary, and over the files of the directories given: sizes and
-/// speed. The bench streams are also checked with the reference decoders.
+/// `ratio`: selected Brotli qualities (all 0..11 by default), or the other
+/// encoders' default and highest levels, over the bench text and binary
+/// and files of the directories given: sizes and speed. The bench streams
+/// are also checked with the reference decoders.
 async fn ratio(
   dir : String,
   format : String,
   min_ms : Int32,
   only : String,
   dirs : Array[String],
+  qualities : Array[Int],
 ) -> Unit {
   @shell.Cmd("moon", [
     "build", "--release", "--target", "native", "bench/src/compare_ratio",
@@ -1268,6 +1270,7 @@ async fn ratio(
       let out = @shell.Cmd(ratio_tool, [format, min_ms.to_string(), path], env={
         "ONLY": name,
         "DUMP": "\{work}/dump",
+        "BROTLI_QUALITIES": qualities.map(q=>q.to_string()).join(","),
       }).output(max_output_bytes=1 << 24)
       if out.exit_code() != 0 {
         println(
@@ -1279,7 +1282,7 @@ async fn ratio(
     }
   }
   // Zstandard at levels one through twelve and the five negative levels
-  // the ratio driver measures, and Brotli at three settings;
+  // the ratio driver measures, and Brotli at the selected qualities;
   // the DEFLATE table has no reference row. The file is named, not piped, as
   // brotli then knows its size, which changes some streams.
   if format == "zstd" && (only == "" || only == "gaato/zstd") {
@@ -1304,10 +1307,14 @@ async fn ratio(
       }
     }
   }
-  if format == "brotli" && only == "" {
-    for args in [["-q", "4"], ["-q", "9", "-w", "22"], ["-q", "11"]] {
+  if format == "brotli" && (only == "" || only == "gaato/brotli") {
+    let cli = @shell.Cmd("moon", ["run", "brotli/scripts/reference/cli.mbtx"]).output()
+    cli.check()
+    let pinned = cli.stdout().trim().to_owned()
+    for q in qualities {
+      let args = ["-q", q.to_string(), "-w", "22"]
       for path in paths {
-        let out = @shell.Cmd("brotli", [..args, "-c", path]).output(
+        let out = @shell.Cmd(pinned, [..args, "-c", path]).output(
           max_output_bytes=1 << 28,
         )
         out.check()
@@ -1636,6 +1643,7 @@ async fn main {
   let mut runs = 3
   let mut out = ""
   let dirs = []
+  let mut qualities = [0,1,2,3,4,5,6,7,8,9,10,11]
   let mut i = 1
   if args.get(1) is Some(c) && !c.has_prefix("--") {
     command = c
@@ -1649,6 +1657,10 @@ async fn main {
       "--format" => format = args[i + 1]
       "--time" => min_ms = @string.parse_int(args[i + 1])
       "--corpus" => dirs.push(args[i + 1])
+      "--qualities" => {
+        qualities = args[i+1].split(",").map(s=>@string.parse_int(s) catch { _ => setup_failure("invalid quality") }).collect()
+        if qualities.is_empty() || qualities.any(q=>q<0 || q>11) { setup_failure("qualities must be in 0..11") }
+      }
       "--fixtures" => fixtures = args[i + 1]
       "--limit" => limit_mib = @string.parse_int(args[i + 1])
       "--runs" => runs = @string.parse_int(args[i + 1])
@@ -1676,7 +1688,7 @@ async fn main {
     "stream" => stream(dir, timeout_s, only)
     "memory" => memory(dir, timeout_s, only)
     "claims" => claims(dir, fixtures, limit_mib, timeout_s, only)
-    "ratio" => ratio(dir, format, min_ms, only, dirs)
+    "ratio" => ratio(dir, format, min_ms, only, dirs, qualities)
     "speed" => speed(if out == "" { "\{dir}/speed" } else { out }, runs)
     c => setup_failure("unknown command: \{c}")
   }

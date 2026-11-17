@@ -1,17 +1,32 @@
 ///|
-/// The most bytes `compress` writes for `n` bytes of input, whatever the
-/// window: the stream header, and for each meta-block of up to 64 KiB its
-/// bytes and 5 more, since a meta-block that would come out larger than
+/// The most bytes `compress` writes for `n` bytes of input at the given
+/// quality and window (clamped as by `Encoder`). Defaults preserve the
+/// quality-4 bound. Qualities 0..1 use fragments of min(window, 512 KiB),
+/// 2..3 use 16 KiB input blocks, and the remaining qualities use a
+/// conservative 64 KiB unit. Each unit needs its bytes and 5 more, since
+/// a meta-block that would come out larger than
 /// its bytes is written uncompressed (4 header bytes) and the last one
 /// then needs an empty last meta-block after it. An `Encoder`'s stream of
 /// `n` bytes is within it too, plus 7 bytes for each `Flush` (the meta-block
 /// it ends, and the empty metadata block that pads it to a byte). A
 /// negative `n` counts as 0; past 2^62 the result is the largest Int64.
-pub fn compress_bound(n : Int64) -> Int64 {
+pub fn compress_bound(
+  n : Int64,
+  quality~ : Int32 = 4,
+  window_bits~ : Int32 = 22,
+) -> Int64 {
   let n = n.max(0L)
   // Past 2^62 the bound saturates at the largest Int64 rather than wrap.
   guard n <= 0x3FFFFFFFFFFFFFFFL else { return 0x7FFFFFFFFFFFFFFFL }
-  n + 5L * (n / BLOCK_SIZE.to_int64() + 1L) + 2L
+  let q = quality.clamp(min=0, max=11)
+  let block = if q <= 1 {
+    1L << window_bits.clamp(min=10, max=24).min(19)
+  } else if q <= 3 {
+    16384L
+  } else {
+    BLOCK_SIZE.to_int64()
+  }
+  n + 5L * (n / block + 1L) + 2L
 }
 
 ///|
@@ -42,12 +57,19 @@ pub fn decoder_memory_bound(max_window_bits~ : Int32 = 24) -> Int64 {
 /// packed cost nodes, match archive, block partitions and clustering queues.
 /// The hint does not change their bound. This worst-case bound includes
 /// pathological block partitions; typical retained memory is much smaller.
+/// Qualities 0..1 bound fragment input, rewrite storage, hash and program
+/// buffers; 2..3 bound their simple hashers, delayed commands and coding
+/// buffers. Their hints do not affect allocation. RESOURCE_BOUNDS.md
+/// derives each quality's formula and lists the backing tests.
 pub fn encoder_memory_bound(
   window_bits~ : Int32 = 22,
   quality~ : Int32 = 4,
   size_hint? : Int64,
 ) -> Int64 {
   let quality = quality.clamp(min=0, max=11)
+  if quality <= 3 {
+    return low_encoder_bound(quality, window_bits)
+  }
   if quality >= 10 {
     return hq_encoder_bound(quality, window_bits)
   }
