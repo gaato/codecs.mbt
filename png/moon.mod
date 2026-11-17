@@ -23,5 +23,5 @@ preferred_target = "native"
 import {
   "gaato/codec@0.1.1",
   "gaato/codec_image@0.1.0",
-  "gaato/deflate@0.3.0",
+  "gaato/deflate@0.4.0",
 }
