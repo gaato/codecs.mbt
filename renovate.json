@@ -33,6 +33,41 @@
         "gaato/.github"
       ],
       "enabled": false
+    },
+    {
+      "description": "Reference sources move only with a port (see customManagers), so they wait on the dashboard instead of opening a PR whose SOURCE.sha256 check fails.",
+      "matchPackageNames": [
+        "google/brotli",
+        "ebiggers/libdeflate"
+      ],
+      "dependencyDashboardApproval": true
+    }
+  ],
+  "customManagers": [
+    {
+      "description": "The reference sources the encoders are ported from and checked against byte for byte (brotli for gaato/brotli, libdeflate for gaato/deflate). Moving one means porting its changes and regenerating the pinned vectors, so Renovate only lists the release; SOURCE.sha256 and the port are updated by hand.",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^brotli/scripts/reference/source\\.mbtx$/"
+      ],
+      "matchStrings": [
+        "https://github\\.com/google/brotli/archive/refs/tags/v(?<currentValue>[0-9.]+)\\.tar\\.gz"
+      ],
+      "depNameTemplate": "google/brotli",
+      "datasourceTemplate": "github-tags",
+      "extractVersionTemplate": "^v(?<version>\\d+\\.\\d+\\.\\d+)$"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^scripts/reference/libdeflate/gen_vectors\\.mbtx$/"
+      ],
+      "matchStrings": [
+        "github\\.com/ebiggers/libdeflate/releases/download/v(?<currentValue>[0-9.]+)/"
+      ],
+      "depNameTemplate": "ebiggers/libdeflate",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>\\d+\\.\\d+)$"
     }
   ]
 }
