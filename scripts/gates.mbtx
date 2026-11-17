@@ -11,13 +11,18 @@ import {
 // Runs the repository validation suite.
 //
 // Usage, from the repository root:
-//   moon run scripts/gates.mbtx -- [--no-js] [--no-wasm] [--no-prove] [--second-solver] [--full]
+//   moon run scripts/gates.mbtx -- [--only PART] [--no-js] [--no-wasm] [--no-prove] [--second-solver] [--full]
 //
-// The coverage ledgers are checked every time (scripts/coverage_report.mbtx):
+// PART is checks, test-native, test-js, test-wasm, test-wasm-gc, coverage,
+// crosscheck, prove or fmt. CI runs these independently to keep wall time
+// bounded by the longest part. Without --only the local sequence is unchanged.
+//
+// The complete sequence checks the coverage ledgers (scripts/coverage_report.mbtx):
 // a gap a test should close fails here as it fails in CI. --full also runs
 // the crosschecks of the encoders against the reference decoders (zstd,
-// brotli, deflate, snappy, lz4 and lzw's scripts/crosscheck.mbtx), as CI does on every push;
-// they take some minutes, so a quick local run leaves them out.
+// brotli, deflate, snappy, lz4 and lzw's scripts/crosscheck.mbtx), as CI's crosscheck part does;
+// they take some minutes, so a quick local run leaves them out. Selecting
+// --only crosscheck requests them directly, without also needing --full.
 //
 // --no-prove skips `moon prove` (for a machine without Z3 4.16.0); the proof
 // ledgers are still checked against the code. --second-solver proves again
@@ -62,6 +67,12 @@ async fn ledgered() -> Array[String] {
 }
 
 ///|
+/// Selects a part, or the complete legacy sequence when no part was requested.
+fn selected(only : String?, part : String) -> Bool {
+  only is None || only == Some(part)
+}
+
+///|
 async fn main {
   let targets = ["native"]
   let mut skip_js = false
@@ -69,8 +80,32 @@ async fn main {
   let mut skip_prove = false
   let mut second_solver = false
   let mut full = false
+  let mut only : String? = None
+  let mut expect_part = false
   for arg in @env.args()[1:] {
+    if expect_part {
+      match arg {
+        "checks"
+        | "test-native"
+        | "test-js"
+        | "test-wasm"
+        | "test-wasm-gc"
+        | "coverage"
+        | "crosscheck"
+        | "prove"
+        | "fmt" => only = Some(arg)
+        _ => die(2, "unknown gates part: \{arg}")
+      }
+      expect_part = false
+      continue
+    }
     match arg {
+      "--only" => {
+        if only is Some(_) {
+          die(2, "--only accepts one part")
+        }
+        expect_part = true
+      }
       "--full" => full = true
       "--no-js" => skip_js = true
       "--no-wasm" => skip_wasm = true
@@ -79,84 +114,95 @@ async fn main {
       _ => die(2, "unknown option: \{arg}")
     }
   }
+  if expect_part {
+    die(2, "--only needs a part")
+  }
   if !skip_js {
     targets.push("js")
   }
   if !skip_wasm {
     targets.append(["wasm", "wasm-gc"])
   }
-  // Every module's CHANGELOG opens with [Unreleased] and has a heading for its version.
-  run("moon", ["run", "scripts/release.mbtx", "--", "check"])
-  // The module READMEs, links and doc comments keep the documentation rules
-  // shared by every gaato MoonBit repository (scripts/docs_audit.mbtx).
-  run("moon", ["run", "scripts/docs_audit.mbtx", "--self-test"])
-  for dir in ledgered() {
-    // Every enforced limit in RESOURCE_BOUNDS.md names tests that exist.
-    run("moon", ["run", "scripts/bounds_check.mbtx", "--", dir])
-  }
-  // The registry index, for the workspace and the scripts' imports.
-  run("moon", ["update"])
-  // The modules' copies of parts/ are what parts/ holds.
-  run("moon", ["run", "scripts/gen_parts.mbtx", "--", "--check"])
-  // The proof that reversing a code twice gives it back is what its generator
-  // writes.
-  run("moon", ["run", "scripts/gen_proof_reverse.mbtx", "--", "--check"])
-  // Every proof ledger (PROOFS.md) agrees with the code: the proved functions
-  // have contracts, every trusted bridge is listed with tests that exist.
-  for dir in ledgered() {
-    if @fs.exists("\{dir}/PROOFS.md") {
-      run("moon", ["run", "scripts/proof_check.mbtx", "--", dir])
+  if selected(only, "checks") {
+    // Every module's CHANGELOG opens with [Unreleased] and has a heading for its version.
+    run("moon", ["run", "scripts/release.mbtx", "--", "check"])
+    // The module READMEs, links and doc comments keep the documentation rules
+    // shared by every gaato MoonBit repository (scripts/docs_audit.mbtx).
+    run("moon", ["run", "scripts/docs_audit.mbtx", "--self-test"])
+    for dir in ledgered() {
+      // Every enforced limit in RESOURCE_BOUNDS.md names tests that exist.
+      run("moon", ["run", "scripts/bounds_check.mbtx", "--", dir])
     }
+    // The registry index, for the workspace and the scripts' imports.
+    run("moon", ["update"])
+    // The modules' copies of parts/ are what parts/ holds.
+    run("moon", ["run", "scripts/gen_parts.mbtx", "--", "--check"])
+    // The proof that reversing a code twice gives it back is what its generator
+    // writes.
+    run("moon", ["run", "scripts/gen_proof_reverse.mbtx", "--", "--check"])
+    // Every proof ledger (PROOFS.md) agrees with the code: the proved functions
+    // have contracts, every trusted bridge is listed with tests that exist.
+    for dir in ledgered() {
+      if @fs.exists("\{dir}/PROOFS.md") {
+        run("moon", ["run", "scripts/proof_check.mbtx", "--", dir])
+      }
+    }
+    // Generated inputs are current: zstd's vectors and the benchmarks' (the zstd
+    // and brotli commands decompress them to what the generators produce),
+    // DEFLATE's, zlib's and gzip's (Node's zlib and the gzip command decompress
+    // them, and zlib still answers what they record for the crafted streams and
+    // the corruptions), and the conformance suite's vectors (an extract of each
+    // format's vectors).
+    run("moon", ["run", "zstd/scripts/gen_vectors.mbtx", "--", "--check"])
+    run("moon", ["run", "zstd/scripts/gen_dict_vectors.mbtx", "--", "--check"])
+    run("moon", ["run", "brotli/scripts/gen_vectors.mbtx", "--", "--check"])
+    run("moon", ["run", "brotli/scripts/gen_dict_vectors.mbtx", "--", "--check"])
+    run("moon", ["run", "scripts/gen_deflate_vectors.mbtx", "--", "--check"])
+    run("moon", [
+      "run", "scripts/reference/libdeflate/gen_vectors.mbtx", "--", "--check",
+    ])
+    run("moon", [
+      "run", "deflate/scripts/gen_deflate64_vectors.mbtx", "--", "--check",
+    ])
+    // The streams the snap crate writes, which the decoder is held to and the
+    // encoder matches.
+    run("moon", ["run", "snappy/scripts/gen_vectors.mbtx", "--", "--check"])
+    // What lz4 1.10.0's library writes, which the decoder is held to and the
+    // encoder matches to the byte.
+    run("moon", ["run", "lz4/scripts/gen_vectors.mbtx", "--", "--check"])
+    // What weezl and compress write, which the decoder is held to and the
+    // encoder matches where they agree.
+    run("moon", ["run", "lzw/scripts/gen_vectors.mbtx", "--", "--check"])
+    // Seeded corruptions of the zstd and brotli vectors, with the zstd and
+    // brotli commands' verdicts, which the decoders are held to.
+    run("moon", ["run", "scripts/gen_oracle_vectors.mbtx", "--", "--check"])
+    run("moon", ["run", "scripts/gen_conformance_vectors.mbtx", "--", "--check"])
+    run("moon", ["run", "scripts/gen_bench_data.mbtx", "--", "--check"])
+    // PngSuite's images, with pypng's answer for each.
+    run("moon", ["run", "scripts/gen_png_vectors.mbtx", "--", "--check"])
+    // Animated PNGs, with the png crate's frames for each.
+    run("moon", ["run", "scripts/gen_apng_vectors.mbtx", "--", "--check"])
   }
-  // Generated inputs are current: zstd's vectors and the benchmarks' (the zstd
-  // and brotli commands decompress them to what the generators produce),
-  // DEFLATE's, zlib's and gzip's (Node's zlib and the gzip command decompress
-  // them, and zlib still answers what they record for the crafted streams and
-  // the corruptions), and the conformance suite's vectors (an extract of each
-  // format's vectors).
-  run("moon", ["run", "zstd/scripts/gen_vectors.mbtx", "--", "--check"])
-  run("moon", ["run", "zstd/scripts/gen_dict_vectors.mbtx", "--", "--check"])
-  run("moon", ["run", "brotli/scripts/gen_vectors.mbtx", "--", "--check"])
-  run("moon", ["run", "brotli/scripts/gen_dict_vectors.mbtx", "--", "--check"])
-  run("moon", ["run", "scripts/gen_deflate_vectors.mbtx", "--", "--check"])
-  run("moon", [
-    "run", "scripts/reference/libdeflate/gen_vectors.mbtx", "--", "--check",
-  ])
-  run("moon", [
-    "run", "deflate/scripts/gen_deflate64_vectors.mbtx", "--", "--check",
-  ])
-  // The streams the snap crate writes, which the decoder is held to and the
-  // encoder matches.
-  run("moon", ["run", "snappy/scripts/gen_vectors.mbtx", "--", "--check"])
-  // What lz4 1.10.0's library writes, which the decoder is held to and the
-  // encoder matches to the byte.
-  run("moon", ["run", "lz4/scripts/gen_vectors.mbtx", "--", "--check"])
-  // What weezl and compress write, which the decoder is held to and the
-  // encoder matches where they agree.
-  run("moon", ["run", "lzw/scripts/gen_vectors.mbtx", "--", "--check"])
-  // Seeded corruptions of the zstd and brotli vectors, with the zstd and
-  // brotli commands' verdicts, which the decoders are held to.
-  run("moon", ["run", "scripts/gen_oracle_vectors.mbtx", "--", "--check"])
-  run("moon", ["run", "scripts/gen_conformance_vectors.mbtx", "--", "--check"])
-  run("moon", ["run", "scripts/gen_bench_data.mbtx", "--", "--check"])
-  // PngSuite's images, with pypng's answer for each.
-  run("moon", ["run", "scripts/gen_png_vectors.mbtx", "--", "--check"])
-  // Animated PNGs, with the png crate's frames for each.
-  run("moon", ["run", "scripts/gen_apng_vectors.mbtx", "--", "--check"])
   // From the workspace root, check and test cover every member.
   let cc = match @env.get_env_var("MOON_CC") {
     Some(cc) if cc != "" => cc
     _ => "cc"
   }
   for t in targets {
-    run("moon", ["check", "--deny-warn", "--target", t])
-    run("timeout", ["600", "moon", "test", "--target", t], env={ "MOON_CC": cc })
+    if selected(only, "test-\{t}") {
+      run("moon", ["check", "--deny-warn", "--target", t])
+      run("timeout", ["600", "moon", "test", "--target", t], env={
+        "MOON_CC": cc,
+      })
+    }
   }
   // Every uncovered line of every ledgered module is in its TEST_COVERAGE.md
   // ledger, within budget.
-  run("moon", ["run", "scripts/coverage_report.mbtx"], env={ "MOON_CC": cc })
+  if selected(only, "coverage") {
+    run("moon", ["run", "scripts/coverage_report.mbtx"], env={ "MOON_CC": cc })
+  }
   // The encoders' streams decode with the reference decoders.
-  if full {
+  if selected(only, "crosscheck") && (full || only == Some("crosscheck")) {
     for dir in ["zstd", "brotli", "deflate", "snappy", "lz4", "lzw"] {
       run("moon", ["run", "\{dir}/scripts/crosscheck.mbtx"], env={
         "MOON_CC": cc,
@@ -164,22 +210,27 @@ async fn main {
     }
   }
   // The proofs, with Z3, then (on request) CVC5.
-  if !skip_prove {
+  if selected(only, "prove") && !skip_prove {
     run("moon", ["run", "scripts/prove.mbtx"])
     if second_solver {
       run("moon", ["run", "scripts/prove.mbtx", "--", "--solver", "cvc5"])
     }
   }
-  run("moon", ["fmt", "--check"])
-  run("moon", ["info"])
-  // Only meaningful in CI: in a jj working copy `git diff` compares against the parent change,
-  // so uncommitted edits would look stale. Set CHECK_MBTI=1 to enforce locally.
-  if @env.get_env_var("CI") == Some("true") ||
-    @env.get_env_var("CHECK_MBTI") == Some("1") {
-    let code = @shell.Cmd("git", ["diff", "--exit-code", "--", "*.mbti"]).status()
-    if code != 0 {
-      die(1, "pkg.generated.mbti is stale: run 'moon info' and commit")
+  if selected(only, "fmt") {
+    run("moon", ["fmt", "--check"])
+    run("moon", ["info"])
+    // Only meaningful in CI: in a jj working copy `git diff` compares against the parent change,
+    // so uncommitted edits would look stale. Set CHECK_MBTI=1 to enforce locally.
+    if @env.get_env_var("CI") == Some("true") ||
+      @env.get_env_var("CHECK_MBTI") == Some("1") {
+      let code = @shell.Cmd("git", ["diff", "--exit-code", "--", "*.mbti"]).status()
+      if code != 0 {
+        die(1, "pkg.generated.mbti is stale: run 'moon info' and commit")
+      }
     }
   }
-  println("gates: OK")
+  match only {
+    None => println("gates: OK")
+    Some(part) => println("gates (\{part}): OK")
+  }
 }
