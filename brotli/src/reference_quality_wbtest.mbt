@@ -37,6 +37,18 @@ fn ref_quality_sample(kind : Int32, size : Int32) -> Bytes {
       (state >> 24).to_byte()
     } else if kind == 4 {
       (((state >> 24) & 31U).reinterpret_as_int() + 32 * ((i / 1024) & 7)).to_byte()
+    } else if kind == 6 {
+      if i >= 4000 {
+        data[i - 4000]
+      } else {
+        (state >> 24).to_byte()
+      }
+    } else if kind == 5 {
+      if i >= 90000 {
+        data[i - 90000]
+      } else {
+        (state >> 24).to_byte()
+      }
     } else if i % 10000 < 6000 {
       text[i % text.length()]
     } else if i >= 4096 && i % 10000 < 8000 {
@@ -104,7 +116,8 @@ test "reference qualities: random splits, flushes, dictionaries, reset and memor
 test "reference qualities: clamping and quality four ignores size hint" {
   let input = ref_quality_sample(2, 100000)
   let original = compress(input)
-  for quality in [-2147483648, 0, 1, 2, 3, 4] {
+  assert_eq(compress(input, quality=-2147483648), compress(input, quality=0))
+  for quality in [4] {
     assert_eq(compress(input, quality~), original)
     let baseline = encode_drive(Encoder(quality~), input, next_in=() => 1231, next_out=() => {
       997

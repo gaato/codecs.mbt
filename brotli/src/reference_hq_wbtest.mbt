@@ -21,7 +21,7 @@ test "HQ small split streams preserve bytes across hints and reset" {
       assert_eq(encoded, expected)
       assert_eq(decompress(encoded), input)
       e.reset()
-      assert_true(e.hq_tree is None)
+      assert_true(e.hq_tree() is None)
       assert_eq(
         encode_drive(e, reset_input, next_in=() => 3, next_out=() => 1),
         reset_expected,
@@ -69,7 +69,7 @@ test "HQ streaming splits, wrong hints, flushes, dictionaries and reset stay bou
         assert_eq(encoded, expected)
         assert_eq(decompress(encoded), input)
         e.reset()
-        assert_true(e.hq_tree is None)
+        assert_true(e.hq_tree() is None)
         assert_eq(
           encode_drive(e, b"reset dictionary compression", next_in=() => 3, next_out=() => {
             1
@@ -117,16 +117,16 @@ test "H10 tree allocation, preparation and position wrap retain their layout" {
     e.ref_processed = 128
     e.ref_offset = 3221225472L - 192L
     let tree = HqTree::new(10, 128, false)
-    e.hq_tree = Some(tree)
+    e.arena = Some(Hq(tree))
     e.ref_process(false, false)
-    assert_true(physical_equal(e.hq_tree.unwrap(), tree))
+    assert_true(physical_equal(e.hq_tree().unwrap(), tree))
     assert_false(tree.prepared)
     tree.buckets.fill(7U)
     tree.prepare()
     assert_true(tree.buckets.all(x => x == tree.invalid))
     assert_eq(tree.memory_usage().to_int64(), hq_tree_bound(10))
     e.reset()
-    assert_true(e.hq_tree is None)
+    assert_true(e.hq_tree() is None)
     assert_eq(
       encoder_memory_bound(quality~, size_hint=1L),
       encoder_memory_bound(quality~, size_hint=1073741824L),
@@ -163,9 +163,9 @@ test "H10 full window-24 forests retain their layout and grow within the bound" 
       check=(e, _) => assert_true(e.memory_usage().to_int64() <= large_bound),
     )
     assert_eq(decompress(encoded), input)
-    assert_eq(large.hq_tree.unwrap().forest.length(), 2 << 24)
+    assert_eq(large.hq_tree().unwrap().forest.length(), 2 << 24)
     assert_eq(
-      large.hq_tree.unwrap().memory_usage().to_int64(),
+      large.hq_tree().unwrap().memory_usage().to_int64(),
       hq_tree_bound(24),
     )
   }
@@ -244,7 +244,7 @@ test "HQ real parser peaks include archive growth and both cost passes" {
     e.data_len = length
     let peak = HqPeak::new()
     let tree = HqTree::new(18, length, true, peak~)
-    e.hq_tree = Some(tree)
+    e.arena = Some(Hq(tree))
     e.hq_parse(tree, quality, 0, length, 0U)
     let dp_bytes = 20L * length.to_int64() + 6408L
     assert_true(!e.ref_commands.unwrap().is_empty())
@@ -279,12 +279,14 @@ fn hq_measure(input : Bytes, quality : Int32, window : Int32) -> HqPeak raise {
   let block = ref_input_block(quality, window)
   // Install exactly the tree hq_process would construct for the first block,
   // with the observer attached. A hint never shortens a streaming forest.
-  e.hq_tree = Some(
-    HqTree::new(
-      window,
-      input.length().min(block),
-      input.length() <= block,
-      peak~,
+  e.arena = Some(
+    Hq(
+      HqTree::new(
+        window,
+        input.length().min(block),
+        input.length() <= block,
+        peak~,
+      ),
     ),
   )
   let encoded = encode_drive(

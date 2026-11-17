@@ -9,8 +9,10 @@ never does. Every breaking change is listed with a migration note.
 
 ### Added
 
-- `quality` on `Encoder`, `compress` and `encoder_memory_bound`, defaulting to 4 and clamped to 0..11. Qualities 5..9 port google/brotli 1.2.1's hashers, static dictionary search, greedy block splitting, histogram merging and context models. Qualities 10..11 port its H10 binary tree, Zopfli cost parsing, entropy-code block splitting, context histogram clustering and distance-parameter selection. Qualities 0..3 select 4. Quality 4 retains its output and memory bounds.
-- `Encoder(size_hint=n)` steers reference parameter choices without recording or checking the length. An incorrect hint still produces a valid stream. `compress` passes the input length and retains the requested window at qualities 5..11, matching a streaming encoder given the same hint and window. Without a hint, the encoder follows the CLI's stdin mode on a fixed 512 KiB read schedule. `encoder_memory_bound` also accepts the hint because it can select larger tables at qualities 5 and 6; qualities 10 and 11 make the same choices in either mode.
+- `quality` on `Encoder`, `compress` and `encoder_memory_bound`, defaulting to 4 and clamped to 0..11. Qualities 5..9 port google/brotli 1.2.1's hashers, static dictionary search, greedy block splitting, histogram merging and context models. Qualities 10..11 port its H10 binary tree, Zopfli cost parsing, entropy-code block splitting, context histogram clustering and distance-parameter selection. Qualities 0..1 port its one-pass and two-pass fragment encoders; 2..3 port H2/H3 and reference greedy parsing. Quality 4 retains its output and memory bounds.
+- `Encoder(size_hint=n)` steers reference parameter choices without recording or checking the length. An incorrect hint still produces a valid stream. `compress` passes the input length and retains the requested window at reference qualities (0..3 and 5..11), matching a streaming encoder given the same hint and window. Without a hint, the encoder follows the CLI's stdin mode on a fixed 512 KiB read schedule. `encoder_memory_bound` also accepts the hint because it can select larger tables at qualities 5 and 6; qualities 0..3, 10 and 11 make the same choices in either mode.
+
+- Optional `quality` and `window_bits` arguments on `compress_bound`, preserving its default quality-4 result and accounting for the smaller fragment/block sizes at qualities 0..3.
 
 ### Fixed
 

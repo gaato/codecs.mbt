@@ -9,7 +9,7 @@ import {
 // Values
 pub fn compress(BytesView, quality? : Int32, window_bits? : Int32, dictionary? : Dictionary) -> Bytes
 
-pub fn compress_bound(Int64) -> Int64
+pub fn compress_bound(Int64, quality? : Int32, window_bits? : Int32) -> Int64
 
 pub fn decoder_memory_bound(max_window_bits? : Int32) -> Int64
 

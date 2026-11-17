@@ -94,8 +94,8 @@ regression in `src/reference_hq_wbtest.mbt` run on native only. These remain
 part of native coverage; moving them does not relax any uncovered-line
 budget.
 
-Snapshot at the last full measurement (2026-11-18): **96.5 %** (3340/3460
-lines); the 120 uncovered lines are ledgered below, most of them the Wasm, JS and
+Snapshot at the last full measurement (2026-11-18): **96.9 %** (3973/4098
+lines); the 125 uncovered lines are ledgered below, most of them the Wasm, JS and
 Wasm GC variants that native does not compile.
 
 ## Policy
@@ -128,6 +128,10 @@ Must be covered by tests:
   both cost passes, and q10's literal-estimator scratch. The phase observer
   checks actual capacities against the parser bound separately from coding;
   a dominant coding bound cannot mask omitted parser allocations.
+- Qualities 0..3: 120 pinned CLI digests in the native identity matrix and
+  64 small digests on JS, Wasm and Wasm GC. Branch, split, flush, dictionary,
+  reset and allocation checks run on all targets; the large fragment and
+  distant-match matrices run only on native to keep portable CI tests cheap.
 
 Accepted as uncovered (needs a row):
 
@@ -144,9 +148,11 @@ Budgets are the exact uncovered counts: the script fails on any difference.
 
 | File | Budget | Reason |
 | --- | --- | --- |
+| src/reference_low_bits.mbt | 1 | The six-nibble fragment header needs more than 1 MiB of input. The CLI-compatible scheduler caps each q0/q1 fragment at 512 KiB, including raw fallback. Four- and five-nibble headers, length patches, fallback and bit offsets are covered by the low-quality CLI pins and streaming tests. |
+| src/reference_low_encoder.mbt | 1 | The no-input, no-action guard in `quick_process`: the fixed-read scheduler calls only with a nonempty input block or `Flush`/`Finish`. The low-quality tests cover empty and repeated flushes, empty finish, random splits, reset and both hint modes. |
 | src/decoder.mbt | 1 | In `next_aligned_byte`, loading a byte from `stash`: uncompressed and metadata bytes would come from it only if `stash` held bytes there, and it never does. A unit leaves bytes in `stash` only when they fall short of what it needs, so when it completes it has consumed them all; the byte-aligned loops start after that unit. |
-| src/meta_block_writer.mbt | 1 | The `cached_match_prefix` fallback for Wasm, JS and Wasm GC returns true, leaving prefix comparison to their match-length routine. Native compiles the four-byte rejection instead. The same quality-4 SHA-256 pins run on all four targets. |
-| src/meta_block_writer_wasm.mbt | 42 | The Wasm quality-4 payload loop uses the parser's fixed command and alphabet limits to omit repeated range checks. Native compiles the standard loop and GC/JS their paired-code loop. The quality-4 SHA-256 pins, split and output-budget tests run on all four targets. |
+| src/meta_block_writer.mbt | 1 | The `cached_match_prefix` fallback for JS and Wasm GC returns true, leaving prefix comparison to their match-length routine. Native and Wasm compile the four-byte rejection instead. The same quality-4 SHA-256 pins run on all four targets. |
+| src/meta_block_writer_wasm.mbt | 45 | The Wasm quality-4 payload loop uses the parser's fixed command and alphabet limits to omit repeated range checks, pairs literal codes (at most 30 bits) and skips zero-width extras. Native compiles the standard loop; GC/JS use paired codes with checked command accesses. The quality-4 SHA-256 pins, split and output-budget tests run on all four targets. |
 | src/meta_block_writer_portable.mbt | 35 | The GC/JS quality-4 writer pairs literal codes and skips zero-bit command extras. Native compiles the standard loop and Wasm its unchecked command-table loop. The unchanged quality-4 SHA-256 pins run on GC and JS, including flushes and windows 10..24; the gates also run the split and output-budget tests there. |
 | src/internal/bits/bit_packer.mbt | 10 | `BitPacker::write`, `BitPacker::write_fitting` and `BitPacker::flush` for JS (`#cfg(target="js")`), the 32-bit accumulator moved a byte at a time: the ledger measures native, which compiles the 64-bit `write` and the eight-byte `flush` instead. The gates run the same tests on JS: `src/internal/bits/bit_packer_test.mbt` and the encoder's, including the SHA-256 of its output. |
 | src/internal/blit/blit.mbt | 6 | `bytes` and `into_view` for JS (`#cfg(target="js")`), forward loops without index checks, and `forward` for JS and Wasm GC, a byte at a time where native and Wasm copy eight: the ledger measures native, which compiles the block copies and the eight-byte steps instead. The gates run the same tests on JS: `src/internal/blit/blit_test.mbt` and the decoder's tests, which write through both. |

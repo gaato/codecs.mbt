@@ -3,11 +3,20 @@
 
 ///|
 fn ref_input_block(quality : Int32, window : Int32) -> Int32 {
+  if quality <= 1 {
+    return 1 << window
+  }
+  if quality <= 3 {
+    return 16384
+  }
   1 << (if quality >= 9 && window > 16 { window.min(18) } else { 16 })
 }
 
 ///|
 fn ref_max_meta(quality : Int32, window : Int32) -> Int32 {
+  if quality <= 3 {
+    return 1 << (window.max(14) + 1).min(24)
+  }
   let block_bits = if quality >= 9 && window > 16 { window.min(18) } else { 16 }
   1 << (window.max(block_bits) + 1).min(24)
 }
@@ -37,7 +46,8 @@ fn Encoder::ref_memory_usage(self : Encoder) -> Int32 {
     Some(h) => h.memory_usage()
     None => 0
   }) +
-  (match self.hq_tree {
+  self.low_memory() +
+  (match self.hq_tree() {
     Some(h) => h.memory_usage()
     None => 0
   })
@@ -78,6 +88,8 @@ fn Encoder::ref_append(self : Encoder, start : Int32, n : Int32) -> Unit {
       self.window_bits.max(
         if self.quality >= 9 {
           self.window_bits.min(18).max(16)
+        } else if self.quality <= 3 {
+          14
         } else {
           16
         },
@@ -310,6 +322,14 @@ fn Encoder::ref_dictionary_reach(self : Encoder, reach : Int32) -> Int32 {
 
 ///|
 fn Encoder::ref_process(self : Encoder, is_last : Bool, flush : Bool) -> Unit {
+  if self.quality <= 1 {
+    self.fragment_process(is_last)
+    return
+  }
+  if self.quality <= 3 {
+    self.quick_process(is_last, flush)
+    return
+  }
   if self.quality >= 10 {
     self.hq_process(is_last, flush)
     return
@@ -430,10 +450,12 @@ fn Encoder::ref_emit(self : Encoder, is_last : Bool) -> Unit {
         commands,
         self.quality,
         is_last,
-        memory?=self.hq_tree.unwrap().peak.map(p => {
+        memory?=self.hq_tree().unwrap().peak.map(p => {
           HqMemory::new(self, p, false)
         }),
       )
+    } else if self.quality <= 3 {
+      self.low_store(is_last)
     } else {
       ref_store_block(
         w,
@@ -499,7 +521,11 @@ fn Encoder::ref_step(
       let count = (self.ref_batch_len - self.ref_batch_pos).min(
         ref_input_block(self.quality, self.window_bits),
       )
-      self.ref_append(self.ref_batch_pos, count)
+      if self.quality <= 1 {
+        self.fragment_append(self.ref_batch_pos, count)
+      } else {
+        self.ref_append(self.ref_batch_pos, count)
+      }
       self.ref_batch_pos += count
       let last_batch = self.ref_batch_len < 524288 &&
         self.ref_batch_pos == self.ref_batch_len
