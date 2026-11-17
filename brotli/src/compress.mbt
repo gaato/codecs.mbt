@@ -1,7 +1,7 @@
 ///|
 /// Compresses `input` into a whole Brotli stream. `window_bits` is as for
 /// `Encoder`. At quality 4 the window declared is reduced to what the input
-/// needs (at least 64 KiB), preserving its default output. Qualities 5..9
+/// needs (at least 64 KiB), preserving its default output. Qualities 5..11
 /// keep the requested window and pass the input length as `size_hint`, so
 /// an `Encoder` given that hint and window produces the same stream.
 /// `quality` and `dictionary` are as for `Encoder`.

@@ -52,8 +52,8 @@ streams built bit by bit, and seeded pseudo-random splits and corruptions.
 - moon's bundled tcc cannot link on some hosts (openSUSE); the script sets
   `MOON_CC=cc` unless it is already set.
 
-Snapshot at the last full measurement (2026-11-17): **98.4 %** (2339/2377
-lines); the 38 uncovered lines are ledgered below, most of them the JS and
+Snapshot at the last full measurement (2026-11-18): **96.5 %** (3340/3460
+lines); the 120 uncovered lines are ledgered below, most of them the Wasm, JS and
 Wasm GC variants that native does not compile.
 
 ## Policy
@@ -82,6 +82,10 @@ Must be covered by tests:
   fallback, flushes, the input buffer sliding, and suspension on output
   through byte-sized and random splits. The encoder's streams are held to
   google/brotli's decoder by `scripts/crosscheck.mbtx`, which CI runs.
+- HQ parser scratch during actual parsing, including q11 archive growth and
+  both cost passes, and q10's literal-estimator scratch. The phase observer
+  checks actual capacities against the parser bound separately from coding;
+  a dominant coding bound cannot mask omitted parser allocations.
 
 Accepted as uncovered (needs a row):
 
@@ -100,6 +104,8 @@ Budgets are the exact uncovered counts: the script fails on any difference.
 | --- | --- | --- |
 | src/decoder.mbt | 1 | In `next_aligned_byte`, loading a byte from `stash`: uncompressed and metadata bytes would come from it only if `stash` held bytes there, and it never does. A unit leaves bytes in `stash` only when they fall short of what it needs, so when it completes it has consumed them all; the byte-aligned loops start after that unit. |
 | src/meta_block_writer.mbt | 1 | The `cached_match_prefix` fallback for Wasm, JS and Wasm GC returns true, leaving prefix comparison to their match-length routine. Native compiles the four-byte rejection instead. The same quality-4 SHA-256 pins run on all four targets. |
+| src/meta_block_writer_wasm.mbt | 42 | The Wasm quality-4 payload loop uses the parser's fixed command and alphabet limits to omit repeated range checks. Native compiles the standard loop and GC/JS their paired-code loop. The quality-4 SHA-256 pins, split and output-budget tests run on all four targets. |
+| src/meta_block_writer_portable.mbt | 35 | The GC/JS quality-4 writer pairs literal codes and skips zero-bit command extras. Native compiles the standard loop and Wasm its unchecked command-table loop. The unchanged quality-4 SHA-256 pins run on GC and JS, including flushes and windows 10..24; the gates also run the split and output-budget tests there. |
 | src/internal/bits/bit_packer.mbt | 10 | `BitPacker::write`, `BitPacker::write_fitting` and `BitPacker::flush` for JS (`#cfg(target="js")`), the 32-bit accumulator moved a byte at a time: the ledger measures native, which compiles the 64-bit `write` and the eight-byte `flush` instead. The gates run the same tests on JS: `src/internal/bits/bit_packer_test.mbt` and the encoder's, including the SHA-256 of its output. |
 | src/internal/blit/blit.mbt | 6 | `bytes` and `into_view` for JS (`#cfg(target="js")`), forward loops without index checks, and `forward` for JS and Wasm GC, a byte at a time where native and Wasm copy eight: the ledger measures native, which compiles the block copies and the eight-byte steps instead. The gates run the same tests on JS: `src/internal/blit/blit_test.mbt` and the decoder's tests, which write through both. |
 | src/internal/huffman/decode_table.mbt | 3 | The `abort`s of `Builder::Builder` (a root outside 1 to 15 bits, an alphabet past 4096 symbols) and of `Builder::build` (a table without room): the `panic` tests of `src/internal/huffman/decode_table_spec_test.mbt` run them, but the abort ends the test before its coverage counts are written. |
@@ -109,4 +115,6 @@ Budgets are the exact uncovered counts: the script fails on any difference.
 | src/internal/lz77/hash.mbt | 6 | `load4`, `read` and `write` for JS and Wasm GC (`#cfg(not(any(target="native", target="wasm")))`), which read a byte at a time and check every index: the ledger measures native, which compiles the one-load and unchecked ones instead. The gates run the same tests on JS and Wasm GC: the match finders' tests and the encoder's, including the SHA-256 of its output. |
 | src/internal/match_length_fast/length.mbt | 2 | The checked JS/Wasm GC `length`, excluded by native's cfg. The package's alignment, exact-end, mismatch and overlap tests run on all four targets. |
 | src/reference_encoder.mbt | 2 | `ref_process`'s no-input, no-action guard: its scheduler calls only with a nonempty input block or `Flush`/`Finish`. And the dictionary-search stop past 67,108,860 coded distance bytes, which requires a large dictionary index as described for `src/lz77_dictionary.mbt`; the same static-dictionary distance cap is tested directly in "reference helpers: position wraps, capped distances and ring-edge matches". |
-| src/reference_bitstream.mbt | 2 | The capped-zero-run continuation in `ref_write_map`, for runs of at least 128 zeros. The reference's fixed two-, three- and thirteen-context maps have shorter zero runs; the one-context case uses its specialized trivial map writer. Both context map encodings are checked by pinned CLI byte identity and decoder round trips. |
+| src/reference_hq_parse.mbt | 1 | The raw-dictionary search stop past 67,108,860 coded distance bytes needs the large dictionary index described for `src/lz77_dictionary.mbt`, exceeding the test allocation budget. HQ dictionary streams are checked with the CLI decoder; the maximum coded distance is also exercised directly in the HQ distance-parameter test. |
+| src/reference_hq_process.mbt | 1 | The no-input, no-action guard: the fixed-read scheduler calls only with a nonempty input block or `Flush`/`Finish`. The HQ streaming tests cover those calls, empty streams, reset and both hint modes. |
+| src/reference_hasher.mbt | 5 | The checked four-byte candidate comparison and four UInt32 conversion helpers for JS and Wasm GC. Native and Wasm compile the unaligned word comparison and UInt64 helpers instead. Distances pass the window limit before conversion to Int32; ring sums fit UInt32. All targets run the quality 5..9 CLI digest pins and wrap/ring-edge tests. |

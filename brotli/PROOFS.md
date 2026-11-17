@@ -107,10 +107,11 @@ trusted, like the bridges, to say what the Why3 symbols are.
 
 ## Trusted bridges
 
-The quality 5..9 port (`src/reference_*.mbt`) is tested, not proved. Its
-parsing, greedy histogram merges, context maps, Huffman construction and
-bitstream writer are held to the pinned reference bytes in
-`src/reference_vectors_wbtest.mbt`, plus decoder crosschecks and the shared
+The quality 5..11 port (`src/reference_*.mbt`) is tested, not proved. Its
+parsing, greedy histogram merges, H10 tree, cost DP, block partitions,
+context clustering, Huffman construction and bitstream writer are held to
+the pinned reference bytes in `src/reference_vectors_wbtest.mbt` and
+`src/reference_hq_vectors_wbtest.mbt`, plus decoder crosschecks and the shared
 byte-stream conformance harness. It introduces no trusted proof bridge.
 
 | Bridge | Package | Claim | Backing test |

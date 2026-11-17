@@ -49,8 +49,8 @@ the same table sizes as an omitted hint. A dictionary index is separate.
 | 7 | Reference 7 | 159,901,300 | 159,901,300 | `src/reference_quality_wbtest.mbt`: "reference qualities: random splits, flushes, dictionaries, reset and memory bounds" |
 | 8 | Reference 8 | 168,289,908 | 168,289,908 | `src/reference_quality_wbtest.mbt`: "reference qualities: random splits, flushes, dictionaries, reset and memory bounds" |
 | 9 | Reference 9 | 192,931,444 | 192,931,444 | `src/reference_quality_wbtest.mbt`: "reference qualities: random splits, flushes, dictionaries, reset and memory bounds" |
-| 10 | 9 | 192,931,444 | 192,931,444 | `src/reference_quality_wbtest.mbt`: "reference qualities: clamping and quality four ignores size hint" |
-| 11 | 9 | 192,931,444 | 192,931,444 | `src/reference_quality_wbtest.mbt`: "reference qualities: clamping and quality four ignores size hint" |
+| 10 | Reference 10 | 27,197,068,000 | 27,197,068,000 | `src/reference_hq_wbtest.mbt`: "HQ streaming splits, wrong hints, flushes, dictionaries and reset stay bounded", "HQ allocation bounds use packed nodes and capacity ceilings", "HQ real parser peaks include archive growth and both cost passes", "HQ phase accounting observes splitting and clustering below the bound" |
+| 11 | Reference 11 | 27,197,068,000 | 27,197,068,000 | `src/reference_hq_wbtest.mbt`: "HQ streaming splits, wrong hints, flushes, dictionaries and reset stay bounded", "HQ allocation bounds use packed nodes and capacity ceilings", "HQ real parser peaks include archive growth and both cost passes", "HQ phase accounting observes splitting and clustering below the bound" |
 
 For qualities 5..9, let `w` be the window bits, `B` the input block size
 (64 KiB, or at quality 9 `1 << min(18, w)` when `w > 16`),
@@ -85,7 +85,125 @@ The logarithm lookup is compiled as constants; it has no table allocation.
 Quality 4 does not initialize the reference hash tables or context maps.
 No dictionary index is charged twice. The rows for encoder input,
 pending output, commands and fixed tables elsewhere in this document give
-the quality-4 layout; the formula above covers the reference qualities.
+the quality-4 layout; the formula above covers qualities 5..9.
+
+### Qualities 10 and 11
+
+`src/reference_hq_bounds.mbt` derives these bounds from allocation sizes,
+including transient coding storage. They are conservative worst-case limits,
+not predictions of an application's peak. The partitioning term allows one
+surviving histogram per initial block before final clustering. Upstream's
+expected 16 clusters per 64-block batch is an allocation heuristic, not a
+limit; assuming it would make the bound unsound on adversarial partitions.
+The coding term dominates both rows, so their overall bounds coincide even
+though quality 11's parser can allocate substantially more than quality 10's.
+At window 24, both worst-case bounds are 54,464,238,304 bytes. The arithmetic
+uses Int64 and does not allocate these amounts.
+
+Let `W = 1 << w`, `B = ref_input_block(q, w)`,
+`M = min(2 * max(W, B), 1 << 24)` and `C = M/8 + B/2 + 2`.
+The retained-buffer term is:
+
+```text
+W - 16 + M + 524296 + 524288 + 2*max(W,B)
++ 4*(M+512) + 80*C + encoder_fixed_memory(w) + 80 + H(w)
+H(w) = 8*W + 4*131072 + 4*384
+     + 2*32768 + 4*(31705+88+8+38)
+```
+
+`H` counts H10's UInt32 buckets and children, candidate pairs, static-word
+lookup tables, suffix groups and per-length candidates. It is exactly
+34,273,148 bytes at window 22 and 134,936,444 at window 24; the forest alone
+is respectively 32 MiB and 128 MiB. A true one-shot input may allocate two
+children per input byte instead of per window byte. A size hint cannot
+enable that optimization. Preparation clears buckets while retaining the
+forest, including across position wraps. The test
+`src/reference_hq_wbtest.mbt`: "H10 tree allocation, preparation and position wrap retain their layout"
+checks the exact byte count, shortened forest and reset lifecycle.
+
+The bound adds the larger of parsing and coding scratch, which have separate
+lifetimes. Parsing uses four 32-bit node arrays of `B+1` entries, `B+2`
+Float32 literal prefix sums, 704 command costs, 64 distance costs, a
+768-entry literal histogram, 56 queue entries and four initial distances.
+Quality 10 also needs three literal-window counters. Quality 11 adds `B`
+match counts, a doubled-capacity archive of at most `512*B` UInt32 entries
+(including raw-dictionary candidates), and 1,280 entries for its second cost
+model. At `B=262144`, these bounds are 5,249,300 and 543,173,896 bytes.
+`src/reference_hq_wbtest.mbt`: "HQ real parser peaks include archive growth and both cost passes"
+measures the live scratch during actual parses, including archive capacity
+changes, the literal estimator and the second cost model. Its two-symbol
+262,144-byte q11 input grows the archive and reaches 23,080,200 bytes of
+parser scratch. Replacing either quality's parser bound by DP storage alone
+fails this test; a larger coding bound cannot conceal missing parser storage.
+
+Coding is bounded by the larger of block partitioning, context clustering
+and Huffman construction, plus completed splits and symbol vectors. The
+source formulas enumerate the symbol/ID arrays, switch bitmaps, Double path
+costs, histogram storage, doubled capacities, cluster sizes, maps and
+remapping, and the pair queues capped at 64 pairs per surviving histogram.
+Context clustering has at most 16,384 literal input histograms, 1,024
+distance input histograms and 256 final histograms per category. This
+derivation uses the port's Int32 symbol vectors and its actual histogram
+and pair layout, rather than copying C allocation sizes or adding an
+unexplained scratch allowance. As elsewhere, runtime object headers and
+garbage awaiting collection are outside the accounting model.
+
+### Measured HQ peaks
+
+Measured on 2026-11-18, native MoonBit 0.10.20+65efd5b93 on Linux x86_64
+(Intel Core i5-10400F), with `scripts/measure_memory.mbtx` under the shared
+gate lock. These are peaks of accounted allocations on the named inputs,
+not RSS or guaranteed limits. All table values are bytes.
+
+| Quality | Window | `bench_text` | `bench_binary` | `alternating512` | Worst-case bound |
+|---:|---:|---:|---:|---:|---:|
+| 10 | 22 | 44,592,696 | 6,385,248 | 60,030,477 | 27,197,068,000 |
+| 11 | 22 | 54,034,928 | 11,436,640 | 60,295,682 | 27,197,068,000 |
+| 10 | 24 | 145,255,992 | 6,385,248 | 160,693,773 | 54,464,238,304 |
+| 11 | 24 | 154,698,224 | 11,436,640 | 160,958,978 | 54,464,238,304 |
+
+`bench_text` (524,288 bytes) and `bench_binary` (131,072 bytes) are the
+existing benchmark corpus files, written under `_build/compare/ratio/` by
+`scripts/compare_codecs.mbtx`. Their contents come from
+`bench/src/data_test.mbt`; the measurement script prints their SHA-256 hashes.
+`alternating512` is 1,048,576 seeded random bytes: every 512 bytes selects
+the next of eight disjoint 32-byte alphabets. The script constructs it from
+LCG seed 1951. It produces 2,048 initial literal blocks and 256 surviving
+histograms before final clustering at both qualities and windows.
+
+Encodes use a correct size hint, whole-input `Finish`, and 4 KiB output
+buffers. The observer sums the encoder's actual retained backing storage
+with actual lengths/capacities of live phase scratch. It releases refinement
+storage before clustering and parser storage before coding; aliases are not
+charged as new histogram data. Consumed symbol arrays include their copy
+overlap, or transfer their full backing buffer on native/linear Wasm when
+exclusively owned. A histogram has 24 bytes of fields/alignment
+and an 8-byte array slot, matching the bound's 32-byte charge; merge-queue
+entries also use its 32-byte charge. Runtime headers, observer state,
+caller-owned input/output and garbage awaiting collection are excluded.
+Container growth charges the resulting capacity, as `memory_usage` does;
+allocator-internal copies during growth are outside this capacity model.
+The small Huffman/map helpers have a separate envelope based on actual tree
+and map counts; the script asserts that the entire envelope is below an
+observed peak before reporting that peak. It never substitutes this envelope
+for a measured value.
+
+The binary corpus fits a final first input block, so its forest is sized to
+the input and its measured peak is the same at both windows. The other two
+inputs allocate the full 32 MiB or 128 MiB forest. To approach the worst-case
+bound, the partitioning/clustering term would have to grow: many more short
+blocks in an 8 MiB or 16 MiB meta-block would have to retain distinct
+histograms through batch merging. That increases histogram storage and the
+queue of up to 64 merge pairs per surviving histogram. The final 256-tree
+limit does not cap these intermediate allocations.
+
+Reproduce from the repository root, with `GATES_LOCK` set to the shared lock:
+
+```sh
+flock "$GATES_LOCK" moon run brotli/scripts/measure_memory.mbtx
+```
+
+Two optional arguments select different text and binary corpus files.
 
 ## Fixed per decoder
 

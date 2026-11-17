@@ -311,13 +311,14 @@ fn RefHasher::find(
       continue
     }
     if !self.chain {
-      if (absolute & self.ring_mask).to_uint64() + best.to_uint64() >
-        self.ring_mask.to_uint64() {
+      if (absolute & self.ring_mask).ref_match_unsigned() +
+        best.ref_match_unsigned() >
+        self.ring_mask.ref_match_unsigned() {
         break
       }
-      if ((absolute - distance.reinterpret_as_uint()) & self.ring_mask).to_uint64() +
-        best.to_uint64() >
-        self.ring_mask.to_uint64() ||
+      if ((absolute - distance.reinterpret_as_uint()) & self.ring_mask).ref_match_unsigned() +
+        best.ref_match_unsigned() >
+        self.ring_mask.ref_match_unsigned() ||
         data[pos + best] != data[prev + best] {
         continue
       }
@@ -339,44 +340,38 @@ fn RefHasher::find(
   best = best.max(3)
   if self.chain {
     let bank = hash & (self.free.length() - 1)
-    let mut backward = (absolute - self.addresses[hash]).to_uint64()
+    let mut backward = (absolute - self.addresses[hash]).ref_match_unsigned()
     let mut slot = self.heads[hash].to_int()
     for _ in 0..<self.hops {
-      if backward > reach.to_uint64() {
+      if backward > reach.ref_match_unsigned() {
         break
       }
-      let prev = pos - backward.to_int()
+      let prev = pos - backward.ref_match_int()
       let at = (bank << self.bank_bits) + slot
       slot = self.next[at].to_int()
       let delta = self.deltas[at].to_int()
-      if (absolute & self.ring_mask).to_uint64() + best.to_uint64() >
-        self.ring_mask.to_uint64() ||
-        ((absolute - backward.to_uint()) & self.ring_mask).to_uint64() +
-        best.to_uint64() >
-        self.ring_mask.to_uint64() {
-        backward += delta.to_uint64()
+      if (absolute & self.ring_mask).ref_match_unsigned() +
+        best.ref_match_unsigned() >
+        self.ring_mask.ref_match_unsigned() ||
+        ((absolute - backward.ref_match_low()) & self.ring_mask).ref_match_unsigned() +
+        best.ref_match_unsigned() >
+        self.ring_mask.ref_match_unsigned() {
+        backward += delta.ref_match_unsigned()
         continue
       }
-      let mut equal = true
-      for k in 0..<4 {
-        if data[pos + best - 3 + k] != data[prev + best - 3 + k] {
-          equal = false
-          break
-        }
-      }
-      if equal {
+      if ref_same4(data, pos + best - 3, prev + best - 3) {
         let n = ref_match_length(data, prev, pos, limit)
         if n >= 4 {
-          let score = ref_score(n, backward.to_int())
+          let score = ref_score(n, backward.ref_match_int())
           if score > result.score {
             result.length = n
-            result.distance = backward.to_int()
+            result.distance = backward.ref_match_int()
             result.score = score
             best = n
           }
         }
       }
-      backward += delta.to_uint64()
+      backward += delta.ref_match_unsigned()
     }
   } else {
     let key = if self.tagged { hash >> 8 } else { hash }
@@ -392,34 +387,28 @@ fn RefHasher::find(
       if self.tagged && self.tags[at] != (hash & 255).to_byte() {
         continue
       }
-      let backward = (absolute - self.buckets[at]).to_uint64()
-      if backward > reach.to_uint64() {
+      let backward = (absolute - self.buckets[at]).ref_match_unsigned()
+      if backward > reach.ref_match_unsigned() {
         break
       }
-      let prev = pos - backward.to_int()
-      if (absolute & self.ring_mask).to_uint64() + best.to_uint64() >
-        self.ring_mask.to_uint64() {
+      let prev = pos - backward.ref_match_int()
+      if (absolute & self.ring_mask).ref_match_unsigned() +
+        best.ref_match_unsigned() >
+        self.ring_mask.ref_match_unsigned() {
         break
       }
-      if ((absolute - backward.to_uint()) & self.ring_mask).to_uint64() +
-        best.to_uint64() >
-        self.ring_mask.to_uint64() {
+      if ((absolute - backward.ref_match_low()) & self.ring_mask).ref_match_unsigned() +
+        best.ref_match_unsigned() >
+        self.ring_mask.ref_match_unsigned() {
         continue
       }
-      let mut equal = true
-      for k in 0..<4 {
-        if data[pos + best - 3 + k] != data[prev + best - 3 + k] {
-          equal = false
-          break
-        }
-      }
-      if equal {
+      if ref_same4(data, pos + best - 3, prev + best - 3) {
         let n = ref_match_length(data, prev, pos, limit)
         if n >= 4 {
-          let score = ref_score(n, backward.to_int())
+          let score = ref_score(n, backward.ref_match_int())
           if score > result.score {
             result.length = n
-            result.distance = backward.to_int()
+            result.distance = backward.ref_match_int()
             result.score = score
             best = n
           }
@@ -451,4 +440,85 @@ fn ref_hasher_bound(quality : Int32, window : Int32, hint : Int64) -> Int32 {
     (2 << bits) + ((if quality <= 6 { 5 } else { 4 }) << (bits + quality - 1))
   }
   tables + 98304
+}
+
+///|
+// These four bytes end at best + 1. The caller checks the reference
+// ring limits, best is at least 3, and the input owns its tail padding.
+// Native and Wasm use the reference's unaligned word comparison.
+#cfg(any(target="native", target="wasm"))
+#inline
+fn ref_same4(data : FixedArray[Byte], a : Int32, b : Int32) -> Bool {
+  let bytes = data.unsafe_reinterpret_as_bytes()
+  bytes.unsafe_read_uint32_le(a) == bytes.unsafe_read_uint32_le(b)
+}
+
+///|
+#cfg(not(any(target="native", target="wasm")))
+#inline
+fn ref_same4(data : FixedArray[Byte], a : Int32, b : Int32) -> Bool {
+  data[a] == data[b] &&
+  data[a + 1] == data[b + 1] &&
+  data[a + 2] == data[b + 2] &&
+  data[a + 3] == data[b + 3]
+}
+
+///|
+// In find, best is at most 256 KiB and ring_mask is below 2^25.
+// Ring sums fit UInt32. A chain adds a UInt16 delta only after its
+// distance passed the window check, so that addition also cannot wrap.
+// Keep the established native/Wasm arithmetic; GC and JS avoid widening.
+#cfg(any(target="wasm-gc", target="js"))
+#inline
+fn UInt32::ref_match_unsigned(self : UInt32) -> UInt32 {
+  self
+}
+
+///|
+#cfg(any(target="wasm-gc", target="js"))
+#inline
+fn Int32::ref_match_unsigned(self : Int32) -> UInt32 {
+  self.reinterpret_as_uint()
+}
+
+///|
+#cfg(any(target="wasm-gc", target="js"))
+#inline
+fn UInt32::ref_match_int(self : UInt32) -> Int32 {
+  self.reinterpret_as_int()
+}
+
+///|
+#cfg(any(target="wasm-gc", target="js"))
+#inline
+fn UInt32::ref_match_low(self : UInt32) -> UInt32 {
+  self
+}
+
+///|
+#cfg(not(any(target="wasm-gc", target="js")))
+#inline
+fn UInt32::ref_match_unsigned(self : UInt32) -> UInt64 {
+  self.to_uint64()
+}
+
+///|
+#cfg(not(any(target="wasm-gc", target="js")))
+#inline
+fn Int32::ref_match_unsigned(self : Int32) -> UInt64 {
+  self.to_uint64()
+}
+
+///|
+#cfg(not(any(target="wasm-gc", target="js")))
+#inline
+fn UInt64::ref_match_int(self : UInt64) -> Int32 {
+  self.to_int()
+}
+
+///|
+#cfg(not(any(target="wasm-gc", target="js")))
+#inline
+fn UInt64::ref_match_low(self : UInt64) -> UInt32 {
+  self.to_uint()
 }

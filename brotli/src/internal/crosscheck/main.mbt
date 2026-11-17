@@ -254,7 +254,7 @@ fn main {
 
 ///|
 fn quality_streams() -> Unit {
-  for quality in 5..<=9 {
+  for quality in 5..<=11 {
     for
       (name, input, window_bits) in [
         ("empty", b"", 22),

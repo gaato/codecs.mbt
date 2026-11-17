@@ -1,0 +1,27 @@
+----
+import {
+  "moonbitlang/async@0.22.5",
+  "moonbitlang/async@0.22.5/fs",
+  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/core/env",
+}
+----
+
+// Prints the CLI used for byte identity. Build from the hash-checked archive:
+// the independently installed decoder on PATH can be a different version.
+async fn main {
+  let source = @shell.Cmd("moon", [
+    "run", "brotli/scripts/reference/source.mbtx",
+  ]).output()
+  source.check()
+  let src = "\{source.stdout().trim()}/c"
+  let brotli = "brotli/scripts/reference/target/brotli-1.2.1-cli"
+  if !@fs.exists(brotli) {
+    let cc = @env.get_env_var("CC").unwrap_or("cc")
+    @shell.Cmd("sh", ["-c", "\"$0\" -O2 -I\"$1/include\" \"$1\"/common/*.c \"$1\"/dec/*.c \"$1\"/enc/*.c \"$1/tools/brotli.c\" -lm -o \"$2.$$.part\" && mv -f \"$2.$$.part\" \"$2\"", cc, src, brotli]).output().check()
+  }
+  let version = @shell.Cmd(brotli, ["--version"]).output()
+  version.check()
+  assert_eq(version.stdout().trim().to_owned(), "brotli 1.2.1")
+  println(brotli)
+}

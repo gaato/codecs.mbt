@@ -34,6 +34,9 @@ import {
 // stream needs: both decoders are given it (Node's `dictionary` option and
 // `brotli -d -D`).
 //
+// Byte identity uses the CLI built by reference/cli.mbtx from the pinned,
+// hash-checked 1.2.1 source. PATH brotli remains an independent decoder.
+//
 // Usage, from the repository root (needs the brotli command and node):
 //   moon run brotli/scripts/crosscheck.mbtx [-- --target native|js|wasm|wasm-gc] [--compare]
 //   --compare  also print the sizes from gzip -6 (the gzip command) and
@@ -144,7 +147,14 @@ async fn main {
     setup_failure("run from the repository root")
     return
   }
-  for script in ["reference/gen_tables.mbtx", "reference/gen_vectors.mbtx"] {
+  let cli = @shell.Cmd("moon", ["run", "brotli/scripts/reference/cli.mbtx"]).output()
+  cli.check()
+  let reference_cli = cli.stdout().trim().to_owned()
+  for
+    script in [
+      "reference/gen_tables.mbtx", "reference/gen_vectors.mbtx", "reference/gen_hq_tables.mbtx",
+      "reference/gen_hq_vectors.mbtx",
+    ] {
     @shell.Cmd("moon", ["run", "brotli/scripts/\{script}", "--check"])
     .output(max_output_bytes=max_output)
     .check()
@@ -275,9 +285,9 @@ async fn main {
       let reference = if words[1] == "named" {
         let file = "\{identity_work}/input"
         @fs.write_binary(file, decoded)
-        @shell.Cmd("brotli", [..args, file]).output(max_output_bytes=max_output)
+        @shell.Cmd(reference_cli, [..args, file]).output(max_output_bytes=max_output)
       } else {
-        @shell.Cmd("brotli", args, stdin=Binary(decoded)).output(
+        @shell.Cmd(reference_cli, args, stdin=Binary(decoded)).output(
           max_output_bytes=max_output,
         )
       }

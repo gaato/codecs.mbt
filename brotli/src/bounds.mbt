@@ -38,12 +38,19 @@ pub fn decoder_memory_bound(max_window_bits~ : Int32 = 24) -> Int64 {
 /// delayed commands, a 512 KiB read buffer, the reference ring, output and
 /// 8 MiB of histogram and Huffman scratch. The bound is computed without
 /// allocating these buffers.
+/// Qualities 10..11 instead derive their scratch bound from the H10 forest,
+/// packed cost nodes, match archive, block partitions and clustering queues.
+/// The hint does not change their bound. This worst-case bound includes
+/// pathological block partitions; typical retained memory is much smaller.
 pub fn encoder_memory_bound(
   window_bits~ : Int32 = 22,
   quality~ : Int32 = 4,
   size_hint? : Int64,
 ) -> Int64 {
   let quality = quality.clamp(min=0, max=11)
+  if quality >= 10 {
+    return hq_encoder_bound(quality, window_bits)
+  }
   if quality > 4 {
     let q = quality.min(9)
     let w = window_bits.clamp(min=10, max=24)

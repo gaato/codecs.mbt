@@ -337,6 +337,7 @@ fn write_length(w : @bits.BitPacker, length : Int32) -> Unit {
 /// Writes `data[start..end)` as a compressed meta-block from the commands
 /// `parse` made. False, part way, once it is no smaller than an
 /// uncompressed meta-block; the caller rewinds the writer then.
+#cfg(target="native")
 fn Encoder::write_compressed(
   self : Encoder,
   start : Int32,

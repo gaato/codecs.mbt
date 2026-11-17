@@ -12,13 +12,13 @@ import {
 let checks : String =
   #|///|
   #|test "quality encoders keep the shared byte-stream contract" {
-  #|  for quality in 5..=9 {
+  #|  for quality in 5..=11 {
   #|    for hint in [None, Some(1048576L)] {
   #|      for window_bits in [10, 22] {
   #|        let make = () => @brotli.Encoder(quality~, window_bits~, size_hint?=hint)
   #|        let input = b"dictionary compression \xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e ".repeat(60)
   #|        let stream = @harness.check_roundtrip(make, () => @brotli.Decoder(), input,
-  #|          encoder_memory_limit=Some(@brotli.encoder_memory_bound(quality~, window_bits~, size_hint?=hint).to_int()))
+  #|          encoder_memory_limit=Some(@brotli.encoder_memory_bound(quality~, window_bits~, size_hint?=hint).min(2147483647L).to_int()))
   #|        @harness.check_flush(make, () => @brotli.Decoder(), input, flush_at=[0,1,31,31,input.length()])
   #|        let encoder = () => @harness.ByteEncoder::new(make())
   #|        @harness.check_reset(encoder, input, b"a second stream")

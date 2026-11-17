@@ -14,6 +14,7 @@ import {
 import {
   "gaato/brotli/internal/checksum",
   "moonbitlang/core/encoding/base64",
+  "moonbitlang/core/encoding/hex",
   "moonbitlang/core/encoding/utf8",
 } for "wbtest"
 

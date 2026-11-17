@@ -15,7 +15,8 @@ const INITIAL_BUFFER : Int32 = 1024
 ///|
 /// A streaming Brotli encoder (RFC 7932). Quality 4 uses lazy LZ77 and one
 /// prefix code per category. Qualities 5..9 use the reference's hashers,
-/// static dictionary and context modelling. Input and output chunks may
+/// static dictionary and context modelling; 10..11 use a binary tree and
+/// cost-based parsing with histogram clustering. Input and output chunks may
 /// have any size; memory stays within `encoder_memory_bound`.
 pub struct Encoder {
   // The LZ77 dictionary matches may copy from.
@@ -62,14 +63,14 @@ pub struct Encoder {
   priv mut ref_offset : Int64
   priv mut ref_insert : Int32
   priv mut ref_literals : Int32
+  priv mut hq_tree : HqTree?
 }
 
 ///|
 /// An encoder at the start of a stream, with a window of
 /// `1 << window_bits` bytes (clamped to 10..24). The default 22 is the
 /// reference encoder's; a decoder needs up to that much memory.
-/// `quality` defaults to 4 and is clamped to 0..11; 0..3 use 4, and
-/// 10..11 use 9.
+/// `quality` defaults to 4 and is clamped to 0..11; 0..3 use 4.
 ///
 /// `size_hint` steers parameter selection at qualities 5..9. It is not
 /// written to the stream or checked: a wrong hint still produces valid
@@ -78,6 +79,7 @@ pub struct Encoder {
 /// known size, output matches its named-file mode at the same window.
 /// Without a hint, input is processed on a fixed 512 KiB read schedule,
 /// independent of caller chunks. Quality 4 ignores the hint.
+/// Qualities 10..11 make the same parameter choices with either hint mode.
 ///
 /// With `dictionary`, a match may copy from it as RFC 9841 section 3.2 has
 /// it, as `brotli -D` writes and RFC 9842's `dcb` coding reads: at a
@@ -94,7 +96,7 @@ pub fn Encoder::Encoder(
   let window_bits = window_bits.clamp(min=10, max=24)
   let window = 1 << window_bits
   let quality = quality.clamp(min=0, max=11)
-  let quality = if quality < 4 { 4 } else { quality.min(9) }
+  let quality = quality.max(4)
   let size_hint = if quality == 4 {
     0L
   } else {
@@ -107,6 +109,7 @@ pub fn Encoder::Encoder(
     size_hint,
     ref_hint: size_hint,
     ref_hasher: None,
+    hq_tree: None,
     ref_commands: if quality == 4 {
       None
     } else {
@@ -163,6 +166,7 @@ pub fn Encoder::Encoder(
 pub fn Encoder::reset(self : Encoder) -> Unit {
   self.ref_hint = self.size_hint
   self.ref_hasher = None
+  self.hq_tree = None
   if self.ref_commands is Some(commands) {
     commands.clear()
   }
@@ -224,8 +228,8 @@ pub fn Encoder::last_produced(self : Encoder) -> Int32 {
 /// before construction (see RESOURCE_BOUNDS.md). `reset` releases input.
 /// A dictionary's index is shared by the encoders given it and counted by
 /// `Dictionary::memory_usage`, not here.
-/// At qualities 5..9 this also counts the read buffer, retained commands,
-/// reference hash tables and the ring used after the first window wrap;
+/// At qualities 5..11 this also counts the read buffer, retained commands,
+/// reference search tables (including H10's forest) and the ring used after the first window wrap;
 /// `encoder_memory_bound` includes their worst case and coding scratch.
 pub fn Encoder::memory_usage(self : Encoder) -> Int32 {
   self.data.length() +

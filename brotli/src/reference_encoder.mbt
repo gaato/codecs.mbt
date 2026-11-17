@@ -36,6 +36,10 @@ fn Encoder::ref_memory_usage(self : Encoder) -> Int32 {
   (match self.ref_hasher {
     Some(h) => h.memory_usage()
     None => 0
+  }) +
+  (match self.hq_tree {
+    Some(h) => h.memory_usage()
+    None => 0
   })
 }
 
@@ -72,7 +76,7 @@ fn Encoder::ref_append(self : Encoder, start : Int32, n : Int32) -> Unit {
   let ring_size = 1 <<
     (
       self.window_bits.max(
-        if self.quality == 9 {
+        if self.quality >= 9 {
           self.window_bits.min(18).max(16)
         } else {
           16
@@ -306,6 +310,10 @@ fn Encoder::ref_dictionary_reach(self : Encoder, reach : Int32) -> Int32 {
 
 ///|
 fn Encoder::ref_process(self : Encoder, is_last : Bool, flush : Bool) -> Unit {
+  if self.quality >= 10 {
+    self.hq_process(is_last, flush)
+    return
+  }
   let commands = self.ref_commands.unwrap()
   let mut start = self.ref_processed
   let end = self.data_len
@@ -413,16 +421,31 @@ fn Encoder::ref_emit(self : Encoder, is_last : Bool) -> Unit {
   }
   if compress {
     let before = w.position()
-    ref_store_block(
-      w,
-      self.data,
-      self.block_start,
-      self.data_len,
-      commands,
-      self.quality,
-      self.ref_hint,
-      is_last,
-    )
+    if self.quality >= 10 {
+      hq_store_block(
+        w,
+        self.data,
+        self.block_start,
+        self.data_len,
+        commands,
+        self.quality,
+        is_last,
+        memory?=self.hq_tree.unwrap().peak.map(p => {
+          HqMemory::new(self, p, false)
+        }),
+      )
+    } else {
+      ref_store_block(
+        w,
+        self.data,
+        self.block_start,
+        self.data_len,
+        commands,
+        self.quality,
+        self.ref_hint,
+        is_last,
+      )
+    }
     if n + 4 >= (w.position() - (before & -8)) >> 3 {
       return
     }

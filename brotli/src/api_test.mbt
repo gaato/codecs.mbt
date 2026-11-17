@@ -122,7 +122,7 @@ test "quality and size hint work through the public byte-stream API" {
   let input = b"Brotli dictionary compression: known sizes and streaming.\n".repeat(
     80,
   )
-  for quality in 5..<=9 {
+  for quality in 5..<=11 {
     let encoder = @brotli.Encoder(
       quality~,
       window_bits=22,

@@ -35,6 +35,8 @@ fn ref_quality_sample(kind : Int32, size : Int32) -> Bytes {
       text[i % text.length()]
     } else if kind == 1 {
       (state >> 24).to_byte()
+    } else if kind == 4 {
+      (((state >> 24) & 31U).reinterpret_as_int() + 32 * ((i / 1024) & 7)).to_byte()
     } else if i % 10000 < 6000 {
       text[i % text.length()]
     } else if i >= 4096 && i % 10000 < 8000 {
@@ -127,8 +129,7 @@ test "reference qualities: clamping and quality four ignores size hint" {
       )
     }
   }
-  assert_eq(compress(input, quality=10), compress(input, quality=9))
-  assert_eq(compress(input, quality=2147483647), compress(input, quality=9))
+  assert_eq(compress(input, quality=2147483647), compress(input, quality=11))
   for quality in [10, 11] {
     let encoded = encode_drive(
       Encoder(quality~, size_hint=input.length().to_int64()),
@@ -142,8 +143,7 @@ test "reference qualities: clamping and quality four ignores size hint" {
         )
       },
     )
-    assert_eq(encoded, compress(input, quality=9))
-    assert_eq(encoder_memory_bound(quality~), encoder_memory_bound(quality=9))
+    assert_eq(encoded, compress(input, quality~))
   }
 }
 

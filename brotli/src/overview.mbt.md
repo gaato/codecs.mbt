@@ -123,11 +123,11 @@ Not included: the rest of Shared Brotli (RFC 9841): serialized shared dictionari
 
 ## Encoding
 
-`Encoder(quality=4)` and `compress(input, quality=4)` trade encoding time for size. Quality 4 is the default: lazy LZ77 and one prefix code per meta-block. Qualities 5 through 9 use google/brotli's hashers, static dictionary, block splitting and context models. Values are clamped to 0..11; 0..3 select 4, and 10..11 select 9. The encoder never raises.
+`Encoder(quality=4)` and `compress(input, quality=4)` trade encoding time for size. Quality 4 is the default: lazy LZ77 and one prefix code per meta-block. Qualities 5 through 9 use google/brotli's hashers, static dictionary, block splitting and context models. Qualities 10 and 11 use its binary-tree matcher, cost-based parsing and histogram clustering; they spend more time searching for smaller output. Values are clamped to 0..11; 0..3 select 4. The encoder never raises.
 
-At qualities 5..9, when the length is known, pass `Encoder(size_hint=n)` to obtain the same output as `compress` at the same quality and window. `compress` supplies its input length automatically. The hint steers parameter choices; it is neither written into the stream nor checked, so a wrong hint still produces a valid stream whose bytes may differ. Hints are clamped to 0..1 GiB; zero selects the same mode as an omitted hint. Quality 4 ignores hints.
+At qualities 5..11, when the length is known, pass `Encoder(size_hint=n)` to obtain the same output as `compress` at the same quality and window. `compress` supplies its input length automatically. The hint steers parameter choices; it is neither written into the stream nor checked, so a wrong hint still produces a valid stream whose bytes may differ. Hints are clamped to 0..1 GiB; zero selects the same mode as an omitted hint. Quality 4 ignores hints. Qualities 10 and 11 make the same parameter choices in either hint mode.
 
-Without a hint, qualities 5..9 follow the reference CLI's stdin mode, processing input on a fixed 512 KiB read schedule. Output is independent of caller input and output splits in either mode. Qualities 5..9 keep the requested `window_bits`; quality 4 reduces a one-shot stream's declared window to what the input needs, preserving its default output.
+Without a hint, qualities 5..11 follow the reference CLI's stdin mode, processing input on a fixed 512 KiB read schedule. Output is independent of caller input and output splits in either mode. Qualities 5..11 keep the requested `window_bits`; quality 4 reduces a one-shot stream's declared window to what the input needs, preserving its default output.
 
 `Encoder(dictionary=d)` and `compress(dictionary=d)` let matches copy from an LZ77 dictionary as `brotli -D` writes them, for RFC 9842's `dcb` coding: at a distance past the window's reach, however far into the stream. The dictionary builds the index encoders search it with once, the first time, and every encoder given it shares that (`Dictionary::memory_usage`).
 
@@ -135,7 +135,7 @@ Without a hint, qualities 5..9 follow the reference CLI's stdin mode, processing
 
 The decoder's memory is the window (at most 16 MiB, and no more than the output so far) plus tables of at most 1.3 MiB; `memory_usage()` reports it, and `decoder_memory_bound(max_window_bits~)` gives its most before you make a decoder. `Decoder(max_window_bits=n)` refuses streams that need a window over `2^n - 16` bytes with `LimitExceeded`, saying how much the stream needs.
 
-At quality 4 the encoder holds its window (`Encoder(window_bits=n)`, 22 by default: 4 MiB, growing with input) plus a 64 KiB meta-block, its output and 855 KiB of fixed tables. Qualities 5..9 also hold delayed commands, larger hash tables, a 512 KiB input buffer and a reference ring after its first wrap. `memory_usage()` reports owned buffers; `encoder_memory_bound(quality~, window_bits~, size_hint?)` bounds them and coding scratch. Higher qualities can use substantially more memory; see [resource bounds](https://github.com/gaato/codecs.mbt/blob/main/brotli/RESOURCE_BOUNDS.md). `compress_bound(n)` bounds whole-stream output.
+At quality 4 the encoder holds its window (`Encoder(window_bits=n)`, 22 by default: 4 MiB, growing with input) plus a 64 KiB meta-block, its output and 855 KiB of fixed tables. Qualities 5..11 also hold delayed commands, larger search tables, a 512 KiB input buffer and a reference ring after its first wrap. Qualities 10 and 11 need a binary-tree forest and temporary cost arrays; quality 11 also archives matches. `memory_usage()` reports owned buffers; `encoder_memory_bound(quality~, window_bits~, size_hint?)` bounds them and coding scratch. Its worst-case partitioning bound can be much larger than typical retained memory; see [resource bounds](https://github.com/gaato/codecs.mbt/blob/main/brotli/RESOURCE_BOUNDS.md). `compress_bound(n)` bounds whole-stream output.
 
 ## Errors
 
@@ -162,4 +162,4 @@ The [comparison](https://github.com/gaato/codecs.mbt/blob/main/bench/README.md#c
 
 ## License
 
-Apache-2.0, with the quality 5..9 encoder port from [google/brotli](https://github.com/google/brotli) under MIT (`LICENSE-encoder`). The static dictionary in `src/static_data.mbt` is also MIT; see `LICENSE-dictionary`.
+Apache-2.0, with the quality 5..11 encoder port from [google/brotli](https://github.com/google/brotli) under MIT (`LICENSE-encoder`). The static dictionary in `src/static_data.mbt` is also MIT; see `LICENSE-dictionary`.
