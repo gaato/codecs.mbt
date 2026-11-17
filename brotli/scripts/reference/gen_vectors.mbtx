@@ -39,7 +39,19 @@ fn digest(data : Bytes) -> String { @hex.encode(Bytes::from_array(@crypto.sha256
 async fn main {
   let work = @fs.tmpdir(prefix="brotli-quality-vectors.")
   defer @fs.rmdir(work, recursive=true)
-  let version = @shell.Cmd("brotli", ["--version"]).output()
+  // The pins come from a CLI built from the pinned, hash-checked 1.2.1 source,
+  // not the brotli on PATH: distributions ship other versions (Ubuntu 24.04 has
+  // 1.1.0), whose output differs, and the check must give the same answer on
+  // every machine.
+  @shell.Cmd("moon", ["run", "brotli/scripts/reference/source.mbtx"]).output().check()
+  let cache = "brotli/scripts/reference/target"
+  let brotli = "\{cache}/brotli-1.2.1-cli"
+  if !@fs.exists(brotli) {
+    let cc = @env.get_env_var("CC").unwrap_or("cc")
+    let src = "\{cache}/brotli-1.2.1/c"
+    @shell.Cmd("sh", ["-c", "\"$0\" -O2 -I\"$1/include\" \"$1\"/common/*.c \"$1\"/dec/*.c \"$1\"/enc/*.c \"$1/tools/brotli.c\" -lm -o \"$2.$$.part\" && mv -f \"$2.$$.part\" \"$2\"", cc, src, brotli]).output().check()
+  }
+  let version = @shell.Cmd(brotli, ["--version"]).output()
   version.check()
   assert_eq(version.stdout().trim().to_owned(), "brotli 1.2.1")
   let out = StringBuilder()
@@ -57,9 +69,9 @@ async fn main {
     out.write_string("  {\n    let input = ref_quality_sample(\{kind}, \{size})\n    assert_eq(@checksum.sha256(input), \"\{digest(input)}\")\n    let expected = [\n")
     for quality in 5..=9 {
       let args = ["-q", quality.to_string(), "-w", window.to_string(), "-c"]
-      let named = @shell.Cmd("brotli", [..args, file]).output(max_output_bytes=4000000)
+      let named = @shell.Cmd(brotli, [..args, file]).output(max_output_bytes=4000000)
       named.check()
-      let stdin = @shell.Cmd("brotli", args, stdin=Binary(input)).output(max_output_bytes=4000000)
+      let stdin = @shell.Cmd(brotli, args, stdin=Binary(input)).output(max_output_bytes=4000000)
       stdin.check()
       out.write_string("      (\"\{digest(named.stdout_bytes())}\", \"\{digest(stdin.stdout_bytes())}\"),\n")
     }
