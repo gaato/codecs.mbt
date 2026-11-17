@@ -19,7 +19,7 @@ core library renames some of them on its main branch, such as `max_output` to
 | `moonbitlang/core/compress/flate` | `moonbit-community/flate` | `gaato/deflate` |
 | `moonbitlang/core/compress/zlib` | `moonbit-community/flate/zlib` | `gaato/deflate/zlib` |
 | `moonbitlang/core/compress/gzip` | `moonbit-community/flate/gzip` | `gaato/deflate/gzip` |
-| `moonbitlang/core/archive/zip` | `moonbit-community/flate/zip` | none yet |
+| `moonbitlang/core/archive/zip` | `moonbit-community/flate/zip` | [`gaato/zip`](https://mooncakes.io/docs/gaato/zip), a separate module |
 
 ## One-shot functions
 
@@ -141,6 +141,5 @@ levels from 2 onward already split blocks when their statistics change.
 
 ## What the core library has and gaato/deflate does not
 
-- ZIP archives (`archive/zip`).
 - `cancelled`, `two_pass` and `fast_store` in the one-shot functions (see
   [One-shot functions](#one-shot-functions)).

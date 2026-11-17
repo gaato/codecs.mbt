@@ -249,6 +249,7 @@ not taken up again without new numbers:
 ## Where things are not
 
 Archives and containers with entries or random access (tar, zip) build on
-codecs from their own repositories. So do byte-stream codecs outside
+codecs from their own repositories: gaato/zip is in
+[archive.mbt](https://github.com/gaato/archive.mbt). So do byte-stream codecs outside
 compression (base64, character sets, encryption): implementing
 `gaato/codec_bytes` needs only a dependency on it.
