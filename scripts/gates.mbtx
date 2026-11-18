@@ -98,14 +98,20 @@ async fn check_script_imports() -> Unit {
     let text = @fs.read_text(path)
     // Frontmatter can contain several import blocks. Inspect all of it,
     // stopping before program text that may quote an import as test data.
+    // Delimiters are three or more hyphens; comments do not import.
     let imports = StringBuilder()
     let mut in_frontmatter = false
     for line in text.split("\n") {
-      if line.trim() == "----" {
+      let trimmed = line.trim()
+      if trimmed.length() >= 3 && trimmed.iter().all(c => c == '-') {
         if in_frontmatter { break }
         in_frontmatter = true
       } else if in_frontmatter {
-        imports.write_view(line)
+        let code = match line.find("//") {
+          Some(i) => line[:i]
+          None => line
+        }
+        imports.write_view(code)
         imports.write_char('\n')
       }
     }
