@@ -19,7 +19,7 @@ publish = false
 miniz_oxide = "=0.9.1"
 base64 = "=0.22.1"
 sha2 = "=0.10.9"
-snap = "=1.1.1"
+snap = "=1.1.2"
 lz4-sys = "=1.11.1"
 lz4_flex = "=0.14.0"
 weezl = "=0.1.12"
