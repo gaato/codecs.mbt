@@ -94,7 +94,7 @@ async fn filter(command : String, args : Array[String], data : Bytes) -> Result[
     max_output_bytes=max_output,
   )
   if output.exit_code() != 0 {
-    return Err(output.stderr().trim().to_string())
+    return Err(output.stderr().trim().to_owned())
   }
   Ok(output.stdout_bytes())
 }
@@ -129,8 +129,8 @@ async fn main {
     guard line.split("\t").collect() is [name, set, input, stream] else {
       setup_failure("unexpected line from the crosscheck tool: \{line}")
     }
-    names.push(name.to_string())
-    sets.push(set.to_string())
+    names.push(name.to_owned())
+    sets.push(set.to_owned())
     inputs.push(@base64.decode(input))
     streams.push(@base64.decode(stream))
   }

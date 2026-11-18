@@ -767,7 +767,7 @@ fn kind(name : String) -> String {
 /// Writes the cases to `dir`: the streams under `files/`, and `cases.tsv`.
 async fn write_cases(dir : String, cases : Array[Case]) -> Unit {
   if @fs.exists("\{dir}/files") {
-    @fs.rmdir("\{dir}/files", recursive=true)
+    @fs.remove("\{dir}/files", recursive=true)
   }
   @fs.mkdir("\{dir}/files", recursive=true)
   let index = StringBuilder()
@@ -1046,7 +1046,7 @@ async fn node_deflate(input : Bytes, dir : String) -> (String, String) {
 /// brotli -q 9 -w 22, raw DEFLATE and zlib at level 6, gzip -6 -n.
 async fn streams_of(input : Bytes, dir : String) -> Map[String, String] {
   if @fs.exists(dir) {
-    @fs.rmdir(dir, recursive=true)
+    @fs.remove(dir, recursive=true)
   }
   @fs.mkdir(dir, recursive=true)
   let (deflate, zlib) = node_deflate(input, dir)
@@ -1239,7 +1239,7 @@ async fn ratio(
   ]).run()
   let work = "\{dir}/ratio"
   if @fs.exists(work) {
-    @fs.rmdir(work, recursive=true)
+    @fs.remove(work, recursive=true)
   }
   @fs.mkdir("\{work}/dump", recursive=true)
   let text = bench_text()
@@ -1437,7 +1437,7 @@ async fn claims(
   ]).run()
   let work = "\{dir}/claims"
   if @fs.exists(work) {
-    @fs.rmdir(work, recursive=true)
+    @fs.remove(work, recursive=true)
   }
   @fs.mkdir(work, recursive=true)
   let list = @shell.Cmd(streamer, ["--list"]).output()

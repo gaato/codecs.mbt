@@ -73,6 +73,53 @@ fn selected(only : String?, part : String) -> Bool {
 }
 
 ///|
+/// Checks source scripts, excluding dependency, build and VCS directories,
+/// so copied scripts cannot reintroduce the unstable registry async API.
+async fn check_script_imports() -> Unit {
+  let skipped = [
+    "_build", "target", ".mooncakes", ".moonagent", ".repos", ".venv",
+    "__pycache__", "node_modules", ".git", ".jj",
+  ]
+  let paths : Array[String] = []
+  @fs.walk(
+    ".",
+    (dir, entries) => {
+      for entry in entries {
+        if entry.has_suffix(".mbtx") {
+          paths.push("\{dir}/\{entry}")
+        }
+      }
+    },
+    exclude=path => skipped.iter().any(name => path.has_suffix("/\{name}")),
+    max_concurrency=1,
+  )
+  paths.sort()
+  for path in paths {
+    let text = @fs.read_text(path)
+    // Frontmatter can contain several import blocks. Inspect all of it,
+    // stopping before program text that may quote an import as test data.
+    let imports = StringBuilder()
+    let mut in_frontmatter = false
+    for line in text.split("\n") {
+      if line.trim() == "----" {
+        if in_frontmatter { break }
+        in_frontmatter = true
+      } else if in_frontmatter {
+        imports.write_view(line)
+        imports.write_char('\n')
+      }
+    }
+    let imports = imports.to_string()
+    let registry = "\"moonbitlang/" + "async"
+    if imports.contains(registry + "@") ||
+      imports.contains(registry + "\"") ||
+      imports.contains(registry + "/") {
+      die(1, "\{path}: use moonbitlang/core/async instead of registry async; the registry API is unstable and being replaced")
+    }
+  }
+}
+
+///|
 async fn main {
   let targets = ["native"]
   let mut skip_js = false
@@ -124,6 +171,7 @@ async fn main {
     targets.append(["wasm", "wasm-gc"])
   }
   if selected(only, "checks") {
+    check_script_imports()
     // Every module's CHANGELOG opens with [Unreleased] and has a heading for its version.
     run("moon", ["run", "scripts/release.mbtx", "--", "check"])
     // The module READMEs, links and doc comments keep the documentation rules

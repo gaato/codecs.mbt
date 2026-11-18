@@ -74,9 +74,9 @@ async fn main {
     guard line.split("\t").collect() is [name, set, input, _] else {
       continue
     }
-    guard wanted(name.to_string(), set.to_string()) else { continue }
-    names.push(name.to_string())
-    sets.push(set.to_string())
+    guard wanted(name.to_owned(), set.to_owned()) else { continue }
+    names.push(name.to_owned())
+    sets.push(set.to_owned())
     inputs.push(@base64.decode(input))
   }
   // weezl's streams in one run of the reference; compress's one at a time.
@@ -102,7 +102,7 @@ async fn main {
   let answers = []
   for i, set in sets {
     if weezl_index.get(i) is Some(k) {
-      answers.push(weezl[k].to_string())
+      answers.push(weezl[k].to_owned())
       continue
     }
     let bits = match set {

@@ -94,8 +94,8 @@ async fn main {
     guard line.split("\t").collect() is [name, format, input, stream] else {
       setup_failure("unexpected line from the crosscheck tool: \{line}")
     }
-    names.push(name.to_string())
-    formats.push(format.to_string())
+    names.push(name.to_owned())
+    formats.push(format.to_owned())
     inputs.push(@base64.decode(input))
     streams.push(@base64.decode(stream))
   }

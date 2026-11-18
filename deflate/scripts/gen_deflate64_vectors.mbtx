@@ -1,8 +1,8 @@
 ----
 import {
-  "moonbitlang/async@0.22.5",
-  "moonbitlang/async@0.22.5/fs",
-  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/core/async",
+  "moonbitlang/core/async/fs",
+  "moonbitlang/core/async/shell",
   "moonbitlang/core/encoding/base64",
   "moonbitlang/core/encoding/hex",
   "moonbitlang/core/env",
@@ -105,7 +105,7 @@ async fn main {
   }
   available.check()
   let work = @fs.tmpdir(prefix="codecs-deflate64.")
-  defer @fs.rmdir(work, recursive=true)
+  defer @fs.remove(work, recursive=true)
   let check = @env.args().contains("--check")
   let target = "deflate/src/deflate64/vectors_wbtest.mbt"
   let out = StringBuilder()
@@ -114,7 +114,7 @@ async fn main {
   )
   for kind in ["text", "runs", "far", "mixed"] {
     let bytes = input(kind)
-    @fs.write_file("\{work}/input.bin", bytes)
+    @fs.write_binary("\{work}/input.bin", bytes)
     let archive = "\{work}/output.zip"
     let result = @shell.Cmd(
       "7z",
@@ -125,7 +125,7 @@ async fn main {
       cwd=work,
     ).output()
     result.check()
-    let raw = raw_member(@fs.read_file(archive).binary(), bytes.length())
+    let raw = raw_member(@fs.read_binary(archive), bytes.length())
     // Validate the input with 7z too; a bad archive extraction fails here.
     let back = @shell.Cmd("7z", ["x", "-so", archive, "input.bin"]).output(
       max_output_bytes=1 << 20,
@@ -147,7 +147,7 @@ async fn main {
   formatted.check()
   if check {
     guard @fs.exists(target) &&
-      @fs.read_file(target).text() == formatted.stdout() else {
+      @fs.read_text(target) == formatted.stdout() else {
       abort(
         "\{target} is stale: run moon run deflate/scripts/gen_deflate64_vectors.mbtx",
       )
@@ -156,7 +156,7 @@ async fn main {
       "Deflate64 vectors: four raw streams and SHA-256 pins agree with 7z",
     )
   } else {
-    @fs.write_file(target, formatted.stdout())
+    @fs.write_text(target, formatted.stdout())
     println("wrote \{target}: four 7z Deflate64 streams")
   }
 }

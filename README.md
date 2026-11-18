@@ -28,6 +28,9 @@ repository is laid out.
 
 ## Development
 
+The development toolchain is MoonBit 0.10.21 (`moonc v0.10.21+06da1ed44`,
+`moon 0.1.20261117`), pinned in `moonbit-version` and the CI containers.
+
 ```sh
 moon run scripts/gates.mbtx                     # check, test on every target, coverage ledgers, proofs, format, interfaces
 moon run scripts/gates.mbtx -- --full           # include the encoders' reference crosschecks
@@ -45,7 +48,7 @@ CI times and margin in [ci.yml](.github/workflows/ci.yml):
 
 | Part | Work |
 | --- | --- |
-| `checks` | Release metadata, docs, bounds and proof ledgers, registry, generated sources and vectors |
+| `checks` | Script imports, release metadata, docs, bounds and proof ledgers, registry, generated sources and vectors |
 | `test-native` | Native `moon check --deny-warn` and `moon test` |
 | `test-js` | JS `moon check --deny-warn` and `moon test` |
 | `test-wasm` | Wasm `moon check --deny-warn` and `moon test` |

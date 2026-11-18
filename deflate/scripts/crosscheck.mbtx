@@ -188,7 +188,7 @@ async fn main {
       window_bits: name
         .split(" ")
         .filter(word => word.has_prefix("w"))
-        .map(word => word[1:].to_string())
+        .map(word => word[1:].to_owned())
         .collect()
         .get(0)
         .unwrap_or(""),

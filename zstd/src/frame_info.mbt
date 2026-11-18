@@ -175,7 +175,7 @@ pub fn frame_size(input : BytesView) -> Int64 raise @codec.CodecError {
 pub fn skippable_frame(variant : Int32, data : BytesView) -> Bytes {
   let magic = SKIPPABLE_MAGIC | (variant & 0xF).reinterpret_as_uint()
   let n = data.length().reinterpret_as_uint()
-  let out = Buffer(size_hint=8 + data.length())
+  let out = Buffer(capacity=8 + data.length())
   out.write_uint_le(magic)
   out.write_uint_le(n)
   out.write_bytesview(data)

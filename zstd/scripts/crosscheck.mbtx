@@ -50,7 +50,7 @@ import {
 async fn train_dictionary() -> Bytes {
   let dir = "_build/crosscheck-samples"
   if @fs.exists(dir) {
-    @fs.rmdir(dir, recursive=true)
+    @fs.remove(dir, recursive=true)
   }
   @fs.mkdir(dir, recursive=true)
   let words = [
@@ -71,7 +71,7 @@ async fn train_dictionary() -> Bytes {
   @shell.Cmd("zstd", [
     "-q", "-f", "--train", "-r", dir, "--maxdict=16384", "--dictID=777", "-o", path,
   ]).output().check()
-  @fs.rmdir(dir, recursive=true)
+  @fs.remove(dir, recursive=true)
   @fs.read_binary(path)
 }
 

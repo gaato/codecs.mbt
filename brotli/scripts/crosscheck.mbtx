@@ -236,7 +236,7 @@ async fn main {
   let mut failures = 0
   let mut checked = 0
   let identity_work = @fs.tmpdir(prefix="brotli-quality-crosscheck.")
-  defer @fs.rmdir(identity_work, recursive=true)
+  defer @fs.remove(identity_work, recursive=true)
   for n, s in streams {
     let result = node_results[n]
     if result.strip_prefix("error ") is Some(err) {

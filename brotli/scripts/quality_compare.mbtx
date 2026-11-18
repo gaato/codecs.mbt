@@ -1,8 +1,8 @@
 ----
 import {
-  "moonbitlang/async@0.22.5",
-  "moonbitlang/async@0.22.5/fs",
-  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/core/async",
+  "moonbitlang/core/async/fs",
+  "moonbitlang/core/async/shell",
   "moonbitlang/core/env",
 }
 ----
@@ -30,7 +30,7 @@ async fn main {
   @shell.Cmd("moon", ["build", "--release", "--target", "native", "brotli/src/internal/quality_compare"]).output().check()
   let executable = "_build/native/release/build/gaato/brotli/internal/quality_compare/quality_compare.exe"
   let work = @fs.tmpdir(prefix="brotli-quality-comparison.")
-  defer @fs.rmdir(work, recursive=true)
+  defer @fs.remove(work, recursive=true)
   let text = b"The quick brown fox jumps over the lazy dog. Brotli dictionary compression and context modelling.\n"
   println("| Input | Quality | MoonBit bytes | CLI bytes | MoonBit ms | CLI ms |")
   println("|---|---:|---:|---:|---:|---:|")
@@ -42,7 +42,7 @@ async fn main {
       else { (rng >> 24).to_byte() }
     })
     let file = "\{work}/input"
-    @fs.write_file(file, input)
+    @fs.write_binary(file, input)
     for quality in 0..=11 {
       let (ours, ours_ms) = measure(executable, [quality.to_string(), file])
       let (reference, ref_ms) = measure(brotli, ["-q", quality.to_string(), "-w", "22", "-c", file])

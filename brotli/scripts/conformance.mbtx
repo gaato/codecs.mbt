@@ -1,8 +1,8 @@
 ----
 import {
-  "moonbitlang/async@0.22.5",
-  "moonbitlang/async@0.22.5/fs",
-  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/core/async",
+  "moonbitlang/core/async/fs",
+  "moonbitlang/core/async/shell",
   "moonbitlang/core/env",
 }
 ----
@@ -32,15 +32,15 @@ let checks : String =
 
 async fn main {
   let work = @fs.tmpdir(prefix="brotli-conformance.")
-  defer @fs.rmdir(work, recursive=true)
+  defer @fs.remove(work, recursive=true)
   for name in ["brotli", "codec", "codec_bytes", "codec_image", "harness"] {
     @fs.symlink(target=@fs.realpath(name), "\{work}/\{name}")
   }
   @fs.mkdir("\{work}/consumer/src", recursive=true)
-  @fs.write_file("\{work}/moon.work", "members = [\"consumer\", \"brotli\", \"codec\", \"codec_bytes\", \"codec_image\", \"harness\"]\n")
-  @fs.write_file("\{work}/consumer/moon.mod", "name = \"gaato/brotli_contract\"\nversion = \"0.0.0\"\nprivate = true\nsource = \"src\"\nimport { \"gaato/brotli@0.5.0\", \"gaato/codec_harness@0.0.0\" }\n")
-  @fs.write_file("\{work}/consumer/src/moon.pkg", "import { \"gaato/brotli\", \"gaato/codec_harness\" @harness } for \"test\"\nsupported_targets = \"native + js + wasm + wasm-gc\"\n")
-  @fs.write_file("\{work}/consumer/src/contract_test.mbt", checks)
+  @fs.write_text("\{work}/moon.work", "members = [\"consumer\", \"brotli\", \"codec\", \"codec_bytes\", \"codec_image\", \"harness\"]\n")
+  @fs.write_text("\{work}/consumer/moon.mod", "name = \"gaato/brotli_contract\"\nversion = \"0.0.0\"\nprivate = true\nsource = \"src\"\nimport { \"gaato/brotli@0.5.0\", \"gaato/codec_harness@0.0.0\" }\n")
+  @fs.write_text("\{work}/consumer/src/moon.pkg", "import { \"gaato/brotli\", \"gaato/codec_harness\" @harness } for \"test\"\nsupported_targets = \"native + js + wasm + wasm-gc\"\n")
+  @fs.write_text("\{work}/consumer/src/contract_test.mbt", checks)
   let target = @env.args().get(1).unwrap_or("native")
   let status = @shell.Cmd("moon", ["test", "--target", target, "consumer/src"], cwd=work).status()
   assert_eq(status, 0)

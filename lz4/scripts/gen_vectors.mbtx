@@ -89,14 +89,14 @@ async fn main {
       continue
     }
     if name == "dictionary" {
-      dict = input.to_string()
+      dict = input.to_owned()
       continue
     }
     guard set != "flushed" else { continue }
-    names.push(name.to_string())
-    sets.push(set.to_string())
+    names.push(name.to_owned())
+    sets.push(set.to_owned())
     inputs.push(@base64.decode(input))
-    let (format, with_dict) = reference_format(set.to_string())
+    let (format, with_dict) = reference_format(set.to_owned())
     if with_dict {
       lines.write_string("\{format}\t\{input}\t\{dict}\n")
     } else {
