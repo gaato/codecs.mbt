@@ -125,7 +125,17 @@ test "typst" (b : @bench.T) {
 test "mizchi" (b : @bench.T) {
   let (plain, interlaced, want) = images()
   assert_true(gives("mizchi", plain, want))
-  // mizchi/image does not read interlaced images.
-  assert_true(!gives("mizchi", interlaced, want))
+  assert_true(gives("mizchi", interlaced, want))
   b.bench(name="mizchi png 512x384 rgb8", () => b.keep(native("mizchi", plain)))
+  b.bench(name="mizchi png 512x384 rgb8 adam7", () => {
+    b.keep(native("mizchi", interlaced))
+  })
+}
+
+///|
+// CI skips benchmarks, so keep their decoder expectations in a regular test.
+test "mizchi decodes plain and Adam7 benchmark images" {
+  let (plain, interlaced, want) = images()
+  assert_true(gives("mizchi", plain, want))
+  assert_true(gives("mizchi", interlaced, want))
 }

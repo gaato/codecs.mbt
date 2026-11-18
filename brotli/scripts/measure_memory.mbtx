@@ -1,8 +1,8 @@
 ----
 import {
-  "moonbitlang/async@0.22.5",
-  "moonbitlang/async@0.22.5/fs",
-  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/core/async",
+  "moonbitlang/core/async/fs",
+  "moonbitlang/core/async/shell",
   "moonbitlang/core/env",
   "moonbitlang/core/encoding/hex",
   "moonbitlang/x@0.5.6/crypto",
@@ -21,7 +21,7 @@ async fn main {
   let source = StringBuilder()
   source.write_string("///|\ntest \"measured HQ accounted memory\" {\nlet mut seed = 1951U\nlet alternating = Bytes::makei(1048576, i => { seed = seed * 1664525U + 1013904223U; (32U * ((i / 512) & 7).reinterpret_as_uint() + ((seed >> 24) & 31U)).to_byte() })\nfor (name, input) in [\n")
   for i, file in files {
-    let bytes = @fs.read_file(file).binary()
+    let bytes = @fs.read_binary(file)
     let name = if i == 0 { "bench_text" } else { "bench_binary" }
     let digest = @hex.encode(Bytes::from_array(@crypto.sha256(bytes)))
     println("INPUT \{name}: \{bytes.length()} bytes, SHA-256 \{digest}")
@@ -37,15 +37,15 @@ async fn main {
   }
   source.write_string("(\"alternating512\", alternating)] {\nfor quality in [10,11] { for window in [22,24] {\nlet p = hq_measure(input, quality, window)\nprintln(\"MEASURE\\t\\{name}\\t\\{input.length()}\\t\\{quality}\\t\\{window}\\t\\{p.bytes}\\t\\{encoder_memory_bound(quality~, window_bits=window)}\\t\\{p.parser}\\t\\{p.blocks}\\t\\{p.clusters}\")\n}}}\n}\n")
   let work = @fs.tmpdir(prefix="brotli-memory.")
-  defer @fs.rmdir(work, recursive=true)
+  defer @fs.remove(work, recursive=true)
   @fs.mkdir("\{work}/brotli", recursive=true)
   @shell.Cmd("cp", ["-a", "brotli/src", "\{work}/brotli/"]).output().check()
-  @fs.write_file("\{work}/brotli/moon.mod", @fs.read_file("brotli/moon.mod").text())
+  @fs.write_text("\{work}/brotli/moon.mod", @fs.read_text("brotli/moon.mod"))
   for name in ["codec", "codec_bytes"] {
     @fs.symlink(target=@fs.realpath(name), "\{work}/\{name}")
   }
-  @fs.write_file("\{work}/moon.work", "members = [\"brotli\", \"codec\", \"codec_bytes\"]\n")
-  @fs.write_file("\{work}/brotli/src/measured_memory_wbtest.mbt", source.to_string())
+  @fs.write_text("\{work}/moon.work", "members = [\"brotli\", \"codec\", \"codec_bytes\"]\n")
+  @fs.write_text("\{work}/brotli/src/measured_memory_wbtest.mbt", source.to_string())
   let result = @shell.Cmd("moon", ["-C", work, "test", "--target", "native", "brotli/src", "-f", "measured HQ accounted memory"]).output(max_output_bytes=8 << 20)
   println(result.stdout())
   eprintln(result.stderr())

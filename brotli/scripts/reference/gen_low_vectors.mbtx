@@ -37,7 +37,7 @@ async fn main {
   cli.check()
   let brotli=cli.stdout().trim().to_owned()
   let work=@fs.tmpdir(prefix="brotli-low-vectors.")
-  defer @fs.rmdir(work,recursive=true)
+  defer @fs.remove(work,recursive=true)
   let cases=[]
   for q in 0..=3 {
     for (kind,size,window) in [(0,0,22),(0,1,22),(0,20,10),(0,1000,24),(1,10000,22),(2,20000,16),(3,10000,22)] {

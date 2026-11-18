@@ -1,8 +1,8 @@
 ----
 import {
-  "moonbitlang/async@0.22.5",
-  "moonbitlang/async@0.22.5/fs",
-  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/core/async",
+  "moonbitlang/core/async/fs",
+  "moonbitlang/core/async/shell",
   "moonbitlang/core/env",
   "moonbitlang/core/encoding/hex",
   "moonbitlang/x@0.5.6/crypto",
@@ -38,7 +38,7 @@ fn digest(data : Bytes) -> String { @hex.encode(Bytes::from_array(@crypto.sha256
 
 async fn main {
   let work = @fs.tmpdir(prefix="brotli-quality-vectors.")
-  defer @fs.rmdir(work, recursive=true)
+  defer @fs.remove(work, recursive=true)
   let cli = @shell.Cmd("moon", ["run", "brotli/scripts/reference/cli.mbtx"]).output()
   cli.check()
   let brotli = cli.stdout().trim().to_owned()
@@ -53,7 +53,7 @@ async fn main {
   ] {
     let input = sample(kind, size)
     let file = "\{work}/input"
-    @fs.write_file(file, input)
+    @fs.write_binary(file, input)
     out.write_string("  {\n    let input = ref_quality_sample(\{kind}, \{size})\n    assert_eq(@checksum.sha256(input), \"\{digest(input)}\")\n    let expected = [\n")
     for quality in 5..=9 {
       let args = ["-q", quality.to_string(), "-w", window.to_string(), "-c"]
@@ -69,6 +69,6 @@ async fn main {
   let formatted = @shell.Cmd("moonfmt", ["-"], stdin=Text(out.to_string())).output()
   formatted.check()
   let path = "brotli/src/reference_vectors_wbtest.mbt"
-  if @env.args().contains("--check") { assert_eq(@fs.read_file(path).text(), formatted.stdout()) }
-  else { @fs.write_file(path, formatted.stdout()) }
+  if @env.args().contains("--check") { assert_eq(@fs.read_text(path), formatted.stdout()) }
+  else { @fs.write_text(path, formatted.stdout()) }
 }

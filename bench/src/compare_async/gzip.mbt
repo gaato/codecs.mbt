@@ -1,6 +1,6 @@
 ///|
 /// The package and its version.
-pub let name : String = "moonbitlang/core/async (MoonBit 0.10.20)"
+pub let name : String = "moonbitlang/core/async (MoonBit 0.10.21)"
 
 ///|
 /// A reader over bytes in memory that hands out at most `piece` bytes per
@@ -15,6 +15,11 @@ priv struct Source {
 ///|
 impl @io.BinaryReaderImpl for Source with fn get_controller(self) {
   self.controller
+}
+
+///|
+impl @io.BinaryReaderImpl for Source with fn name(_) {
+  "codec_bench source"
 }
 
 ///|
@@ -46,6 +51,17 @@ priv struct Sink {
 ///|
 impl @io.BinaryWriterImpl for Sink with fn get_controller(self) {
   self.controller
+}
+
+///|
+impl @io.BinaryWriterImpl for Sink with fn name(_) {
+  "codec_bench sink"
+}
+
+///|
+/// Sink keeps every byte it is given in `out`: nothing waits to be flushed.
+impl @io.BinaryWriterImpl for Sink with fn flush_partial_data(_) {
+
 }
 
 ///|

@@ -343,7 +343,7 @@ fn render(dictionary : Bytes, rfc : Array[String]) -> String raise {
   }
   out.append([
     "  ]",
-    "  let buffer = Buffer(size_hint=\{dictionary.length()})",
+    "  let buffer = Buffer(capacity=\{dictionary.length()})",
     "  for chunk in chunks {",
     "    buffer.write_bytes(chunk)",
     "  }",

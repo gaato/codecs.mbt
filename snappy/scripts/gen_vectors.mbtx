@@ -57,8 +57,8 @@ async fn main {
       continue
     }
     guard !name.has_suffix("_flushed") else { continue }
-    names.push(name.to_string())
-    formats.push(format.to_string())
+    names.push(name.to_owned())
+    formats.push(format.to_owned())
     inputs.push(@base64.decode(input))
     lines.write_string("\{format}-encode\t\{input}\n")
   }

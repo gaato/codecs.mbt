@@ -1,8 +1,8 @@
 ----
 import {
-  "moonbitlang/async@0.22.5",
-  "moonbitlang/async@0.22.5/fs",
-  "moonbitlang/async@0.22.5/shell",
+  "moonbitlang/core/async",
+  "moonbitlang/core/async/fs",
+  "moonbitlang/core/async/shell",
   "moonbitlang/core/encoding/hex",
   "moonbitlang/core/env",
   "moonbitlang/x@0.5.6/crypto",
@@ -99,10 +99,10 @@ async fn generate(work : String, check : Bool) -> Unit {
       )
     }
     verify_archive(downloaded)
-    @fs.mkdir(cache_dir, recursive=true, allow_exist=true)
+    @fs.mkdir(cache_dir, recursive=true, allow_existing=true)
     let unique = work[work.rev_find("/").unwrap() + 1:]
     let staging = "\{cache_dir}/\{unique}.tar.gz.part"
-    @fs.write_file(staging, @fs.read_file(downloaded))
+    @fs.write_binary(staging, @fs.read_binary(downloaded))
     @fs.rename(staging, archive)
   }
   verify_archive(archive)
@@ -115,9 +115,9 @@ async fn generate(work : String, check : Bool) -> Unit {
 async fn verify_archive(archive : String) -> Unit {
   let dir = "scripts/reference/libdeflate"
   let archive_name = "libdeflate-1.24.tar.gz"
-  let pin = @fs.read_file("\{dir}/SOURCE.sha256").text().trim().to_owned()
+  let pin = @fs.read_text("\{dir}/SOURCE.sha256").trim().to_owned()
   let hash = @hex.encode(
-    Bytes::from_array(@crypto.sha256(@fs.read_file(archive).binary())),
+    Bytes::from_array(@crypto.sha256(@fs.read_binary(archive))),
   )
   guard pin == "\{hash}  \{archive_name}" else {
     abort("libdeflate SHA-256 mismatch for \{archive}; expected SOURCE.sha256")
@@ -166,7 +166,7 @@ async fn generate_matches(work : String, check : Bool) -> Unit {
     ] {
     let data = input(kind, size)
     let path = "\{work}/input"
-    @fs.write_file(path, data)
+    @fs.write_binary(path, data)
     out.write_string(
       "  {\n    let data = bt_oracle_input(\"\{kind}\", \{size})\n    assert_eq(bt_input_digest(data), \{input_digest(data)}UL)\n",
     )
@@ -192,12 +192,12 @@ async fn generate_matches(work : String, check : Bool) -> Unit {
   formatted.check()
   if check {
     guard @fs.exists(target) &&
-      @fs.read_file(target).text() == formatted.stdout() else {
+      @fs.read_text(target) == formatted.stdout() else {
       abort("\{target} is stale: run moon run \{dir}/gen_vectors.mbtx")
     }
     println("\{target}: 32 match-list digests agree with libdeflate 1.24")
   } else {
-    @fs.write_file(target, formatted.stdout())
+    @fs.write_text(target, formatted.stdout())
     println("wrote \{target}: 32 match-list digests")
   }
 }
@@ -264,7 +264,7 @@ fn patch(source : String, old : String, replacement : String) -> String {
 async fn generate_deflate(work : String, check : Bool) -> Unit {
   let root = "\{work}/libdeflate-1.24"
   let file = "\{root}/lib/deflate_compress.c"
-  let original = @fs.read_file(file).text()
+  let original = @fs.read_text(file)
   let source = patch(
     original, "SOFT_MAX_BLOCK_LENGTH\t300000", "SOFT_MAX_BLOCK_LENGTH\t65535",
   )
@@ -280,7 +280,7 @@ async fn generate_deflate(work : String, check : Bool) -> Unit {
   let source = patch(
     source, "(SOFT_MAX_BLOCK_LENGTH * 5)", "(MIN_BLOCK_LENGTH * MAX_MATCHES_PER_POS)",
   )
-  @fs.write_file(file, source)
+  @fs.write_text(file, source)
   let executable = "\{work}/compress"
   ignore(
     run("cc", [
@@ -317,13 +317,13 @@ async fn generate_deflate(work : String, check : Bool) -> Unit {
     ] {
     let input_path = "\{work}/raw_input"
     let output_path = "\{work}/raw_output"
-    @fs.write_file(input_path, input)
+    @fs.write_binary(input_path, input)
     out.write_string(
       "  {\n    let input = \{expression}\n    assert_eq(@fixtures.sha256(input), \"\{sha256(input)}\")\n    let expected = [\n",
     )
     for level in 0..<=12 {
       ignore(run(executable, [input_path, level.to_string(), output_path]))
-      let digest = sha256(@fs.read_file(output_path).binary())
+      let digest = sha256(@fs.read_binary(output_path))
       out.write_string("      \"\{digest}\",\n")
       if name == "sample" && level >= 10 {
         println("level \{level}: \{digest}")
@@ -338,14 +338,14 @@ async fn generate_deflate(work : String, check : Bool) -> Unit {
   formatted.check()
   if check {
     guard @fs.exists(target) &&
-      @fs.read_file(target).text() == formatted.stdout() else {
+      @fs.read_text(target) == formatted.stdout() else {
       abort(
         "\{target} is stale: run moon run scripts/reference/libdeflate/gen_vectors.mbtx",
       )
     }
     println("\{target}: 78 raw-DEFLATE digests agree with libdeflate 1.24")
   } else {
-    @fs.write_file(target, formatted.stdout())
+    @fs.write_text(target, formatted.stdout())
     println("wrote \{target}: 78 raw-DEFLATE digests")
   }
 }
@@ -353,6 +353,6 @@ async fn generate_deflate(work : String, check : Bool) -> Unit {
 ///|
 async fn main {
   let work = @fs.tmpdir(prefix="codecs-bt-reference.")
-  defer @fs.rmdir(work, recursive=true)
+  defer @fs.remove(work, recursive=true)
   generate(work, @env.args().contains("--check"))
 }

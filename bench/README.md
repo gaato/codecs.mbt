@@ -61,11 +61,17 @@ decoder itself holds 47,360 + 2 × (1 + 1,536) bytes for these images.
 
 `src/compare_png` holds the other PNG decoders on mooncakes.io behind one
 shape: moonbitlang/typst 0.1.9 (`codecs`, its `decode_png`), gmlewis/image 0.17.18
-(`png`) and mizchi/image 0.4.3 (`decode_png`). Each decodes a whole file, and
+(`png`) and mizchi/image 0.5.0 (`decode_png`). Each decodes a whole file, and
 its output is brought to straight RGBA, 16 bits a sample, samples of fewer
 bits widened by repeating their bits, so that it can be compared byte for byte
 with gaato/png's: the samples of `decode`'s rows (which the conformance suite
 checks against pypng's) with the palette and tRNS applied.
+
+The current mizchi/image 0.5.0 pin decodes the plain and Adam7 benchmark
+fixtures to the same pixels; both are checked by a regular test as well as
+the benchmark. The recorded mizchi/image results below are from 0.4.3,
+including its interlaced-image refusals. They have not been remeasured for
+0.5.0.
 
 bikallem/image 0.1.0 (`png`) does not build here: moon 0.1.20261016 stops at
 its dependency bikallem/compress 0.3.2, whose `moon.mod.json` "is no longer
@@ -92,7 +98,7 @@ which needs a workspace of its own, are from 2026-10-23.
 | [moonbitlang/typst](https://mooncakes.io/docs/moonbitlang/typst) 0.1.9 | No | 262.5 MiB, none | All, Adam7, APNG's default image | Not IEND's, no | All four | 1.07 / 1.4 / 1.05 / 7.8 |
 | [gmlewis/image](https://mooncakes.io/docs/gmlewis/image) 0.17.18 | Input only | 264.2 MiB, 2^28 pixels | All, Adam7, APNG's default image | All chunks, yes | All four¹ | 14 / – / 6.6 / – |
 | [bikallem/image](https://mooncakes.io/docs/bikallem/image) 0.1.0 | No | 526.1 MiB, 2^28 pixels | All, Adam7, APNG's default image | All chunks, yes | None as published² | 2.2 / 3.5 / 1.9 / 7.3³ |
-| [mizchi/image](https://mooncakes.io/docs/mizchi/image) 0.4.3 | Rows, once all inflated | Refused: 256 MiB inflated | 8-bit, no Adam7, APNG's default image | All chunks, yes | All four | 3.2 / 4.7 / 2.9 / 10 |
+| [mizchi/image](https://mooncakes.io/docs/mizchi/image) 0.4.3 (recorded) | Rows, once all inflated | Refused: 256 MiB inflated | 8-bit, APNG's default image; Adam7 supported by the current 0.5.0 pin | All chunks, yes | All four | 3.2 / 4.7 / 2.9 / 10 |
 
 ¹ On JS and Wasm the stack runs out on a 512 × 384 image. ² MoonBit 0.10.16's moon no longer reads its `moon.mod.json`, nor its dependency's; with them migrated, all four. ³ Its times of 2026-10-23 over ours of 2026-11-15.
 
@@ -102,7 +108,7 @@ The times are for a 512 × 384 RGB image: each package's time over ours, below 1
 - **moonbitlang/typst** (`codecs`): the whole file in, the whole image out. `decode_png` sets no limit: a 1 MB file of a 16384 × 16384 image needed more than 4 GiB of address space. tRNS, pHYs, iCCP and eXIf. The CRC of IHDR, PLTE and IDAT. PngSuite: 162 of 162, 14 of 14; the default image of 45 of 45 APNG vectors; neither crashes nor hangs on 30,590 broken files.
 - **gmlewis/image** (`png`): input from a reader, the whole image out, with no limit but 2^28 pixels, where its sizes would overflow. No ancillary chunk; tRNS applied. Every chunk's CRC, ancillary ones too. PngSuite: 162 of 162, 14 of 14; 45 of 45 APNG vectors. Of 30,590 broken files, hangs on 893, most of them cut short, crashes on 8, and gives for 192 an image whose `at` aborts.
 - **bikallem/image** (`png`): the whole file in, the whole image and its inflated data held, with no limit but 2^28 pixels. No ancillary chunk; tRNS applied. Every chunk's CRC, ancillary ones too. PngSuite: 162 of 162, 14 of 14; 45 of 45 APNG vectors. Crashes on 38 of 30,590 broken files, 34 of them damaged copies of a 1.5 KB image for which its buffer of inflated data grew past 3 GiB.
-- **mizchi/image**: rows to a callback, once the whole image data is inflated; the inflated data and the RGBA image held, 777 MiB for 8191 × 8191. At most 256 MiB inflated, so 8192 × 8192 RGBA is refused; it allocates the image before inflating, 1.3 GiB for a 79-byte file. 8-bit only, tRNS only for indexed color. No ancillary chunk. Every chunk's CRC, ancillary ones too; IEND not required. PngSuite: 53 of 162 (108 refused, 1 other image), 14 of 14; 41 of 45 APNG vectors. Crashes on 173 of 30,590 broken files.
+- **mizchi/image 0.4.3 (recorded)**: rows to a callback, once the whole image data is inflated; the inflated data and the RGBA image held, 777 MiB for 8191 × 8191. At most 256 MiB inflated, so 8192 × 8192 RGBA is refused; it allocates the image before inflating, 1.3 GiB for a 79-byte file. 8-bit only, tRNS only for indexed color. No ancillary chunk. Every chunk's CRC, ancillary ones too; IEND not required. PngSuite: 53 of 162 (108 refused, 1 other image), 14 of 14; 41 of 45 APNG vectors. Crashes on 173 of 30,590 broken files.
 
 ### Speed
 
@@ -129,7 +135,8 @@ gmlewis/image's inflater (gmlewis/flate 0.36.17) recurses for every match,
 fills: on JS ("RangeError: Maximum call stack size exceeded") and Wasm the
 stack runs out on this image, while PngSuite's small images decode on all four
 targets. Its benchmark is in `gmlewis_bench_test.mbt`, built for Native and
-Wasm GC only. mizchi/image refuses interlaced images.
+Wasm GC only. The interlaced-image refusals recorded for mizchi/image 0.4.3
+do not apply to the current 0.5.0 pin.
 
 ### Memory
 
@@ -192,10 +199,10 @@ gaato/png's:
 | bikallem/image 0.1.0 | 162 | 14 | 45 |
 | mizchi/image 0.4.3 | 53 | 14 | 41 |
 
-mizchi/image refuses PngSuite's 16-bit images (`unsupported color type/bit
+The recorded mizchi/image 0.4.3 run refused PngSuite's 16-bit images (`unsupported color type/bit
 depth`), its images of fewer than 8 bits (`decompressed size mismatch`) and its
-interlaced ones, 108 in all, and gives another image for `tbrn2c08`: it
-applies tRNS to indexed images only. bikallem/image gives an indexed image's
+interlaced ones, 108 in all, and gave another image for `tbrn2c08`: it
+applied tRNS to indexed images only. bikallem/image gives an indexed image's
 palette with tRNS as Go's premultiplied `RGBA` colors holding straight values;
 read as straight, as here, they match, while code that takes them for
 premultiplied ones, as Go's `RGBA` means, gets other colors.

@@ -138,7 +138,7 @@ async fn measure(dir : String) -> String {
     }
   }
   if @fs.exists("_build/native/debug/test") {
-    @fs.rmdir("_build/native/debug/test", recursive=true)
+    @fs.remove("_build/native/debug/test", recursive=true)
   }
   let cc = match @env.get_env_var("MOON_CC") {
     Some(cc) if cc != "" => cc

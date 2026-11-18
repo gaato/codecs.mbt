@@ -364,7 +364,7 @@ async fn main {
   let stale = "\{target} is stale: run moon run zstd/scripts/gen_dict_vectors.mbtx"
   let work = "_build/gen_dict_vectors"
   if @fs.exists(work) {
-    @fs.rmdir(work, recursive=true)
+    @fs.remove(work, recursive=true)
   }
   @fs.mkdir(work, recursive=true)
   if @env.args().contains("--check") {
@@ -397,5 +397,5 @@ async fn main {
     @fs.write_text(target, text)
     println("\{target}: \{text.length()} characters")
   }
-  @fs.rmdir(work, recursive=true)
+  @fs.remove(work, recursive=true)
 }

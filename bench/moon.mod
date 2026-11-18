@@ -28,7 +28,7 @@ import {
   "moonbitlang/typst@0.1.9",
   "gmlewis/image@0.17.18",
   "gmlewis/io@0.23.20",
-  "mizchi/image@0.4.3",
+  "mizchi/image@0.5.0",
   "moonbitlang/x@0.5.6",
   "Milky2018/zstd@0.1.4",
   "hustcer/fbr@0.8.2",
