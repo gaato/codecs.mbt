@@ -14,7 +14,7 @@
     "crc": ["src", "src/internal/crc32", "src/internal/crc32c"],
     "snappy": ["src", "src/internal/whole", "src/internal/blit", "src/internal/copy16", "src/internal/crc32c"],
     "lz4": ["src", "src/internal/whole", "src/internal/blit", "src/internal/copy16"],
-    "lzw": ["src", "src/internal/whole"],
+    "lzw": ["src", "src/internal/blit", "src/internal/whole"],
     "zstd": [
       "src", "src/internal/whole",
       "src/internal/blit",
@@ -153,7 +153,8 @@
       "proof_codes": ["codes.mbt", "codes.mbtp", "codes_test.mbt"]
     },
     "lzw": {
-      "whole": ["whole.mbt", "whole_test.mbt"]
+      "whole": ["whole.mbt", "whole_test.mbt"],
+      "blit": ["blit.mbt", "blit_test.mbt"]
     },
     "zstd": {
       "whole": ["whole.mbt", "whole_test.mbt"],

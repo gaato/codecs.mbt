@@ -44,7 +44,7 @@ test {
 
 `update(crc, data)` continues a CRC as zlib's `crc32` does: from the CRC of the data so far, with `checksum(b"")` for none, so that `update(checksum(a), b)` is `checksum(a + b)`. `combine(crc_a, crc_b, len_b)` gives the CRC of `a` then `b` from those of each and `b`'s length in bytes, in time logarithmic in the length, as zlib's `crc32_combine` does; it serves pieces computed apart, in parallel or on other machines.
 
-`crc32`, `crc32c` and `crc64_xz`, and any `Crc` made with their parameters, take eight bytes at a time (slice-by-8, from tables computed at start-up: 8 KiB each for the 32-bit two and 16 KiB for CRC-64/XZ). `crc32_update`, `crc32c_update` and `crc64_xz_update` are the same as plain functions on `UInt32` and `UInt64`, starting from 0. Other CRCs take a byte at a time from a table of 256 entries made with the `Crc`.
+`crc32`, `crc32c` and `crc64_xz`, and any `Crc` made with their parameters, take eight bytes at a time from tables computed at start-up (slice-by-8). `crc32_update`, `crc32c_update` and `crc64_xz_update` are the same as plain functions on `UInt32` and `UInt64`, starting from 0. Other CRCs take a byte at a time from a table of 256 entries made with the `Crc`.
 
 Not included: CRCs wider than 64 bits (the catalogue's CRC-82/DARC), whose register does not fit a `UInt64`; messages that are not whole bytes; hardware CRC instructions, which MoonBit does not reach; and other checksums. Adler-32 and xxHash are not CRCs, and gaato/deflate and gaato/zstd keep theirs internal; for SHA-2 and other cryptographic hashes, use `moonbitlang/x/crypto`.
 

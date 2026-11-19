@@ -17,9 +17,21 @@ pub struct Crc {
   priv mask : UInt64
   // The register after a byte from each register's low (reflected) or top
   // byte, 256 entries.
-  priv table : FixedArray[UInt64]
+  priv table : RegisterTable
   priv engine : Engine
 }
+
+///|
+#cfg(any(target="wasm", target="js"))
+priv enum RegisterTable {
+  Narrow(FixedArray[UInt32])
+  Wide(FixedArray[UInt64])
+}
+
+///|
+// CRC-32/BZIP2 was faster with the wide register on native and Wasm GC.
+#cfg(not(any(target="wasm", target="js")))
+type RegisterTable = FixedArray[UInt64]
 
 ///|
 /// How a `Crc` runs over data: from its table, or eight bytes at a time
@@ -124,9 +136,35 @@ pub fn Crc::try_new(
     reflect_out,
     xor_out,
     mask,
-    table,
+    table: register_table(table, width, reflect_in),
     engine,
   })
+}
+
+///|
+#cfg(any(target="wasm", target="js"))
+fn register_table(
+  table : FixedArray[UInt64],
+  width : Int32,
+  reflect_in : Bool,
+) -> RegisterTable {
+  if width <= 32 {
+    let shift = if reflect_in { 0 } else { 32 }
+    Narrow(FixedArray::makei(256, i => (table[i] >> shift).to_uint()))
+  } else {
+    Wide(table)
+  }
+}
+
+///|
+#cfg(not(any(target="wasm", target="js")))
+#inline
+fn register_table(
+  table : FixedArray[UInt64],
+  _width : Int32,
+  _reflect_in : Bool,
+) -> RegisterTable {
+  table
 }
 
 ///|
@@ -139,6 +177,21 @@ pub fn Crc::checksum(self : Crc, data : BytesView) -> UInt64 {
 /// The CRC of the data so far, whose CRC is `crc`, extended by `data`:
 /// `update(checksum(a), b)` is `checksum(a + b)`, and the CRC of no data is
 /// `checksum(b"")`.
+#cfg(any(target="wasm", target="js"))
+pub fn Crc::update(self : Crc, crc : UInt64, data : BytesView) -> UInt64 {
+  match self.engine {
+    Crc32 => @crc32.update_bytes(crc.to_uint(), data).to_uint64()
+    Crc32c => @crc32c.update_bytes(crc.to_uint(), data).to_uint64()
+    Crc64Xz => crc64_xz_update(crc, data)
+    Table => self.update_table(crc & self.mask, data)
+  }
+}
+
+///|
+/// The CRC of the data so far, whose CRC is `crc`, extended by `data`:
+/// `update(checksum(a), b)` is `checksum(a + b)`, and the CRC of no data is
+/// `checksum(b"")`.
+#cfg(not(any(target="wasm", target="js")))
 pub fn Crc::update(self : Crc, crc : UInt64, data : BytesView) -> UInt64 {
   match self.engine {
     Crc32 => @crc32.update_bytes(crc.to_uint(), data).to_uint64()
@@ -206,6 +259,24 @@ fn Crc::empty(self : Crc) -> UInt64 {
 
 ///|
 /// The register the table runs, from an output value.
+#cfg(not(target="native"))
+fn Crc::register(self : Crc, crc : UInt64) -> UInt64 {
+  if self.reflect_in {
+    let x = crc ^ self.xor_out
+    // The two reflections of a width-bit value cancel.
+    if self.reflect_out {
+      x
+    } else {
+      reflect(x, self.width)
+    }
+  } else {
+    self.normal(crc) << (64 - self.width)
+  }
+}
+
+///|
+// Keep the reflected whole-input loop's native code generation.
+#cfg(target="native")
 fn Crc::register(self : Crc, crc : UInt64) -> UInt64 {
   let normal = self.normal(crc)
   if self.reflect_in {
@@ -217,6 +288,22 @@ fn Crc::register(self : Crc, crc : UInt64) -> UInt64 {
 
 ///|
 /// The output value of a register the table ran.
+#cfg(not(target="native"))
+fn Crc::output(self : Crc, register : UInt64) -> UInt64 {
+  if self.reflect_in {
+    let r = if self.reflect_out {
+      register
+    } else {
+      reflect(register, self.width)
+    }
+    r ^ self.xor_out
+  } else {
+    self.from_normal(register >> (64 - self.width))
+  }
+}
+
+///|
+#cfg(target="native")
 fn Crc::output(self : Crc, register : UInt64) -> UInt64 {
   let normal = if self.reflect_in {
     reflect(register, self.width)
@@ -246,7 +333,68 @@ fn Crc::from_normal(self : Crc, normal : UInt64) -> UInt64 {
 }
 
 ///|
-/// The table's register after `data`.
+/// Updates the table engine's CRC with `data`.
+#cfg(any(target="wasm", target="js"))
+fn Crc::update_table(self : Crc, crc : UInt64, data : BytesView) -> UInt64 {
+  match self.table {
+    Narrow(table) => self.update_narrow(table, crc, data)
+    Wide(table) => self.output(self.run_wide(table, self.register(crc), data))
+  }
+}
+
+///|
+#cfg(any(target="wasm", target="js"))
+fn Crc::update_narrow(
+  self : Crc,
+  table : FixedArray[UInt32],
+  crc : UInt64,
+  data : BytesView,
+) -> UInt64 {
+  if self.reflect_in {
+    let mut r = self.register(crc).to_uint()
+    for b in data {
+      // Masking to a byte gives an index within the 256 entries.
+      r = table.unsafe_get(((r ^ b.to_uint()) & 0xFF).reinterpret_as_int()) ^
+        (r >> 8)
+    }
+    self.output(r.to_uint64())
+  } else {
+    let shift = 32 - self.width
+    let mut r = self.normal(crc).to_uint() << shift
+    for b in data {
+      // The high byte XOR the input byte is within the 256 entries.
+      r = table.unsafe_get(((r >> 24) ^ b.to_uint()).reinterpret_as_int()) ^
+        (r << 8)
+    }
+    self.from_normal((r >> shift).to_uint64())
+  }
+}
+
+///|
+#cfg(any(target="wasm", target="js"))
+fn Crc::run_wide(
+  self : Crc,
+  table : FixedArray[UInt64],
+  register : UInt64,
+  data : BytesView,
+) -> UInt64 {
+  let mut r = register
+  if self.reflect_in {
+    for b in data {
+      // An index of a byte: within the 256 entries.
+      r = table.unsafe_get(((r ^ b.to_uint64()) & 0xFF).to_int()) ^ (r >> 8)
+    }
+  } else {
+    for b in data {
+      // The high byte XOR the input byte is within the 256 entries.
+      r = table.unsafe_get(((r >> 56) ^ b.to_uint64()).to_int()) ^ (r << 8)
+    }
+  }
+  r
+}
+
+///|
+#cfg(not(any(target="wasm", target="js")))
 fn Crc::run(self : Crc, register : UInt64, data : BytesView) -> UInt64 {
   let table = self.table
   let mut r = register
@@ -257,6 +405,7 @@ fn Crc::run(self : Crc, register : UInt64, data : BytesView) -> UInt64 {
     }
   } else {
     for b in data {
+      // The high byte XOR the input byte is within the 256 entries.
       r = table.unsafe_get(((r >> 56) ^ b.to_uint64()).to_int()) ^ (r << 8)
     }
   }

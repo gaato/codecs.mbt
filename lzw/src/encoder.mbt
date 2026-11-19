@@ -376,8 +376,10 @@ pub fn Encoder::step(
   }
   for ;; {
     let n = (self.out_len - self.out_pos).min(output.length() - self.produced)
-    for i in 0..<n {
-      output[self.produced + i] = self.out[self.out_pos + i]
+    if n > 0 {
+      // n is bounded by both the caller's remaining room and the
+      // initialized bytes between out_pos and out_len.
+      @blit.into_view(output, self.produced, self.out, self.out_pos, n)
     }
     self.out_pos += n
     self.produced += n

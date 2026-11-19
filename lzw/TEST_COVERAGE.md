@@ -24,7 +24,7 @@ CI too. The pitfalls the script pins are described in zstd's ledger,
 
 - Sources: every non-test `.mbt` of `src/`: the formats, the decoder, the
   encoder, the whole-input functions and the trait implementations; and
-  `src/internal/whole/`, the copy of parts/whole they run through. The
+  the copies of parts/whole and parts/blit in `src/internal/`. The
   crosscheck's executable, `src/internal/crosscheck/`, is run by
   `scripts/crosscheck.mbtx` and `scripts/gen_vectors.mbtx`, not by the
   tests.
@@ -58,4 +58,6 @@ Budgets are the exact uncovered counts: the script fails on any difference.
 
 | File | Budget | Reason |
 | --- | --- | --- |
+| src/decoder.mbt | 3 | The unchecked table accessors compile only on Wasm, and the guard for fewer than three input bytes is folded away on native. The decoder tests run on all four targets, including the reference vectors in `src/vectors_wbtest.mbt`. |
+| src/internal/blit/blit.mbt | 10 | The native build excludes the JS byte loops and the JS and Wasm GC implementation of `forward`. The shared tests in `src/internal/blit/blit_test.mbt` run on those targets, and the encoder tests exercise `into_view`. |
 | src/internal/whole/whole.mbt | 4 | The output reaching 2^31 - 1 bytes with no `max_output` (`None => MAX_LENGTH` in `decode`, the `abort` of `encode`), which no test can allocate, and `copy` for JS (`#cfg(target="js")`), a loop without index checks: the ledger measures native, which compiles the block copy instead. The gates run the same tests on JS: `src/internal/whole/whole_test.mbt`, and every `compress` and `decompress` test of the module. |
