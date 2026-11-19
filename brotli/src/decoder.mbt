@@ -391,13 +391,14 @@ fn Decoder::step_with(
   match status {
     NeedMoreInput => {
       // Keep the unfinished unit's bytes; the caller may drop the chunk.
-      let kept = self.stash[self.stash_pos:].to_owned()
-      kept.push_iter(self.view[self.in_pos:].iter())
-      self.stash = kept
-      self.stash_pos = 0
-      self.in_pos = self.view.length()
+      self.compact_stash()
+      let view = self.view
+      for i in self.in_pos..<view.length() {
+        self.stash.push(view[i])
+      }
+      self.in_pos = view.length()
       if end {
-        let message = if self.state is StreamHeader && kept.length() == 0 {
+        let message = if self.state is StreamHeader && self.stash.length() == 0 {
           "the input holds no stream"
         } else {
           "the input ends inside the stream"
@@ -452,11 +453,22 @@ fn Decoder::step_with(
 }
 
 ///|
-fn Decoder::finish_step(self : Decoder, status : Status) -> Status {
-  if self.stash_pos > 0 {
-    self.stash = self.stash[self.stash_pos:].to_owned()
-    self.stash_pos = 0
+/// Drops the consumed prefix without reallocating the unfinished unit.
+fn Decoder::compact_stash(self : Decoder) -> Unit {
+  let at = self.stash_pos
+  guard at > 0 else { return }
+  let stash = self.stash
+  let remaining = stash.length() - at
+  for i in 0..<remaining {
+    stash[i] = stash[at + i]
   }
+  stash.truncate(remaining)
+  self.stash_pos = 0
+}
+
+///|
+fn Decoder::finish_step(self : Decoder, status : Status) -> Status {
+  self.compact_stash()
   self.step_consumed = self.in_pos
   self.step_produced = self.out_pos
   self.release_step()

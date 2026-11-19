@@ -74,6 +74,7 @@ fn Encoder::quick_process(self : Encoder, last : Bool, flush : Bool) -> Unit {
     )
     if (cmd.raw_distance < 16 || cmd.raw_distance - 15 == distance) &&
       distance.to_int64() <= reach {
+      // The retained window covers distance and end is the valid data end.
       let more = ref_match_length(
         self.data,
         start - distance,

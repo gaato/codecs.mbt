@@ -367,6 +367,7 @@ fn Encoder::ref_process(self : Encoder, is_last : Bool, flush : Bool) -> Unit {
     last.copy.to_int64()).min(self.max_distance.to_int64())
     if (last.raw_distance < 16 || last.raw_distance - 15 == distance) &&
       distance.to_int64() <= reach_at_copy {
+      // The retained window covers distance and end is the valid data end.
       let more = ref_match_length(
         self.data,
         start - distance,

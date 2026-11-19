@@ -307,21 +307,45 @@ fn fast_commands_pay() -> Bool {
 }
 
 ///|
+// command supplies a block category or a code bounded by its alphabet.
+#cfg(target="wasm")
+#inline
+fn command_value(table : FixedArray[Int32], index : Int32) -> Int32 {
+  table.unsafe_get(index)
+}
+
+///|
+#cfg(not(target="wasm"))
+#inline
+fn command_value(table : FixedArray[Int32], index : Int32) -> Int32 {
+  table[index]
+}
+
+///|
 /// An insert-and-copy command.
 fn Decoder::command(self : Decoder) -> Unit raise Stop {
-  if self.block_len[1] == 0 {
+  // Commands are slot 1 of the three block categories.
+  let remaining = command_value(self.block_len, 1)
+  if remaining == 0 {
     self.switch_block(1)
     return
   }
-  let sym = self.read_symbol(self.cmd_trees, self.block_type[1])
+  let sym = self.read_symbol(self.cmd_trees, command_value(self.block_type, 1))
+  // A command symbol is below 704, so cell < 11. The bases are 0, 8 or
+  // 16 and the low bits add at most 7, within the 24 length codes.
   let cell = sym >> 6
-  let insert_code = cell_insert_base[cell] + ((sym >> 3) & 7)
-  let copy_code = cell_copy_base[cell] + (sym & 7)
-  let insert_len = insert_length_base[insert_code] +
-    self.read_bits(insert_length_extra[insert_code])
-  let copy_len = copy_length_base[copy_code] +
-    self.read_bits(copy_length_extra[copy_code])
-  self.block_len[1] -= 1
+  let insert_code = command_value(cell_insert_base, cell) + ((sym >> 3) & 7)
+  let copy_code = command_value(cell_copy_base, cell) + (sym & 7)
+  let insert_len = command_value(insert_length_base, insert_code) +
+    self.read_bits(command_value(insert_length_extra, insert_code))
+  let copy_len = command_value(copy_length_base, copy_code) +
+    self.read_bits(command_value(copy_length_extra, copy_code))
+  if INLINE_SLOW_LITERAL {
+    // Slot 1 is the command category in the three-entry table.
+    self.block_len.unsafe_set(1, remaining - 1)
+  } else {
+    self.block_len[1] -= 1
+  }
   if insert_len > self.meta_remaining {
     raise corrupt("insert past the end of the meta-block")
   }
@@ -455,6 +479,15 @@ fn Decoder::copy_fast(self : Decoder) -> Unit {
 }
 
 ///|
+// Wasm still calls read_symbol out of line in this loop.
+#cfg(target="wasm")
+const INLINE_SLOW_LITERAL : Bool = true
+
+///|
+#cfg(not(target="wasm"))
+const INLINE_SLOW_LITERAL : Bool = false
+
+///|
 /// The literals of a command.
 fn Decoder::literals(self : Decoder) -> Status? raise Stop {
   let trees = self.lit_trees
@@ -471,12 +504,49 @@ fn Decoder::literals(self : Decoder) -> Status? raise Stop {
       self.switch_block(0)
       continue
     }
-    let context = literal_context(
-      self.lit_mode,
-      self.last_byte(1),
-      self.last_byte(2),
-    )
-    let b = self.read_symbol(trees, map[self.lit_map_offset + context].to_int())
+    let b = if INLINE_SLOW_LITERAL {
+      let ring = self.ring
+      let mask = ring.length() - 1
+      // ensure_space made a nonempty, power-of-two ring.
+      let p1 = ring.unsafe_get((self.wpos - 1) & mask).to_int()
+      let p2 = ring.unsafe_get((self.wpos - 2) & mask).to_int()
+      // The previous bytes fit the LUTs. Context is below 64 and the map
+      // has 64 entries per block type. A byte indexes the 256 offsets.
+      let context = match self.lit_mode {
+        0 => p1 & 0x3f
+        1 => p1 >> 2
+        2 => lut0.unsafe_get(p1).to_int() | lut1.unsafe_get(p2).to_int()
+        _ => (lut2.unsafe_get(p1).to_int() << 3) | lut2.unsafe_get(p2).to_int()
+      }
+      let tree = map.unsafe_get(self.lit_map_offset + context).to_int()
+      let base = trees.offsets.unsafe_get(tree)
+      if self.nbits < MAX_CODE_LENGTH {
+        self.refill()
+      }
+      let acc = self.acc
+      // Root and subtable masks stay within the tree built by Group::build.
+      let pool = trees.pool
+      let mut entry = pool.unsafe_get(base + (acc & (ROOT_SIZE - 1))).to_int()
+      let mut bits = entry & 15
+      if bits > ROOT_BITS {
+        let sub = (acc >> ROOT_BITS) & ((1 << (bits - ROOT_BITS)) - 1)
+        entry = pool.unsafe_get(base + (entry >> 4) + sub).to_int()
+        bits = entry & 15
+      }
+      if bits > self.nbits {
+        raise NeedInput
+      }
+      self.acc = acc >> bits
+      self.nbits -= bits
+      entry >> 4
+    } else {
+      let context = literal_context(
+        self.lit_mode,
+        self.last_byte(1),
+        self.last_byte(2),
+      )
+      self.read_symbol(trees, map[self.lit_map_offset + context].to_int())
+    }
     self.put(b.to_byte())
     self.block_len[0] -= 1
     self.insert_remaining -= 1
