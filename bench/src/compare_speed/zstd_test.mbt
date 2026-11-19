@@ -10,8 +10,14 @@ test "zstd decode" (b : @bench.T) {
     ("gaato/zstd steps text", () => b.keep(@compare.zstd_steps(text, out))),
     ("gaato/zstd steps binary", () => b.keep(@compare.zstd_steps(binary, out))),
   ]
-  add_whole(benches, b, @compare.zstd_whole(), "text", text, text_size)
-  add_whole(benches, b, @compare.zstd_whole(), "binary", binary, binary_size)
+  // moonbitstack/moonzip 0.4.1 refuses both streams: it computes the
+  // content checksum `zstd -3` writes differently ("checksum ... does not
+  // match"), as it does for 15 of the 36 valid streams of compare_check.
+  let decoders = @compare.zstd_whole().filter(d => {
+    !d.name.has_prefix("moonbitstack/moonzip")
+  })
+  add_whole(benches, b, decoders, "text", text, text_size)
+  add_whole(benches, b, decoders, "binary", binary, binary_size)
   run_all(b, benches)
 }
 

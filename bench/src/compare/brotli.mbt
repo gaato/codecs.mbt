@@ -11,6 +11,7 @@ pub fn brotli_whole() -> Array[Whole] {
       name: "mizchi/brotli 0.2.2",
       decode: input => @mizchi_brotli.brotli_decompress(input),
     },
+    moonzip_brotli_whole(),
   ]
 }
 
@@ -54,6 +55,7 @@ pub fn brotli_pieces() -> Array[Pieces] {
         })
       },
     },
+    moonzip_brotli_pieces(),
   ]
 }
 
@@ -84,5 +86,6 @@ pub fn brotli_compress() -> Array[Compress] {
         @mizchi_brotli.brotli_compress_with_quality(input, level)
       },
     },
+    moonzip_brotli_compress(),
   ]
 }

@@ -271,8 +271,8 @@ MOON_CC=cc taskset -c 3 moon bench --release --target native bench/src/compare_p
 ## Compression codecs against other implementations
 
 gaato/zstd, gaato/brotli and gaato/deflate measured against the other
-MoonBit implementations of their formats on mooncakes.io, as of 2026-10-23,
-and against the DEFLATE, zlib and gzip packages that MoonBit 0.10.20's core
+MoonBit implementations of their formats on mooncakes.io, as of 2026-11-19,
+and against the DEFLATE, zlib and gzip packages that MoonBit 0.10.21's core
 library ships:
 
 | Package | Version | Formats compared |
@@ -281,43 +281,39 @@ library ships:
 | [hustcer/fbr](https://mooncakes.io/docs/hustcer/fbr) | 0.8.2 | Brotli |
 | [mizchi/brotli](https://mooncakes.io/docs/mizchi/brotli) | 0.2.2 | Brotli |
 | [moonbit-community/flate](https://mooncakes.io/docs/moonbit-community/flate): its latest release, three days before its code went into MoonBit's core library as `compress/flate`, `compress/zlib` and `compress/gzip` (moonbitlang/core#4459, the last row) | 0.10.0 | raw DEFLATE, zlib, gzip |
-| [gmlewis/flate](https://mooncakes.io/docs/gmlewis/flate), [gmlewis/zlib](https://mooncakes.io/docs/gmlewis/zlib), [gmlewis/gzip](https://mooncakes.io/docs/gmlewis/gzip) | 0.36.17, 0.21.17, 0.34.17 | raw DEFLATE, zlib, gzip |
-| [mizchi/zlib](https://mooncakes.io/docs/mizchi/zlib) (the pure package, not `mizchi/zlib/native`) | 0.4.10 | raw DEFLATE, zlib, gzip |
+| [gmlewis/flate](https://mooncakes.io/docs/gmlewis/flate), [gmlewis/zlib](https://mooncakes.io/docs/gmlewis/zlib), [gmlewis/gzip](https://mooncakes.io/docs/gmlewis/gzip) | 0.36.19, 0.21.19, 0.34.19 | raw DEFLATE, zlib, gzip |
+| [mizchi/zlib](https://mooncakes.io/docs/mizchi/zlib) (the pure package, not `mizchi/zlib/native`) | 0.4.12 | raw DEFLATE, zlib, gzip |
 | [hustcer/fzip](https://mooncakes.io/docs/hustcer/fzip) | 0.8.8 | raw DEFLATE, zlib, gzip |
-| [moonbitlang/async](https://mooncakes.io/docs/moonbitlang/async) `gzip` | 0.22.5 | gzip |
-| [moonbitlang/core](https://mooncakes.io/docs/moonbitlang/core) `compress/flate`, `compress/zlib`, `compress/gzip` (experimental packages) | MoonBit 0.10.20 | raw DEFLATE, zlib, gzip |
+| [moonbitstack/moonzip](https://mooncakes.io/docs/moonbitstack/moonzip) `zstd`, `brotli`, `deflate`, `zlib`, `gzip` | 0.4.1 | zstd, Brotli, raw DEFLATE, zlib, gzip |
+| [moonbitlang/core](https://mooncakes.io/docs/moonbitlang/core) `async/gzip`: a gzip reader over asynchronous IO with an inflater of its own (`async/internal/gzip_internal`), not `compress/flate`'s; it was moonbitlang/async 0.22.5's | MoonBit 0.10.21 | gzip |
+| [moonbitlang/core](https://mooncakes.io/docs/moonbitlang/core) `compress/flate`, `compress/zlib`, `compress/gzip` (experimental packages) | MoonBit 0.10.21 | raw DEFLATE, zlib, gzip |
 
-Ours are this repository's main on 2026-11-07: gaato/zstd 0.3.1,
-gaato/brotli 0.4.1 and gaato/deflate 0.1.0, with changes not yet released
-that day. The speed tables are newer: every
-package was timed again on 2026-11-15, on the same machine and versions,
-with Node 26.13.1, ours being gaato/zstd 0.4.1, gaato/brotli 0.4.3 and
-gaato/deflate 0.1.2.
+Ours are this repository's main on 2026-11-19: gaato/zstd 0.6.0,
+gaato/brotli 0.5.0 and gaato/deflate 0.4.0, with changes not yet released
+that day (Brotli's qualities 0 to 11, and the faster one-shot calls and JS
+and Wasm paths of every format).
 
 [bikallem/compress](https://mooncakes.io/docs/bikallem/compress) 0.3.4
 (zstd, Brotli, raw DEFLATE, zlib, gzip) is not compared: it does not build
-with MoonBit 0.10.16 as published. Its module manifest is `moon.mod.json`,
-which moon 0.1.20261016 refuses ("`moon.mod.json` ... is no longer
-supported. Run `moon fmt` to migrate to `moon.mod`"), and its `zstd`,
-`bzip2`, `lz4` and `snappy` use `try?`, which MoonBit has removed.
+with MoonBit 0.10.21 as published. Its module manifest is `moon.mod.json`,
+as is that of the moonbitlang/async it depends on, which moon
+0.1.20261117 refuses ("`moon.mod.json` ... is no longer supported. Run
+`moon fmt` to migrate to `moon.mod`"), and its `zstd`, `bzip2`, `lz4` and
+`snappy` use `try?`, which MoonBit has removed. Nor are
+[Ronlands/moonbit_zstd](https://mooncakes.io/docs/Ronlands/moonbit_zstd)
+0.1.2 (zstd) and [ivgtr/moonzip](https://mooncakes.io/docs/ivgtr/moonzip)
+0.2.4 (raw DEFLATE, zlib, gzip and ZIP, an fflate port as hustcer/fzip is),
+whose manifests are `moon.mod.json` too; the ZIP packages built on
+moonbit-community/flate (moonbit-community/zipc) are compared through it.
 
-Measured on 2026-11-07 on an Intel Core i5-10400F (openSUSE Tumbleweed,
-Linux 7.3.1) with MoonBit 0.10.20 (moon and moonrun 0.1.20261104, moonc
-0.10.20+65efd5b93; moonrun for Wasm, Node 26.12.1 for JS, GCC 16.2.1 for
-Native), timed runs pinned to one CPU and run one at a time. The references
-are zstd 1.5.7, brotli 1.2.1 and Node's zlib 1.3.2.1-motley-456ae73 (the
-versions matter: zstd 1.5.5 refuses one of zstd's own test vectors). The
-compression ratios are the exception: but for moonbitlang/core's, they are
-from 2026-10-23 (MoonBit 0.10.16); sizes do not depend on the machine, and
-the rows that were measured again came out the same. Peak memory depends on
-the machine: the runs of 2026-10-23, in a cloud VM, peaked 4 to 8 MiB lower
-than these.
-
-The moonbitlang/core/async (MoonBit 0.10.20) entry was measured again on
-2026-11-10 on the i5-10400F, pinned to CPU 2, after migrating from
-moonbitlang/async 0.22.5. It used the same MoonBit and reference versions,
-with Node 26.13.0, using `--only moonbitlang/core/async` and a 300 s timeout.
-The other entries retain their measurements above.
+Measured on 2026-11-19 on an Intel Core i5-10400F (openSUSE Tumbleweed,
+Linux 7.3.3) with MoonBit 0.10.21 (moon and moonrun 0.1.20261117, moonc
+0.10.21+06da1ed44; moonrun for Wasm, Node 26.13.1 for JS, GCC 16.2.1 for
+Native), timed runs pinned to one CPU and run with nothing else on the
+machine. The references are zstd 1.5.7, brotli 1.2.1 and Node's zlib
+1.3.2.1-motley-456ae73 (the versions matter: zstd 1.5.5 refuses one of zstd's own test vectors).
+Peak memory depends on the machine: runs in a cloud VM peaked 4 to 8 MiB
+lower than these.
 
 The packages are called through `src/compare`, one adapter each, the way
 their READMEs show: their one-shot call for a whole input, and their
@@ -335,35 +331,38 @@ zstd:
 
 | Package | Decoder, encoder | Pieces in, caller's buffer out | Memory and limits | Integrity checks | Targets |
 |---|---|---|---|---|---|
-| gaato/zstd | decoder and encoder with dictionaries (raw and `zstd --train`'s); encoder, levels 1 to 12 (3 by default) and the negative levels of `--fast`; frame inspection and skippable frames | yes | decoder: the window, at most `2^max_window_bits` (27 by default), plus 256 KiB and 13 KiB of tables; `decompress(max_output=)`. Encoder: by level, 50 MiB at most without a dictionary. `compress_bound` and the memory bounds before making a codec | content checksum (XXH64) | Native, JS, Wasm, Wasm GC |
+| gaato/zstd | decoder and encoder with dictionaries (raw and `zstd --train`'s); encoder, levels 1 to 22 (3 by default) and the negative levels of `--fast`; frame inspection and skippable frames | yes | decoder: the window, at most `2^max_window_bits` (27 by default), plus 256 KiB and 13 KiB of tables; `decompress(max_output=)`. Encoder: by level, 50 MiB at most without a dictionary. `compress_bound` and the memory bounds before making a codec | content checksum (XXH64) | Native, JS, Wasm, Wasm GC |
 | Milky2018/zstd | decoder, dictionaries; encoder with levels (3 by default) | input in pieces (`push`), output as new `Bytes` from each `pull` | the whole output; no window limit | content checksum (XXH64) | Native, JS, Wasm, Wasm GC |
+| moonbitstack/moonzip | decoder, no dictionaries; encoder with levels (3 by default; above 9 the same as 9), raw literals and the predefined FSE tables only, 64 KiB blocks | input in pieces (`Reader::push`), output as new `Bytes` from each push | the whole output, or the window when streaming; no window limit (`1 << (10 + exponent)` overflows Int32 from an exponent of 21); `limit` unset by default | content checksum, computed as CRC-32 instead of XXH64: frames with the checksum, as `zstd` writes them by default, are refused | Native, JS, Wasm, Wasm GC |
 
 Brotli (the format has no checksum):
 
 | Package | Decoder, encoder | Pieces in, caller's buffer out | Memory and limits | Targets |
 |---|---|---|---|---|
-| gaato/brotli | decoder and encoder with LZ77 dictionaries (RFC 9841, for `dcb`); encoder with one quality | yes | the window, at most 16 MiB (`max_window_bits`), plus at most 1.3 MiB of tables; `decompress(max_output=)`; `compress_bound` and the memory bounds before making a codec | Native, JS, Wasm, Wasm GC |
+| gaato/brotli | decoder and encoder with LZ77 dictionaries (RFC 9841, for `dcb`); encoder, qualities 0 to 11 (4 by default), 0 to 3 and 5 to 11 byte for byte as brotli 1.2.1 writes them | yes | the window, at most 16 MiB (`max_window_bits`), plus at most 1.3 MiB of tables; `decompress(max_output=)`; `compress_bound` and the memory bounds before making a codec | Native, JS, Wasm, Wasm GC |
 | hustcer/fbr | decoder; encoder, qualities 0 to 11 | input in pieces (`push`), output through a callback | the whole output, also when streaming; `max_output_size` 100 MiB and `max_input_size` 1 GiB by default | Native, JS, Wasm, Wasm GC |
 | mizchi/brotli | decoder; encoder, quality 0 (stored) or one other mode | no | no limit to set | Native, JS, Wasm, Wasm GC |
+| moonbitstack/moonzip | decoder, no shared dictionaries; encoder, qualities 0 to 11 (9 by default), windows of 2^10 to 2^24 | input in pieces (`Reader::push`), output as new `Bytes` from each push; the reader keeps the input since the last meta-block and decodes a meta-block again at each try | the whole input and output; `limit` unset by default | Native, JS, Wasm, Wasm GC |
 
 DEFLATE, zlib and gzip:
 
 | Package | Decoder, encoder | Pieces in, caller's buffer out | Memory and limits | Integrity checks | Targets |
 |---|---|---|---|---|---|
-| gaato/deflate | raw DEFLATE, zlib, gzip; levels 0 to 9 (-1 the default, 6, as zlib's); windows of 2^8 to 2^15 for the raw and zlib encoders; preset dictionaries; gzip header fields | yes | about 46 KiB, plus a gzip header's fields up to `max_header_bytes`; `decompress(max_output=)`; `compress_bound` and the memory bounds before making a codec | Adler-32, CRC-32, ISIZE, gzip header CRC | Native, JS, Wasm, Wasm GC |
+| gaato/deflate | raw DEFLATE, zlib, gzip; levels 0 to 12 (-1 the default, 6, as zlib's; 10 to 12 libdeflate's near-optimal parsing); windows of 2^8 to 2^15 for the raw and zlib encoders; preset dictionaries; gzip header fields | yes | about 46 KiB, plus a gzip header's fields up to `max_header_bytes`; `decompress(max_output=)`; `compress_bound` and the memory bounds before making a codec | Adler-32, CRC-32, ISIZE, gzip header CRC | Native, JS, Wasm, Wasm GC |
 | moonbit-community/flate | raw DEFLATE, zlib, gzip, ZIP; levels 0 to 9 and optimal parsing; zlib dictionaries; no access to a gzip header's fields | yes | the window when streaming; `inflate_all(max_output=)`; gzip and zlib `decompress` take no limit | Adler-32, CRC-32, ISIZE, gzip header CRC | Native, JS, Wasm, Wasm GC |
 | gmlewis/flate, zlib, gzip | raw DEFLATE, zlib, gzip; an encoder without levels; zlib dictionaries | it pulls its input from a reader, into the caller's buffer | the window; no output limit | Adler-32, CRC-32, ISIZE, gzip header CRC | decoder: Native (on JS, Wasm and Wasm GC it overflows the stack on the 512 KiB text: `read_literal` and `copy_history` call each other for each match); encoder: all four |
 | mizchi/zlib | raw DEFLATE, zlib, gzip, whole buffers; an encoder without levels; no preset dictionaries | no | `max_size` 256 MiB by default | Adler-32, CRC-32, ISIZE | Native, JS, Wasm, Wasm GC |
 | hustcer/fzip | raw DEFLATE, zlib, gzip, ZIP; levels 0 to 9; dictionaries | input in pieces (`push`), output through a callback; the input is kept and decoded at the last push | `max_output_size` 100 MiB and `max_input_size` 1 GiB by default; inputs over a third of `max_output_size` are refused | Adler-32, CRC-32, ISIZE, gzip header CRC | Native, JS, Wasm, Wasm GC |
-| moonbitlang/core/async (MoonBit 0.10.20) `gzip` | gzip; decoder and encoder (the encoder was not measured) | an asynchronous reader, read into the caller's buffer | the window | CRC-32 and ISIZE of the first member | Native, JS (others not tried) |
+| moonbitstack/moonzip | raw DEFLATE, zlib, gzip; levels 0 to 9 (6 by default; others abort), windows of 2^8 to 2^15, block types and a priced parse to choose; no zlib preset dictionaries (refused); gzip name and comment in Latin-1; one gzip member | input in pieces (`Reader::push`), output as new `Bytes` from each push; sync flush and context takeover for permessage-deflate | the window when streaming, else the whole input and output; `limit` unset by default | Adler-32, CRC-32, ISIZE, gzip header CRC | Native, JS, Wasm, Wasm GC |
+| moonbitlang/core/async (MoonBit 0.10.21) `gzip` | gzip; decoder and encoder (the encoder was not measured) | an asynchronous reader, read into the caller's buffer | the window | CRC-32 and ISIZE of the first member | Native, JS (others not tried) |
 | moonbitlang/core `compress` | raw DEFLATE, zlib, gzip (and ZIP in `archive/zip`); levels 0 to 9 (`Standard`), and `Split` and `Optimal` strategies (not measured); preset dictionaries; no access to a gzip header's fields | yes (`IncrementalDecoder`, and the zlib and gzip `Decoder`s, with `check_end` at the end of input) | the window when streaming; `max_output=` on every one-shot call, `Bytes` capacity by default | Adler-32, CRC-32, ISIZE, gzip header CRC | Native, JS, Wasm, Wasm GC |
 
 ### Correctness
 
 Every decoder ran, on Native, over the same streams, and each answer was
-compared with the reference's (`scripts/compare_codecs.mbtx`). The counts
-of every package but moonbitlang/core are the same as on 2026-10-23, with
-MoonBit 0.10.16 and brotli 1.2.0, in a cloud VM and on the i5-10400F:
+compared with the reference's (`scripts/compare_codecs.mbtx`), on
+2026-11-19. The packages compared before give the same counts as on
+2026-10-23 and 2026-11-07, with MoonBit 0.10.16 and 0.10.20:
 
 - valid: the conformance suite's vectors (`conformance/src`), Brotli's
   `gen/window24_far` (a 16 MiB window), and every stream below that the
@@ -396,11 +395,13 @@ zstd (36 valid, 318 invalid):
 |---|---|---|---|---|---|---|---|---|
 | gaato/zstd | 36 | 318 | 28/28 | 10/10 | 3/3 | 277/277 | 0 | 0 |
 | Milky2018/zstd | 36 | 318 | 28/28 | 10/10 | 3/3 | 277/277 | 0 | 0 |
+| moonbitstack/moonzip | 21 | 317 | 28/28 | 10/10 | 2/3 | 277/277 | 0 | 0 |
 
 `gen/window30_declared`, a frame that declares a 1 GiB window, is left out
 of the counts: `zstd -d` refuses it at its default limit (128 MiB), as
 gaato/zstd does at its default `max_window_bits=27`; Milky2018/zstd has no
-window limit and decodes it.
+window limit and decodes it; moonbitstack/moonzip refuses it, for another
+reason ("a Huffman tree that cannot be completed").
 
 Brotli (81 valid, 359 invalid):
 
@@ -409,6 +410,7 @@ Brotli (81 valid, 359 invalid):
 | gaato/brotli | 81 | 359 | 76/76 | 20/20 | 263/263 | 0 | 0 |
 | hustcer/fbr | 81 | 358 | 76/76 | 19/20 | 263/263 | 0 | 0 |
 | mizchi/brotli | 81 | 290 | 67/76 | 16/20 | 207/263 | 9 | 0 |
+| moonbitstack/moonzip | 73 | 318 | 76/76 | 18/20 | 224/263 | 0 | 0 |
 
 hustcer/fbr accepts bytes after the end of the stream when it decodes a
 whole input (fed in pieces, it refuses them). mizchi/brotli aborts
@@ -429,6 +431,7 @@ Raw DEFLATE (370 valid, 716 invalid):
 | mizchi/zlib | 370 | 702 | 32/36 | 40/44 | 630/636 | 0 | 0 |
 | hustcer/fzip | 370 | 684 | 36/36 | 37/44 | 611/636 | 5 | 0 |
 | moonbitlang/core | 370 | 716 | 36/36 | 44/44 | 636/636 | 0 | 0 |
+| moonbitstack/moonzip | 370 | 708 | 36/36 | 40/44 | 632/636 | 0 | 0 |
 
 zlib (32 valid, 1,063 invalid; with a preset dictionary, 3 valid and 3
 invalid):
@@ -441,6 +444,7 @@ invalid):
 | mizchi/zlib | 32 | 1,061 | 36/36 | 20/20 | 11/13 | 994/994 | no API | 0 | 0 |
 | hustcer/fzip | 32 | 1,054 | 36/36 | 20/20 | 13/13 | 985/994 | 3 + 3 | 0 | 0 |
 | moonbitlang/core | 32 | 1,063 | 36/36 | 20/20 | 13/13 | 994/994 | 3 + 3 | 0 | 0 |
+| moonbitstack/moonzip | 32 | 1,054 | 36/36 | 20/20 | 11/13 | 987/994 | refuses FDICT | 0 | 0 |
 
 gzip (112 valid, 1,111 invalid):
 
@@ -452,7 +456,8 @@ gzip (112 valid, 1,111 invalid):
 | mizchi/zlib | 105 | 1,098 | 66/66 | 66/67 | 47/51 | 919/927 | 0 | 0 |
 | hustcer/fzip | 112 | 1,111 | 66/66 | 67/67 | 51/51 | 927/927 | 0 | 0 |
 | moonbitlang/core | 112 | 1,110 | 66/66 | 67/67 | 50/51 | 927/927 | 0 | 0 |
-| moonbitlang/core/async (MoonBit 0.10.20) | 72 | 1,075 | 64/66 | 63/67 | 45/51 | 903/927 | 0 | 0 |
+| moonbitstack/moonzip | 105 | 1,101 | 66/66 | 67/67 | 50/51 | 918/927 | 0 | 0 |
+| moonbitlang/core/async (MoonBit 0.10.21) | 72 | 1,075 | 64/66 | 63/67 | 45/51 | 903/927 | 0 | 0 |
 
 What lies behind the misses, from the list the script prints:
 
@@ -469,11 +474,30 @@ What lies behind the misses, from the list the script prints:
   member ("Trailing data after gzip stream").
   moonbitlang/core/async refuses any header field (FNAME, FCOMMENT, FEXTRA,
   FHCRC, FTEXT) with `InvalidHeader`, and decodes the first member only,
-  ignoring the rest, corrupt or not. moonbit-community/flate and
+  ignoring the rest, corrupt or not. Core's own review reports the same
+  (moonbitlang/core#4623), and moonbitlang/core#4875, merged on 2026-11-19
+  after MoonBit 0.10.21, moves it to `compress/gzip`'s `StreamDecoder`,
+  built on `compress/gzip`'s decoder: the next release's row will be core's. moonbit-community/flate and
   moonbitlang/core accept text after the last member, which zlib refuses;
   core's `gzip.decompress` documents that it ignores trailing bytes that do
   not begin another member.
-- zlib: mizchi/zlib accepts CINFO 8 and 15 (windows over 32 KiB).
+- zlib: mizchi/zlib accepts CINFO 8 and 15 (windows over 32 KiB), as
+  moonbitstack/moonzip does.
+- moonbitstack/moonzip:
+  - zstd: it computes the content checksum as CRC-32 where RFC 8878 has
+    the low 32 bits of XXH64 (`zstd/zstd.mbt`, and the same in its
+    streaming reader), so it refuses the 15 valid frames that carry a
+    checksum, the empty one among them ("checksum 0 does not match
+    1373170073"); its own encoder never writes one. It accepts
+    `zeroSeq_extraneous.zst`, which `zstd -d` refuses.
+  - Brotli: it refuses 8 valid streams, among them meta-block lengths with
+    a padded nibble and empty streams the reference reads, and accepts 41
+    invalid ones: padding after the last meta-block, data after the end,
+    and seeded corruptions.
+  - DEFLATE: it accepts incomplete and over-subscribed codes in dynamic
+    blocks. gzip: it reads one member only, so a second member gives a CRC
+    error whole (the trailer is taken from the last 8 bytes) and is ignored
+    in pieces; it accepts text after the member.
 
 ### Streaming
 
@@ -489,28 +513,28 @@ the output had come out while only the first half of the input had gone in.
 | Decoder | Output into | Valid streams, 1 byte at a time | Text in 4 KiB pieces: out at half | its time against whole | Text 1 byte at a time |
 |---|---|---|---|---|---|
 | gaato/zstd | caller's buffer | 36/36 | 25 % | 1.0× | 32 ms |
-| Milky2018/zstd | its own `Bytes` per `pull` | 24/36: output repeated | 16 %, and 7,602,176 bytes out instead of 524,288 | 14.7× | no answer within 300 s |
-| gaato/brotli | caller's buffer | 81/81 | 48 % | 1.0× | 76 ms |
-| hustcer/fbr | callback | 81/81 | 0 % | 15× | 219 s |
-| gaato/deflate (raw / zlib / gzip) | caller's buffer | 370/370, 32/32, 112/112 | 49 % | 1.0× | 61 ms (raw) |
-| moonbit-community/flate | caller's buffer | 370/370, 32/32, 112/112 | 49 % | 0.9× | 45 ms |
-| gmlewis/flate, zlib, gzip | caller's buffer (it pulls from a reader) | 370/370, 32/32, 112/112 | 44 % | 1.0× | 33 ms |
-| hustcer/fzip | callback | 370/370, 32/32, 112/112 | 0 % | 1.0× | 10 ms |
-| moonbitlang/core/async (MoonBit 0.10.20) | caller's buffer (an asynchronous reader) | 72/112, as whole | 49 % | 0.9× | 177 ms |
-| moonbitlang/core (raw / zlib / gzip) | caller's buffer | 370/370, 32/32, 112/112 | 49 % | 0.9× | 44 ms (raw) |
+| Milky2018/zstd | its own `Bytes` per `pull` | 24/36: output repeated | 16 %, and 7,602,176 bytes out instead of 524,288 | 14.6× | no answer within 300 s |
+| moonbitstack/moonzip (zstd) | its own `Bytes` per `push` | 21/36: the checksum | refuses the frame at its end (checksum), after 393,216 bytes | | the same, after 524,288 bytes |
+| gaato/brotli | caller's buffer | 81/81 | 48 % | 1.0× | 82 ms |
+| hustcer/fbr | callback | 81/81 | 0 % | 15.5× | 213 s |
+| moonbitstack/moonzip (Brotli) | its own `Bytes` per `push` | 73/81 | 0 % | 15.4× | no answer within 300 s |
+| gaato/deflate (raw / zlib / gzip) | caller's buffer | 370/370, 32/32, 112/112 | 49 % | 1.0× | 49 ms (raw) |
+| moonbit-community/flate | caller's buffer | 370/370, 32/32, 112/112 | 49 % | 1.0× | 43 ms |
+| gmlewis/flate, zlib, gzip | caller's buffer (it pulls from a reader) | 370/370, 32/32, 112/112 | 44 % | 1.0× | 34 ms |
+| hustcer/fzip | callback | 370/370, 32/32, 112/112 | 0 % | 1.0× | 9 ms |
+| moonbitlang/core/async (MoonBit 0.10.21) | caller's buffer (an asynchronous reader) | 72/112, as whole | 49 % | 1.0× | 161 ms |
+| moonbitlang/core (raw / zlib / gzip) | caller's buffer | 370/370, 32/32, 112/112 | 49 % | 0.9× | 42 ms (raw) |
+| moonbitstack/moonzip (raw / zlib / gzip) | its own `Bytes` per `push` | 370/370, 32/32, 105/112 | 49 % | 1.6× | 5.8 s (raw) |
 
 mizchi/brotli and mizchi/zlib take whole inputs only. The times are on
-Native, the mean of 20 decodes (of one, 1 byte at a time), from the second
-of two runs: other work on the machine slowed most of the first by up to
-five times. Ours were timed again on 2026-11-15, as gaato/zstd 0.4.1,
-gaato/brotli 0.4.3 and gaato/deflate 0.1.2, alternately with main of that
-day: in 4 KiB pieces they now take as long as whole. One byte at a time,
-ours took within 5 % of main's that day, both 32 to 35 ms (zstd), 81 to
-86 ms (Brotli) and 50 to 52 ms (raw DEFLATE), a day's difference from the
-times of 2026-11-07, which the column keeps so that it compares runs of
-one day. Fed one byte at a time, every decoder refuses the same invalid
-streams as whole, but for hustcer/fbr, which then also refuses bytes after
-the end of the stream.
+Native, the mean of 20 decodes (of one, 1 byte at a time), with nothing
+else running. One byte at a time, gaato/deflate takes 49 ms on raw DEFLATE
+and 80 ms on zlib, where moonbit-community/flate takes 43 and 69 ms and
+moonbitlang/core 42 and 65 ms. Fed one byte at a time, every decoder
+refuses the same invalid streams as whole, but for hustcer/fbr, which then
+also refuses bytes after the end of the stream, and moonbitstack/moonzip,
+whose gzip reader then ignores what follows the first member instead of
+refusing it.
 
 - Milky2018/zstd's `Decompressor` decodes the frame again from its start at
   every `pull` and hands out again what it handed out before when the frame
@@ -524,6 +548,12 @@ the end of the stream.
 - hustcer/fzip's streams keep their input until the last push and decode
   it then: nothing comes out before the end, and the input must fit in
   memory.
+- moonbitstack/moonzip's Brotli `Reader` keeps the input since the last
+  meta-block boundary and decodes the meta-block again from its start at
+  each try, as hustcer/fbr does: nothing of a one-meta-block text comes out
+  before its end, and in 4 KiB pieces it takes 15 times as long. Its
+  readers return a new `Bytes` for each push; its DEFLATE reader takes 5.8 s
+  over the text fed a byte at a time.
 
 ### Memory
 
@@ -533,32 +563,42 @@ with `/usr/bin/time -f %M` (`compare_codecs.mbtx memory`). That is the
 process's memory, not the decoder's alone: compare_stream reads the
 compressed file whole first (zstd 2,463,691 bytes, 2.3 MiB; Brotli 134,935;
 raw DEFLATE 71,016,308, 67.7 MiB; zlib 71,016,314; gzip 71,361,870), and
-the runtime with a small decode, the 512 KiB text whole, takes 10.1 to 12.1
-MiB (mizchi/brotli 30.1 MiB).
+the runtime with a small decode, the 512 KiB text whole, takes 9.0 to 14.3
+MiB (mizchi/brotli 26.6 MiB).
 
 | Decoder | Whole | 64 KiB pieces |
 |---|---:|---:|
-| gaato/zstd | 525 MiB | 15.9 MiB |
-| Milky2018/zstd | 542 MiB | 532 MiB, with 659 MiB of output (repeated) |
-| gaato/brotli | 523 MiB | 20.1 MiB |
-| hustcer/fbr | refuses: "output exceeds max_output_size" (100 MiB by default), at 266 MiB | the same, after 96 MiB of output, at 235 MiB |
-| mizchi/brotli | 1,562 MiB | |
-| gaato/deflate (raw / zlib / gzip) | 592 / 592 / 594 MiB | 78.0 / 77.9 / 80.0 MiB |
-| moonbit-community/flate | 606 / 606 / 848 MiB | 77.9 / 77.9 / 80.0 MiB |
-| gmlewis/flate, zlib, gzip | 592 / 592 / 594 MiB | 75.9 / 76.0 / 77.9 MiB |
-| mizchi/zlib | 592 / 592 / 594 MiB | |
-| hustcer/fzip | refuses: "input too large for safe allocation" (over a third of its 100 MiB output limit), at 144 MiB | the same, at the last push, with no output, at 242 MiB |
-| moonbitlang/core/async (MoonBit 0.10.20) | 589 MiB | 76.3 MiB |
-| moonbitlang/core (raw / zlib / gzip) | 846 / 848 / 850 MiB | 78.0 / 78.0 / 80.0 MiB |
+| gaato/zstd | 579 MiB | 15.1 MiB |
+| Milky2018/zstd | 536 MiB | 529 MiB, with 659 MiB of output (repeated) |
+| moonbitstack/moonzip (zstd) | refuses: "checksum ... does not match", at 540 MiB | the same, after 248 MiB of output, at 43.3 MiB |
+| gaato/brotli | 551 MiB | 20.3 MiB |
+| hustcer/fbr | refuses: "output exceeds max_output_size" (100 MiB by default), at 265 MiB | the same, after 96 MiB of output, at 257 MiB |
+| mizchi/brotli | 1,560 MiB | |
+| moonbitstack/moonzip (Brotli) | 264 MiB | refuses the first meta-block ("a dictionary reference of 8388608 bytes"), at 38.3 MiB |
+| gaato/deflate (raw / zlib / gzip) | 460 / 460 / 460 MiB | 76.1 / 76.2 / 76.7 MiB |
+| moonbit-community/flate | 603 / 603 / 844 MiB | 76.1 / 78.0 / 76.5 MiB |
+| gmlewis/flate, zlib, gzip | 588 / 588 / 590 MiB | 75.8 / 75.8 / 76.1 MiB |
+| mizchi/zlib | 588 / 588 / 588 MiB | |
+| hustcer/fzip | refuses: "input too large for safe allocation" (over a third of its 100 MiB output limit), at 144 MiB | the same, at the last push, with no output, at 215 MiB |
+| moonbitlang/core/async (MoonBit 0.10.21) | 589 MiB | 76.6 MiB |
+| moonbitlang/core (raw / zlib / gzip) | 844 / 844 / 844 MiB | 76.0 / 76.3 / 76.5 MiB |
+| moonbitstack/moonzip (raw / zlib / gzip) | 844 / 844 / 844 MiB | 76.4 / 76.4 / 76.9 MiB |
 
 Whole, every decoder holds the 256 MiB output, and most a second copy while
-they make `Bytes` of it; moonbitlang/core's one-shot calls, like
-moonbit-community/flate's gzip `decompress`, peak at about a third more. In
-pieces, the decoders that stream stay within about 8 MiB of the input and
-the runtime: 15.9 MiB for gaato/zstd is 2.3 MiB of input, about 12 MiB of
-runtime and small decode, and the 2 MiB window of `zstd -3`; the DEFLATE
-formats' 76 to 80 MiB are mostly their 67.7 MiB input. The refusals'
-messages are from the packages' sources; the run records the error's type.
+they make `Bytes` of it. gaato's one-shot calls write into one array that
+doubles from four times the input's size, then copy what they wrote into
+`Bytes` of its length: gaato/deflate's array starts at 271 MiB and never
+grows, while gaato/zstd's and gaato/brotli's double up to 301 and 264 MiB
+before the copy. Before, they appended to a `Buffer`, whose powers of two
+the 256 MiB output filled exactly (525 and 523 MiB then; gaato/deflate,
+592). moonbitlang/core's one-shot calls, as
+moonbit-community/flate's gzip `decompress` and moonbitstack/moonzip's,
+peak at about a third more. In pieces, the decoders that stream stay
+within about 8 MiB of the input and the runtime: 15.1 MiB for gaato/zstd
+is 2.3 MiB of input, about 11 MiB of runtime and small decode, and the 2
+MiB window of `zstd -3`; the DEFLATE formats' 76 to 78 MiB are mostly
+their 67.7 MiB input. The refusals' messages are from the packages'
+sources; the run records the error's type.
 
 ### Headers that claim a size
 
@@ -578,25 +618,25 @@ references refuse all four claims.
 
 | Decoder | Peak on the four claims | Outcome |
 |---|---|---|
-| gaato/zstd, gaato/brotli, gaato/deflate (gzip) | 8.0 to 10.0 MiB | refused |
-| Milky2018/zstd, moonbit-community/flate, gmlewis/gzip, mizchi/zlib, hustcer/fzip, moonbitlang/core | 8.0 to 8.1 MiB | refused |
-| moonbitlang/core/async (MoonBit 0.10.20) | 8.0 MiB on `gzip_isize` | refused |
-| hustcer/fbr | 25.9 MiB on `brotli_mlen` | refused |
-| mizchi/brotli | 139.9 MiB on `brotli_mlen` | an abort (signal 6), under either limit |
+| gaato/zstd, gaato/brotli, gaato/deflate (gzip) | 8.2 to 8.4 MiB | refused |
+| Milky2018/zstd, moonbit-community/flate, gmlewis/gzip, mizchi/zlib, hustcer/fzip, moonbitlang/core, moonbitstack/moonzip | 8.2 to 8.4 MiB | refused |
+| moonbitlang/core/async (MoonBit 0.10.21) | 8.3 MiB on `gzip_isize` | refused |
+| hustcer/fbr | 26.2 MiB on `brotli_mlen` | refused |
+| mizchi/brotli | 140.2 MiB on `brotli_mlen` | an abort (signal 6), under either limit |
 
 None of gaato's decoders allocates from a claimed size: the zstd window and
 the Brotli window grow with the output (`ensure_space`), and a zstd block
 buffer is at most 128 KiB, checked against the block limit first. An 8 MiB
-peak is the process with nothing decoded. gaato/deflate's gzip `decompress`
-peaks at 8.2 or 10.3 MiB from one run to the next whatever ISIZE says, on a
-valid 5-byte member too, which is where the 10.0 MiB comes from. gmlewis/gzip, fed in pieces,
-hands out `hello` before it refuses the trailer.
+peak is the process with nothing decoded. gmlewis/gzip and
+moonbitstack/moonzip, fed in pieces, hand out `hello` before they refuse
+the trailer.
 
 Of the other inputs, which the references all refuse but `hello.zst`:
-mizchi/brotli aborts on `mizchi-brotli-alloc.br` (at 140.0 MiB) and
+mizchi/brotli aborts on `mizchi-brotli-alloc.br` (at 136.1 MiB) and
 `mizchi-brotli-panic.br`; hustcer/fzip aborts on `fzip-dist31.deflate`, a
-fixed-code block with distance code 31; hustcer/fbr and mizchi/brotli
-accept `fbr-trailing.br`, an empty stream followed by a byte. No decoder
+fixed-code block with distance code 31; hustcer/fbr, mizchi/brotli and
+moonbitstack/moonzip accept `fbr-trailing.br`, an empty stream followed by
+a byte; moonbitstack/moonzip refuses `hello.zst` (the checksum, above). No decoder
 needed more than the 1 GiB limit, and none ran out of time.
 
 ### Speed
@@ -604,96 +644,105 @@ needed more than the 1 GiB limit, and none ran out of time.
 The median time, in milliseconds, to decode the benchmarks' inputs (the 512
 KiB text and the 128 KiB binary stream of `src/data_test.mbt`, made by
 `zstd -3`, `brotli -q 9 -w 22` and `gzip -6 -n`; raw DEFLATE is the data
-inside the gzip member), and to compress what they decode to, over six
-runs on each target, two sessions of three taken in turn, pinned to one CPU
-(`compare_codecs.mbtx speed`, which runs `src/compare_speed` with `moon
-bench --release`; the script prints the mean of a session). Each run's
-figure is `moon bench`'s mean. The median is given because other work on
-the machine slowed some of the runs by up to five times. Each
-benchmark runs for 300 ms before it is measured, and the first measurement
-of a run is taken twice and the first one not counted: on JS and Wasm the
-first benchmarks of a run otherwise take up to twice as long. "steps" is
-the streaming decoder into a 64 KiB buffer, as `src/bench_test.mbt` calls
-it; the other rows are each package's one-shot call (ours is `decompress`,
-moonbitlang/core's `inflate_exact`).
-
-These times are the Intel Core i5-10400F's (the cloud VM's differed
-between runs by 19 % of a benchmark's mean at the median and by up to
-167 %, too much to compare packages by).
+inside the gzip member), and to compress what they decode to, over three
+runs on each target, the targets taken in turn, pinned to one CPU with
+nothing else running (`compare_codecs.mbtx speed --runs 3`, which runs
+`src/compare_speed` with `moon bench --release`). Each run's figure is
+`moon bench`'s mean. Each benchmark runs for 300 ms before it is measured,
+and the first measurement of a run is taken twice and the first one not
+counted: on JS and Wasm the first benchmarks of a run otherwise take up to
+twice as long. "steps" is the streaming decoder into a 64 KiB buffer, as
+`src/bench_test.mbt` calls it; the other rows are each package's one-shot
+call (ours is `decompress`, moonbitlang/core's `inflate_exact`).
 
 Decoding (text, then binary, per target):
 
 | Decoder | Native | | Wasm | | Wasm GC | | JS | |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| gaato/zstd steps | 2.00 | 0.37 | 6.73 | 0.94 | 4.12 | 0.99 | 10.2 | 2.63 |
-| gaato/zstd `decompress` | 2.35 | 0.38 | 5.78 | 0.82 | 4.61 | 1.05 | 15.3 | 4.24 |
-| Milky2018/zstd | 9.56 | 5.79 | 29.2 | 12.0 | 18.5 | 11.2 | 41.3 | 16.7 |
-| gaato/brotli steps | 2.64 | 1.20 | 10.0 | 3.15 | 3.85 | 1.54 | 8.20 | 2.71 |
-| gaato/brotli `decompress` | 2.65 | 1.21 | 9.75 | 3.37 | 4.87 | 1.86 | 15.2 | 4.33 |
-| hustcer/fbr | 3.56 | 1.88 | 7.55 | 4.38 | 7.96 | 3.83 | 24.3 | 11.6 |
-| mizchi/brotli | 5.86 | 3.16 | 20.7 | 7.67 | 12.9 | 9.54 | 34.0 | 25.3 |
-| gaato/deflate steps | 1.46 | 0.53 | 2.17 | 0.78 | 2.06 | 0.75 | 2.63 | 0.92 |
-| moonbit-community/flate steps (`Inflater`) | 1.59 | 0.62 | 6.58 | 4.07 | 5.72 | 3.33 | 5.35 | 3.25 |
-| moonbitlang/core steps (`IncrementalDecoder`) | 1.81 | 0.59 | 6.51 | 4.25 | 5.45 | 3.21 | 5.54 | 3.18 |
-| gaato/deflate `decompress` | 1.67 | 0.54 | 2.08 | 0.85 | 3.17 | 0.91 | 9.77 | 2.41 |
-| moonbit-community/flate `inflate_all` | 2.20 | 0.98 | 5.92 | 2.34 | 4.35 | 2.29 | 7.54 | 2.63 |
-| gmlewis/flate | 12.1 | 4.18 | stack overflow | | stack overflow | | stack overflow | |
-| mizchi/zlib | 2.67 | 1.29 | 7.90 | 4.18 | 6.40 | 2.82 | 33.4 | 15.3 |
-| hustcer/fzip | 2.35 | 0.61 | 5.42 | 2.51 | 4.33 | 1.13 | 11.9 | 2.70 |
-| moonbitlang/core `inflate_exact` | 2.74 | 1.02 | 6.31 | 2.21 | 4.39 | 2.19 | 7.35 | 2.67 |
+| gaato/zstd steps | 1.62 | 0.34 | 3.49 | 0.62 | 3.86 | 0.73 | 7.72 | 2.33 |
+| gaato/zstd `decompress` | 2.15 | 0.36 | 3.59 | 0.64 | 3.94 | 1.01 | 8.11 | 2.44 |
+| Milky2018/zstd | 8.42 | 5.54 | 25.4 | 11.1 | 17.6 | 10.4 | 35.7 | 16.6 |
+| gaato/brotli steps | 2.34 | 1.08 | 8.03 | 2.73 | 3.46 | 1.34 | 5.92 | 2.03 |
+| gaato/brotli `decompress` | 2.38 | 1.09 | 8.04 | 2.71 | 4.01 | 1.62 | 6.53 | 2.31 |
+| hustcer/fbr | 3.20 | 1.48 | 6.42 | 4.01 | 7.26 | 3.32 | 22.3 | 10.5 |
+| mizchi/brotli | 5.24 | 2.85 | 14.2 | 6.24 | 6.94 | 3.90 | 24.1 | 16.1 |
+| moonbitstack/moonzip (Brotli) | 4.51 | 2.47 | 10.3 | 7.46 | 8.98 | 5.58 | 11.9 | 5.84 |
+| gaato/deflate steps | 1.40 | 0.50 | 1.84 | 0.72 | 1.74 | 0.59 | 2.40 | 0.87 |
+| moonbit-community/flate steps (`Inflater`) | 1.54 | 0.53 | 5.81 | 3.52 | 4.72 | 2.90 | 4.90 | 2.99 |
+| moonbitlang/core steps (`IncrementalDecoder`) | 1.56 | 0.54 | 5.86 | 3.43 | 4.82 | 2.97 | 5.06 | 3.01 |
+| gaato/deflate `decompress` | 1.45 | 0.52 | 1.87 | 0.74 | 2.31 | 0.91 | 3.51 | 1.21 |
+| moonbit-community/flate `inflate_all` | 1.88 | 0.92 | 4.81 | 1.99 | 3.99 | 1.87 | 6.00 | 2.41 |
+| gmlewis/flate | 9.97 | 3.77 | – | – | – | – | – | – |
+| mizchi/zlib | 2.46 | 1.13 | 5.96 | 2.61 | 5.57 | 2.55 | 23.9 | 13.6 |
+| hustcer/fzip | 2.24 | 0.57 | 2.63 | 1.01 | 3.66 | 1.01 | 10.3 | 2.84 |
+| moonbitlang/core `inflate_exact` | 2.42 | 0.95 | 4.64 | 1.97 | 3.77 | 1.81 | 4.89 | 1.99 |
+| moonbitstack/moonzip (`inflate`) | 2.27 | 0.88 | 3.25 | 1.57 | 5.08 | 2.16 | 31.4 | 28.9 |
 
-gmlewis/flate's decoder is not timed on JS, Wasm and Wasm GC (see
-Features). Where another package is faster: hustcer/fbr decodes the
-Brotli text 1.3 times as fast as gaato/brotli on Wasm (gaato/brotli is the
-faster on the binary input); moonbit-community/flate's `inflate_all` and
-moonbitlang/core's `inflate_exact` are faster than gaato/deflate's
-`decompress` on JS's text, where gaato/deflate's streaming decoder is the
-fastest of them. moonbitlang/core's decoders run at about
-moonbit-community/flate's speed: its steps within 14 % of `Inflater` on
-every target, and `inflate_exact` within 7 % of `inflate_all` but on
-Native's text, where it is 25 % slower.
+moonbitstack/moonzip's zstd decoder is not timed: it refuses both streams
+(the checksum, above). gmlewis/flate's decoder is not timed on JS, Wasm and
+Wasm GC (see Features). Where another package is faster: hustcer/fbr
+decodes the Brotli text 1.25 times as fast as gaato/brotli on Wasm;
+gaato/brotli is the faster on the binary input there, and on both inputs
+on every other target. moonbitlang/core's decoders run at about
+moonbit-community/flate's speed.
 
 moonbitlang/core/async's gzip decoder was timed with `compare_stream` on
 Native only (its API is asynchronous, which `moon bench` does not run):
-4.75 ms for the text's gzip member whole, and 4.50 ms in 4 KiB pieces
-(`compare_codecs.mbtx stream`, the second of two runs).
+see Streaming.
 
 Encoding (text, then binary), at each package's default level and, if it
 has another, its highest:
 
 | Encoder | Native | | Wasm | | Wasm GC | | JS | |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| gaato/zstd, level 3 | 5.61 | 3.09 | 20.4 | 6.92 | 13.8 | 4.80 | 31.0 | 12.0 |
-| gaato/zstd, level 12 | 37.0 | 6.15 | 91.4 | 17.5 | 109 | 9.75 | 135 | 16.2 |
-| Milky2018/zstd, level 3 (its default) | 1.50 | 0.38 | 3.59 | 0.94 | 3.63 | 0.72 | 12.3 | 2.38 |
-| Milky2018/zstd, level 22 | 474 | 6.14 | 980 | 17.5 | 1,030 | 13.2 | 2,205 | 37.1 |
-| gaato/brotli (one quality) | 8.28 | 3.21 | 23.1 | 6.67 | 18.9 | 5.19 | 31.3 | 9.95 |
-| hustcer/fbr, quality 11 (its default) | 2,665 | 204 | 8,925 | 671 | 2,860 | 221 | 4,440 | 285 |
-| mizchi/brotli, quality 1 (its default) | 13.9 | 2.57 | 45.8 | 7.81 | 26.1 | 2.96 | 22.6 | 4.28 |
-| gaato/deflate, level 6 | 13.5 | 3.22 | 30.7 | 10.5 | 24.0 | 5.90 | 39.7 | 11.8 |
-| gaato/deflate, level 9 | 39.7 | 7.23 | 80.0 | 17.5 | 73.3 | 10.4 | 109 | 17.2 |
-| moonbit-community/flate, level 6 | 11.5 | 3.94 | 21.0 | 7.83 | 23.7 | 5.83 | 27.8 | 9.12 |
-| moonbit-community/flate, level 9 | 37.7 | 8.44 | 55.0 | 12.6 | 70.7 | 13.6 | 87.3 | 18.3 |
-| gmlewis/flate (no levels) | 209 | 103 | 343 | 155 | 189 | 80.8 | 284 | 128 |
-| mizchi/zlib (no levels) | 60.6 | 6.88 | 110 | 16.0 | 51.1 | 8.22 | 77.0 | 12.4 |
-| hustcer/fzip, level 6 | 21.6 | 0.03 | 88.4 | 0.06 | 22.6 | 0.33 | 38.2 | 1.62 |
-| hustcer/fzip, level 9 | 38.4 | 0.03 | 216 | 0.06 | 46.7 | 0.37 | 78.1 | 1.60 |
-| moonbitlang/core, level 6 | 12.6 | 4.01 | 20.2 | 7.44 | 23.1 | 6.20 | 29.6 | 9.82 |
-| moonbitlang/core, level 9 | 39.2 | 8.28 | 57.4 | 14.1 | 66.5 | 14.1 | 73.7 | 18.1 |
+| gaato/zstd, level 3 | 5.16 | 2.52 | 15.0 | 5.20 | 11.2 | 4.35 | 23.9 | 9.98 |
+| gaato/zstd, level 22 | 264 | 34.6 | 678 | 99.1 | 358 | 43.4 | 549 | 77.3 |
+| Milky2018/zstd, level 3 (its default) | 1.45 | 0.35 | 4.44 | 1.11 | 3.23 | 0.67 | 11.1 | 2.21 |
+| Milky2018/zstd, level 22 | 381 | 5.82 | 833 | 18.1 | 851 | 11.5 | 2,040 | 35.4 |
+| moonbitstack/moonzip (zstd), level 3 (its default) | 20.6 | 3.77 | 34.0 | 5.66 | 26.0 | 4.53 | 36.4 | 7.68 |
+| moonbitstack/moonzip (zstd), level 22 | 32.0 | 4.17 | 51.5 | 6.19 | 41.0 | 4.97 | 52.0 | 8.10 |
+| gaato/brotli, quality 4 (its default) | 7.54 | 2.78 | 14.0 | 4.68 | 13.6 | 4.45 | 24.2 | 6.93 |
+| gaato/brotli, quality 11 | 970 | 488 | 2,340 | 2,150 | 1,220 | 633 | 2,660 | 1,550 |
+| hustcer/fbr, quality 11 (its default) | 2,300 | 186 | 6,850 | 567 | 2,340 | 193 | 3,850 | 259 |
+| mizchi/brotli, quality 1 (its default) | 13.2 | 2.33 | 33.2 | 5.99 | 12.7 | 2.46 | 22.4 | 3.82 |
+| moonbitstack/moonzip (Brotli), quality 9 (its default) | 295 | 51.5 | 472 | 147 | 322 | 65.7 | 418 | 115 |
+| moonbitstack/moonzip (Brotli), quality 11 | 5,550 | 355 | 8,650 | 844 | 6,300 | 494 | 7,690 | 828 |
+| gaato/deflate, level 6 | 11.4 | 2.79 | 18.6 | 5.29 | 19.7 | 5.40 | 34.0 | 8.64 |
+| gaato/deflate, level 9 | 36.8 | 6.25 | 54.4 | 10.2 | 60.1 | 9.74 | 102 | 14.8 |
+| moonbit-community/flate, level 6 | 11.1 | 3.22 | 16.3 | 5.85 | 21.1 | 5.71 | 26.8 | 8.58 |
+| moonbit-community/flate, level 9 | 33.9 | 7.68 | 43.2 | 10.9 | 61.3 | 12.7 | 70.2 | 16.0 |
+| gmlewis/flate (no levels) | 191 | 86.7 | 270 | 124 | 144 | 61.2 | 262 | 115 |
+| mizchi/zlib (no levels) | 50.8 | 6.05 | 76.5 | 11.1 | 48.7 | 7.64 | 65.6 | 11.6 |
+| hustcer/fzip, level 6 | 17.7 | 0.026 | 33.6 | 0.036 | 20.0 | 0.30 | 34.1 | 1.54 |
+| hustcer/fzip, level 9 | 33.5 | 0.026 | 69.5 | 0.036 | 39.3 | 0.30 | 66.9 | 1.55 |
+| moonbitlang/core, level 6 | 11.0 | 3.44 | 16.6 | 5.94 | 20.8 | 5.65 | 26.4 | 8.47 |
+| moonbitlang/core, level 9 | 34.3 | 7.82 | 44.6 | 10.7 | 61.2 | 12.6 | 69.9 | 16.0 |
+| moonbitstack/moonzip, level 6 | 35.8 | 6.05 | 46.5 | 13.9 | 45.1 | 8.04 | 64.6 | 12.2 |
+| moonbitstack/moonzip, level 9 | 39.1 | 6.13 | 50.2 | 13.6 | 48.9 | 8.21 | 68.6 | 12.2 |
 
-Milky2018/zstd at level 3 writes raw blocks (524,309 bytes
-for the text), which accounts for its times; at level 22 it takes 9 (Wasm GC)
-to 16 (JS) times as long as gaato/zstd at level 12 on the text, for a stream twice the size
-(below). hustcer/fzip stores the binary input (131,087 bytes), which accounts for its
-times there. mizchi/brotli's stream for the binary input does not decode
-(below); those times are for writing it. moonbit-community/flate at level 6
-compresses the text faster than gaato/deflate at level 6 on Native, Wasm and
-JS, and the binary input on Wasm and JS (on Native it is a fifth slower
-there), and mizchi/brotli compresses the binary input faster than
-gaato/brotli but on Wasm, and the text on JS, at a worse ratio and with
-streams that do not always decode. moonbitlang/core compresses within 12 %
-of moonbit-community/flate's times, and to the same sizes (below); on JS's
-text at level 9 it is 16 % faster.
+Milky2018/zstd at level 3 writes raw blocks (524,309 bytes for the text),
+which accounts for its times; at level 22 it takes longer than gaato/zstd
+at level 22 on the text, for a stream more than twice the size (below).
+moonbitstack/moonzip's zstd encoder sends literals raw and uses the
+predefined FSE tables only, which keeps it fast at every level, at 1.3 to
+1.7 times gaato/zstd's sizes. hustcer/fzip stores the binary input (131,087
+bytes), which accounts for its times there.
+
+Where another package compresses faster at the same level: gaato/deflate
+takes the text 1.1 times as long as moonbit-community/flate and
+moonbitlang/core at level 6 on Wasm and 1.3 times on JS, for a stream 3 %
+smaller; at level 9, 1.25 times on Wasm, 1.45 times on JS and 1.1 times on
+Native, for the same size (1.2 % smaller on Silesia). gaato/deflate is the
+faster on the text on Wasm GC, and on the binary input everywhere but on
+JS at level 6 (within 2 %). At quality 11 hustcer/fbr
+compresses the binary input 2.6 times as fast as gaato/brotli on Native,
+at a 10 % larger size, and the text at under half gaato/brotli's speed.
+mizchi/brotli at quality 1 is faster than gaato/brotli at its default
+quality 4 on the binary input but on Wasm, and on the text on Wasm GC and
+JS, at a
+worse ratio and with streams that do not always decode. moonbitlang/core
+compresses within 7 % of moonbit-community/flate's times, and to the same
+sizes (below).
 
 ### Compression ratio
 
@@ -705,8 +754,9 @@ that [deflate/docs/compression.md](../deflate/docs/compression.md) uses
 [Canterbury corpus](https://corpus.canterbury.ac.nz/) (2,810,784), each file
 matching [`corpora.tsv`](compare/corpora.tsv). Every
 stream was decoded back to its input by the reference (Node's zlib, `brotli
--d`), and by gaato/deflate or gaato/brotli; where one did not decode, it says
-so. These sizes do not depend on the machine: the i5-10400F's were the same.
+-d`, `zstd -d`), and by gaato/deflate or gaato/brotli; where one did not
+decode, it says so. These sizes do not depend on the machine; those of the
+packages compared before came out as on 2026-10-23 and 2026-11-07.
 
 Raw DEFLATE:
 
@@ -722,46 +772,77 @@ Raw DEFLATE:
 | hustcer/fzip, level 9 | 153,516 | 131,087 | 40,677,505 | 83,855,167 | 773,098 |
 | moonbitlang/core, level 6 | 151,935 | 116,559 | 35,410,992 | 68,296,237 | 738,649 |
 | moonbitlang/core, level 9 | 139,753 | 116,233 | 35,015,440 | 67,592,154 | 726,806 |
+| moonbitstack/moonzip, level 6 | 142,036 | 118,063 | 37,889,747 | 71,996,169 | 788,942 |
+| moonbitstack/moonzip, level 9 | 143,201 | 118,063 | 37,767,089 | 71,751,861 | 783,812 |
 
 moonbitlang/core's streams come out the same size as moonbit-community/flate
-0.10.0's on every file, at both levels.
+0.10.0's on every file, at both levels. moonbitstack/moonzip's one-shot
+`deflate` codes the whole input as one block, its level 6 the best of the
+text but 6.6 % over gaato/deflate on Silesia, and its level 9 larger than
+its level 6 on the text. gaato/deflate's levels 10 to 12, libdeflate's
+near-optimal parsing, are measured against libdeflate in
+[deflate/docs/compression.md](../deflate/docs/compression.md).
 
-Brotli (Canterbury without `ptt5`, 2,297,568 bytes, because hustcer/fbr's
-encoder aborts on that file):
+Brotli (Canterbury also without `ptt5`, 2,297,568 bytes, because
+hustcer/fbr's encoder aborts on that file):
 
-| Encoder | Text | Binary | Canterbury without `ptt5` | Canterbury |
-|---|---:|---:|---:|---:|
-| gaato/brotli | 158,879 | 94,219 | 590,929 | 645,891 |
-| hustcer/fbr, quality 11 | 131,556 | 92,867 | 534,975 | aborts on `ptt5` (exit status -6) |
-| mizchi/brotli, quality 1 | 169,007 | does not decode | 777,152, `asyoulik.txt` does not decode | not totalled: `asyoulik.txt` does not decode |
-| `brotli -q 4` | 160,100 | 98,397 | 581,371 | 634,667 |
-| `brotli -q 9 -w 22` | 134,529 | 86,756 | 495,359 | 543,558 |
-| `brotli -q 11` | 122,831 | 83,951 | 449,725 | 490,664 |
+| Encoder | Text | Binary | Silesia | Canterbury without `ptt5` | Canterbury |
+|---|---:|---:|---:|---:|---:|
+| gaato/brotli, quality 4 (its default) | 158,879 | 94,219 | 65,375,737 | 590,929 | 645,891 |
+| gaato/brotli, quality 11 | 122,831 | 83,951 | 50,332,587 | 449,723 | 490,662 |
+| hustcer/fbr, quality 11 (its default) | 131,556 | 92,867 | aborts on 4 files (exit status -6) | 534,975 | aborts on `ptt5` (exit status -6) |
+| mizchi/brotli, quality 1 (its default) | 169,007 | does not decode | 4 files do not decode | 777,152, `asyoulik.txt` does not decode | not totalled: `asyoulik.txt` does not decode |
+| moonbitstack/moonzip, quality 9 (its default) | 138,614 | 89,175 | 62,295,515 | 565,260 | 618,675 |
+| moonbitstack/moonzip, quality 11 | 123,871 | 87,726 | 11 files do not decode | 505,721 | 546,901 |
+| `brotli -q 4 -w 22` | 160,100 | 98,397 | 64,130,339 | 581,370 | 634,666 |
+| `brotli -q 9 -w 22` | 134,529 | 86,756 | 56,682,211 | 495,359 | 543,558 |
+| `brotli -q 11 -w 22` | 122,831 | 83,951 | 50,332,587 | 449,723 | 490,662 |
 
-mizchi/brotli's encoder writes streams that `brotli -d` refuses ("corrupt
-input") for the binary input and for `asyoulik.txt`, 2 of the 13 files. The
-`brotli` rows are brotli 1.2.0 given each file by name.
+gaato/brotli's qualities 0 to 3 and 5 to 11 write what brotli 1.2.1 writes,
+byte for byte, on every file here, and so are not listed apart; quality 4,
+its own, comes out 1.9 % over `brotli -q 4` on Silesia. Streams that `brotli
+-d` refuses ("corrupt input"):
+
+- hustcer/fbr's encoder aborts on Silesia's `xml`, `samba`, `mozilla` and
+  `ooffice`, and on Canterbury's `ptt5`.
+- mizchi/brotli: the binary input, `asyoulik.txt`, and Silesia's `nci`,
+  `samba`, `mozilla` and `webster`.
+- moonbitstack/moonzip at quality 11: every Silesia file but `sao`; every
+  Canterbury file, all under 1 MiB, decodes. At 10 and 11 it cuts the input
+  into meta-blocks of 1 MiB (16 MiB at 9), and its encoder appears to start
+  each meta-block's distance ring afresh (`brotli/encode.mbt`), where RFC
+  7932 carries the ring over from the meta-block before: a short distance
+  code early in a later meta-block then names another distance.
+
+The `brotli` rows are brotli 1.2.1 given each file by name.
+
 Zstandard:
 
 | Encoder | Text | Binary | Silesia, six | Silesia | Canterbury |
 |---|---:|---:|---:|---:|---:|
-| gaato/zstd, level 3 | 148,599 | 98,818 | 33,666,781 | 66,370,602 | 634,725 |
+| gaato/zstd, level 3 (its default) | 148,599 | 98,818 | 33,666,781 | 66,370,602 | 634,725 |
 | gaato/zstd, level 12 | 137,779 | 92,767 | 29,624,896 | 58,122,624 | 591,542 |
+| gaato/zstd, level 19 | 123,832 | 88,044 | 26,798,269 | 53,173,657 | 518,053 |
+| gaato/zstd, level 22 | 123,832 | 88,044 | 26,511,625 | 52,655,055 | 517,920 |
 | Milky2018/zstd, level 3 (its default) | 524,309 | 131,084 | 128,073,231 | 211,943,551 | 2,810,967 |
 | Milky2018/zstd, level 22 | 286,126 | 131,054 | 92,044,336 | 157,503,983 | 2,244,825 |
+| moonbitstack/moonzip, level 3 (its default) | 221,494 | 124,685 | 45,612,984 | 89,454,069 | 1,104,964 |
+| moonbitstack/moonzip, level 22 | 212,156 | 124,637 | 44,995,006 | 88,256,957 | 1,091,967 |
 | `zstd -3` | 148,537 | 100,216 | 33,503,748 | 66,216,569 | 634,602 |
 | `zstd -12` | 137,743 | 95,491 | 29,517,080 | 58,033,936 | 592,372 |
 | `zstd -19` | 123,581 | 86,747 | 26,529,866 | 52,895,350 | 516,401 |
+| `zstd --ultra -22` | 123,581 | 86,747 | 26,256,081 | 52,369,178 | 516,281 |
 
-Every stream of gaato/zstd and Milky2018/zstd decodes back with `zstd -d`
-and gaato/zstd. gaato/zstd is
-measured at every level from 1 to 12 against zstd 1.5.7 in
-[zstd/docs/compression.md](../zstd/docs/compression.md#compression-sizes):
-the corpus totals are within 1 % at each. Milky2018/zstd writes its input
-raw at level 3, and at level 22 stores the binary input and leaves the
-corpora at three quarters (Silesia) to four fifths (Canterbury) of their
-size. The `zstd` rows are zstd
-1.5.7 given each file by name.
+Every stream of each decodes back with `zstd -d`, and gaato/zstd's with
+gaato/zstd too. gaato/zstd is measured at every level from 1 to 22 against
+zstd 1.5.7 in [zstd/docs/compression.md](../zstd/docs/compression.md#compression-sizes):
+the corpus totals are within 1 % at each (level 22: 0.55 % over on
+Silesia). Milky2018/zstd writes its input raw at level 3, and at level 22
+stores the binary input and leaves the corpora at three quarters (Silesia)
+to four fifths (Canterbury) of their size. moonbitstack/moonzip sends
+literals raw and uses only the predefined FSE tables, in 64 KiB blocks of
+their own, at every level: its levels above 9 are its 9. The `zstd` rows
+are zstd 1.5.7 given each file by name.
 
 ### Running them again
 
@@ -775,13 +856,16 @@ moon run scripts/compare_codecs.mbtx -- check --pieces 1 1 --invalid
 moon run scripts/compare_codecs.mbtx -- claims
 taskset -c N moon run scripts/compare_codecs.mbtx -- stream --timeout 300
 taskset -c N moon run scripts/compare_codecs.mbtx -- memory --timeout 300
-moon run scripts/compare_codecs.mbtx -- ratio --format deflate --time 0 --corpus SILESIA --corpus CANTERBURY
-moon run scripts/compare_codecs.mbtx -- ratio --format brotli --time 0 --corpus CANTERBURY
+moon run scripts/compare_codecs.mbtx -- ratio --format deflate --time 0 --jobs 8 --corpus SILESIA --corpus CANTERBURY
+moon run scripts/compare_codecs.mbtx -- ratio --format brotli --time 0 --jobs 8 --corpus SILESIA --corpus CANTERBURY
+moon run scripts/compare_codecs.mbtx -- ratio --format zstd --time 0 --jobs 8 --corpus SILESIA --corpus CANTERBURY
 taskset -c N moon run scripts/compare_codecs.mbtx -- speed --runs 3
 ```
 
 They need the zstd, brotli, gzip and node commands, `/usr/bin/time` and
-`prlimit`. Other reference versions can give other verdicts, and the
+`prlimit`. `--jobs N` runs N encodings and reference decodings of `ratio`
+at once, with the same output; on one CPU, the slowest encoders at their
+highest levels take hours over Silesia. Other reference versions can give other verdicts, and the
 corpora's files should match
 [`corpora.tsv`](compare/corpora.tsv). The script's
 opening comment lists its options.

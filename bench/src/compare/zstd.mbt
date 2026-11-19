@@ -7,6 +7,7 @@ pub fn zstd_whole() -> Array[Whole] {
       name: "Milky2018/zstd 0.1.4",
       decode: input => @milky_zstd.decompress(input),
     },
+    moonzip_zstd_whole(),
   ]
 }
 
@@ -51,6 +52,7 @@ pub fn zstd_pieces() -> Array[Pieces] {
         })
       },
     },
+    moonzip_zstd_pieces(),
   ]
 }
 
@@ -82,13 +84,13 @@ fn[D : @codec_bytes.Decode] run_decode(
 
 ///|
 /// The Zstandard encoders. The ratio driver measures gaato/zstd at every
-/// level 1..12, the others at their default and highest levels.
+/// level 1..22, the others at their default and highest levels.
 pub fn zstd_compress() -> Array[Compress] {
   [
     {
       name: "gaato/zstd",
       default_level: 3,
-      max_level: 12,
+      max_level: 22,
       encode: (input, level) => @zstd.compress(input, level~),
     },
     {
@@ -97,5 +99,6 @@ pub fn zstd_compress() -> Array[Compress] {
       max_level: 22,
       encode: (input, level) => @milky_zstd.compress(input, level~),
     },
+    moonzip_zstd_compress(),
   ]
 }
