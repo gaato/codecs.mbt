@@ -24,3 +24,27 @@
   repository, so that every module page reads to one standard. Copy it from
   gaato/discord.mbt rather than editing it here; a change belongs in all of
   them at once.
+
+## Navigating with `moon ide`
+
+- Every copy of a part is a separate symbol, so `find-references` and
+  `workspace-symbols` list one hit per module that copies it. Read the one
+  in `parts/` and drop the `internal/` copies (`copies` in
+  `scripts/modules.json` lists them), along with `.mooncakes` and tests.
+- Do not rename a part's symbol with `moon ide rename --apply`. Each copy is
+  a separate symbol, so it renames one copy, which `scripts/gen_parts.mbtx`
+  then overwrites from `parts/`, or only `parts/`, leaving the modules'
+  callers behind. Rename in `parts/`, regenerate, then fix the callers.
+- A query takes about 30 seconds and can hold the `_build` lock, so do not
+  run it while a benchmark or a timed test runs in the same directory.
+
+## API changes
+
+- When a published function's labelled parameter is renamed or removed, an
+  optional one becomes required, or a positional one becomes labelled, keep
+  existing calls compiling for one minor release with `#label_migration`
+  (`alias=old`, `fill=false`, `fill=true` or `allow_positional=true`) and a
+  `msg` naming the new form, and remove the attribute in the next minor
+  release. Callers then get a warning instead of a build failure; the
+  CHANGELOG still lists the change with its migration note. A renamed or
+  removed function keeps a `#deprecated` alias for the same period.
