@@ -76,3 +76,35 @@ test "in pieces, the same as whole" {
     assert_eq(adler, whole, msg="piece \{piece}")
   }
 }
+
+///|
+test "short and SIMD updates agree with the reference across random splits" {
+  // An empty update preserves both halves, even when they are unreduced.
+  // With the same starting value, a zero byte takes b past 2 * BASE.
+  let edge = FixedArray::make(1, b'\x00')
+  for n in 0..<=1 {
+    assert_eq(
+      @adler32_fast.update(0xFFFFFFF0U, edge[:n]),
+      @adler32.update(0xFFFFFFF0U, edge[:n]),
+    )
+  }
+  @quickcheck.check(
+    (c : (UInt32, UInt32, UInt16, UInt16)) => {
+      let data = random_bytes(64, c.0)
+      for n in 0..<=64 {
+        let first = c.2.to_int() % (n + 1)
+        let second = first + c.3.to_int() % (n - first + 1)
+        let want = @adler32.update(c.1, data[:n])
+        let a = @adler32_fast.update(c.1, data[:first])
+        let b = @adler32_fast.update(a, data[first:second])
+        if @adler32_fast.update(b, data[second:n]) != want ||
+          @adler32_fast.update(c.1, data[:n]) != want {
+          return false
+        }
+      }
+      true
+    },
+    count=300,
+    seed=2026,
+  )
+}

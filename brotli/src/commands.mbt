@@ -82,43 +82,105 @@ fn Decoder::fast_commands(self : Decoder) -> Unit {
   guard fast_commands_pay() && self.stash_pos >= self.stash.length() else {
     return
   }
-  let len = self.view.length()
+  let view = self.view
+  let len = view.length()
+  guard len - self.in_pos >= FAST_COMMAND_INPUT else { return }
+  let cmd_pool = self.cmd_trees.pool
+  let cmd_offsets = self.cmd_trees.offsets
+  let dist_pool = self.dist_trees.pool
+  let dist_offsets = self.dist_trees.offsets
+  let mut acc = self.acc
+  let mut nbits = self.nbits
+  let mut in_pos = self.in_pos
   while self.state is CommandStart {
-    guard len - self.in_pos >= FAST_COMMAND_INPUT && self.block_len[1] > 0 else {
-      return
+    // The three block categories use slot 1 for commands and 2 for distances.
+    guard len - in_pos >= FAST_COMMAND_INPUT && self.block_len.unsafe_get(1) > 0 else {
+      break
     }
-    let acc = self.acc
-    let nbits = self.nbits
-    let in_pos = self.in_pos
-    let sym = self.fast_symbol(self.cmd_trees, self.block_type[1])
+    let saved_acc = acc
+    let saved_nbits = nbits
+    let saved_in_pos = in_pos
+    if nbits < MAX_CODE_LENGTH {
+      while nbits <= 23 {
+        // The command guard reserves three bytes for each of three refills.
+        acc = acc | (view.unsafe_get(in_pos).to_int() << nbits)
+        in_pos += 1
+        nbits += 8
+      }
+    }
+    // The active command block type selects one of its built trees.
+    let base = cmd_offsets.unsafe_get(self.block_type.unsafe_get(1))
+    // The root mask and the subtable mask index entries laid out by Group::build.
+    let mut entry = cmd_pool.unsafe_get(base + (acc & (ROOT_SIZE - 1))).to_int()
+    let mut bits = entry & 15
+    if bits > ROOT_BITS {
+      let sub = (acc >> ROOT_BITS) & ((1 << (bits - ROOT_BITS)) - 1)
+      entry = cmd_pool.unsafe_get(base + (entry >> 4) + sub).to_int()
+      bits = entry & 15
+    }
+    acc = acc >> bits
+    nbits -= bits
+    let sym = entry >> 4
+    // Command symbols are below 704, giving one of the 11 cells. The
+    // cell bases are 0, 8 or 16, and the low code bits add at most 7.
     let cell = sym >> 6
-    let insert_code = cell_insert_base[cell] + ((sym >> 3) & 7)
-    let copy_code = cell_copy_base[cell] + (sym & 7)
-    let insert_len = insert_length_base[insert_code] +
-      self.fast_bits(insert_length_extra[insert_code])
-    let copy_len = copy_length_base[copy_code] +
-      self.fast_bits(copy_length_extra[copy_code])
-    if insert_len > self.meta_remaining {
-      self.acc = acc
-      self.nbits = nbits
-      self.in_pos = in_pos
-      return
+    let insert_code = cell_insert_base.unsafe_get(cell) + ((sym >> 3) & 7)
+    let copy_code = cell_copy_base.unsafe_get(cell) + (sym & 7)
+    let insert_bits = insert_length_extra.unsafe_get(insert_code)
+    if nbits < insert_bits {
+      while nbits <= 23 {
+        // At most three of the command guard's nine bytes were used above.
+        acc = acc | (view.unsafe_get(in_pos).to_int() << nbits)
+        in_pos += 1
+        nbits += 8
+      }
     }
-    self.block_len[1] -= 1
+    let insert_len = insert_length_base.unsafe_get(insert_code) +
+      (acc & ((1 << insert_bits) - 1))
+    acc = acc >> insert_bits
+    nbits -= insert_bits
+    let copy_bits = copy_length_extra.unsafe_get(copy_code)
+    if nbits < copy_bits {
+      while nbits <= 23 {
+        // At most six of the command guard's nine bytes were used above.
+        acc = acc | (view.unsafe_get(in_pos).to_int() << nbits)
+        in_pos += 1
+        nbits += 8
+      }
+    }
+    let copy_len = copy_length_base.unsafe_get(copy_code) +
+      (acc & ((1 << copy_bits) - 1))
+    acc = acc >> copy_bits
+    nbits -= copy_bits
+    if insert_len > self.meta_remaining {
+      acc = saved_acc
+      nbits = saved_nbits
+      in_pos = saved_in_pos
+      break
+    }
+    self.block_len.unsafe_set(1, self.block_len.unsafe_get(1) - 1)
     self.meta_remaining -= insert_len
     self.insert_remaining = insert_len
     self.copy_len = copy_len
     self.implicit_distance = sym < 128
     self.state = Literals
-    while self.insert_remaining > 0 && self.fast_literals() > 0 {
+    if insert_len > 0 {
+      self.acc = acc
+      self.nbits = nbits
+      self.in_pos = in_pos
+      while self.insert_remaining > 0 && self.fast_literals() > 0 {
 
+      }
+      acc = self.acc
+      nbits = self.nbits
+      in_pos = self.in_pos
+      guard self.insert_remaining == 0 else { break }
     }
-    guard self.insert_remaining == 0 else { return }
     // As `literals` ends: a command that fills the meta-block has no
     // distance.
     if self.meta_remaining == 0 {
       self.state = MetaDone
-      return
+      break
     }
     self.state = Distance
     // As `distance` begins, where `ensure_space` would find the room
@@ -129,107 +191,119 @@ fn Decoder::fast_commands(self : Decoder) -> Unit {
     } else {
       cap - self.wpos
     }
-    guard room >= MAX_TRANSFORMED_WORD else { return }
-    let acc = self.acc
-    let nbits = self.nbits
-    let in_pos = self.in_pos
+    guard room >= MAX_TRANSFORMED_WORD else { break }
+    let saved_acc = acc
+    let saved_nbits = nbits
+    let saved_in_pos = in_pos
     let mut code = 0
     let mut extra = 0
     if !self.implicit_distance {
-      guard len - self.in_pos >= FAST_DISTANCE_INPUT && self.block_len[2] > 0 else {
-        return
+      guard len - in_pos >= FAST_DISTANCE_INPUT &&
+        self.block_len.unsafe_get(2) > 0 else {
+        break
       }
       let context = (self.copy_len - 2).min(3)
-      let tree = self.dist_context_map[self.dist_map_offset + context].to_int()
-      code = self.fast_symbol(self.dist_trees, tree)
-      extra = self.fast_bits(
-        @rules.distance_extra_bits(code, self.npostfix, self.ndirect),
-      )
+      // The map holds four entries per distance block type. Copy lengths
+      // are at least 2.
+      let tree = self.dist_context_map
+        .unsafe_get(self.dist_map_offset + context)
+        .to_int()
+      if nbits < MAX_CODE_LENGTH {
+        while nbits <= 23 {
+          // The distance guard reserves three bytes for each of two refills.
+          acc = acc | (view.unsafe_get(in_pos).to_int() << nbits)
+          in_pos += 1
+          nbits += 8
+        }
+      }
+      // The map entry is a byte and dist_offsets holds 256 entries.
+      let base = dist_offsets.unsafe_get(tree)
+      // The root mask and the subtable mask index entries laid out by Group::build.
+      let mut entry = dist_pool
+        .unsafe_get(base + (acc & (ROOT_SIZE - 1)))
+        .to_int()
+      let mut bits = entry & 15
+      if bits > ROOT_BITS {
+        let sub = (acc >> ROOT_BITS) & ((1 << (bits - ROOT_BITS)) - 1)
+        entry = dist_pool.unsafe_get(base + (entry >> 4) + sub).to_int()
+        bits = entry & 15
+      }
+      acc = acc >> bits
+      nbits -= bits
+      code = entry >> 4
+      let n = @rules.distance_extra_bits(code, self.npostfix, self.ndirect)
+      if nbits < n {
+        while nbits <= 23 {
+          // At most three of the distance guard's six bytes were used above.
+          acc = acc | (view.unsafe_get(in_pos).to_int() << nbits)
+          in_pos += 1
+          nbits += 8
+        }
+      }
+      extra = acc & ((1 << n) - 1)
+      acc = acc >> n
+      nbits -= n
     }
+    // Masking by 3 keeps every distance index in the four-entry ring.
     let dist = @rules.distance(
       code,
       extra,
       npostfix=self.npostfix,
       ndirect=self.ndirect,
-      last1=self.last_distance(1),
-      last2=self.last_distance(2),
-      last3=self.last_distance(3),
-      last4=self.last_distance(4),
+      last1=self.dist_ring.unsafe_get((self.dist_ring_index - 1) & 3),
+      last2=self.dist_ring.unsafe_get((self.dist_ring_index - 2) & 3),
+      last3=self.dist_ring.unsafe_get((self.dist_ring_index - 3) & 3),
+      last4=self.dist_ring.unsafe_get((self.dist_ring_index - 4) & 3),
     )
     guard dist is Some(dist) &&
       dist <= self.filled &&
       self.copy_len <= self.meta_remaining else {
-      self.acc = acc
-      self.nbits = nbits
-      self.in_pos = in_pos
-      return
+      acc = saved_acc
+      nbits = saved_nbits
+      in_pos = saved_in_pos
+      break
     }
     if !self.implicit_distance {
-      self.block_len[2] -= 1
+      self.block_len.unsafe_set(2, self.block_len.unsafe_get(2) - 1)
     }
     if code != 0 {
-      self.dist_ring[self.dist_ring_index & 3] = dist
+      self.dist_ring.unsafe_set(self.dist_ring_index & 3, dist)
       self.dist_ring_index += 1
     }
-    self.meta_remaining -= self.copy_len
-    self.copy_remaining = self.copy_len
+    let n = self.copy_len
+    self.meta_remaining -= n
+    self.copy_remaining = n
     self.copy_dist = dist
     self.state = Copy
-    self.copy_fast()
-    guard self.copy_remaining == 0 else { return }
+    // The same room and wrap checks as copy_fast. Leave Copy pending if
+    // the slow path must drain, grow or wrap the ring first.
+    let ring = self.ring
+    let dst = self.wpos
+    let src = dst - dist
+    guard n <= room && src >= 0 && dst + n <= cap else { break }
+    if dist >= n {
+      @blit.bytes(ring, dst, ring, src, n)
+    } else {
+      @blit.forward(ring, dst, src, n)
+    }
+    let wpos = dst + n
+    self.wpos = if wpos == self.ring_max { 0 } else { wpos }
+    self.pending += n
+    self.filled = (self.filled + n).min(self.window)
+    self.copy_remaining = 0
     self.state = if self.meta_remaining == 0 { MetaDone } else { CommandStart }
   }
+  self.acc = acc
+  self.nbits = nbits
+  self.in_pos = in_pos
 }
 
 ///|
-/// Whether `fast_commands` runs. On Wasm it made the benchmark text decode
-/// a fifth slower, where JS, Wasm GC and native gained (bench/, 2026-11-14).
-#cfg(target="wasm")
-fn fast_commands_pay() -> Bool {
-  false
-}
-
-///|
-#cfg(not(target="wasm"))
+/// Whether `fast_commands` runs. On an i5-10400F (2026-11-19), the Wasm
+/// whole-text decode went from 8.15 to 3.64 ms in `compare_speed_brotli`
+/// and from 8.38 to 3.57 ms in the combined `compare_speed` binary.
 fn fast_commands_pay() -> Bool {
   true
-}
-
-///|
-/// `read_symbol` where the caller has made sure that a refill finds three
-/// bytes in `view`: it then holds at least 24 bits, more than any code.
-#inline
-fn Decoder::fast_symbol(self : Decoder, group : Group, tree : Int32) -> Int32 {
-  if self.nbits < MAX_CODE_LENGTH {
-    self.refill()
-  }
-  let pool = group.pool
-  let base = group.offsets[tree]
-  // The entries are within the tree's table, as `Group::build` lays it out.
-  let mut entry = pool.unsafe_get(base + (self.acc & (ROOT_SIZE - 1))).to_int()
-  let mut bits = entry & 15
-  if bits > ROOT_BITS {
-    let sub = (self.acc >> ROOT_BITS) & ((1 << (bits - ROOT_BITS)) - 1)
-    entry = pool.unsafe_get(base + (entry >> 4) + sub).to_int()
-    bits = entry & 15
-  }
-  self.acc = self.acc >> bits
-  self.nbits -= bits
-  entry >> 4
-}
-
-///|
-/// `read_bits` where the caller has made sure that a refill finds three
-/// bytes in `view`: it then holds at least 24 bits, as many as `n` can be.
-#inline
-fn Decoder::fast_bits(self : Decoder, n : Int32) -> Int32 {
-  if self.nbits < n {
-    self.refill()
-  }
-  let v = self.acc & ((1 << n) - 1)
-  self.acc = self.acc >> n
-  self.nbits -= n
-  v
 }
 
 ///|
