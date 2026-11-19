@@ -421,8 +421,16 @@ fn Decoder::run(self : Decoder, end~ : Bool) -> Status raise Stop {
         self.next_field(Data)
       }
       Data => {
-        let rest = self.view[self.in_pos:]
-        let room = self.out.mut_view(start=self.out_pos)
+        let rest = if self.in_pos == 0 {
+          self.view
+        } else {
+          self.view[self.in_pos:]
+        }
+        let room = if self.out_pos == 0 {
+          self.out
+        } else {
+          self.out.mut_view(start=self.out_pos)
+        }
         let status = try {
           match self.fixed_out {
             Some(fixed) if self.out_pos == 0 =>
@@ -439,9 +447,11 @@ fn Decoder::run(self : Decoder, end~ : Bool) -> Status raise Stop {
           }
         }
         let produced = self.inner.last_produced()
-        let written = room.exact_view(end=produced)
-        self.crc = @crc32.update(self.crc, written)
-        self.size += produced.reinterpret_as_uint()
+        if produced > 0 {
+          let written = room.exact_view(end=produced)
+          self.crc = @crc32.update(self.crc, written)
+          self.size += produced.reinterpret_as_uint()
+        }
         self.in_pos += self.inner.last_consumed()
         self.out_pos += produced
         match status {

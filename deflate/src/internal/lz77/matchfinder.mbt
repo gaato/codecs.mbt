@@ -41,10 +41,11 @@ fn load_u32(data : FixedArray[Byte], pos : Int32) -> UInt32 {
 #cfg(not(any(target="native", target="wasm")))
 #inline
 fn load_u32(data : FixedArray[Byte], pos : Int32) -> UInt32 {
-  data[pos].to_uint() |
-  (data[pos + 1].to_uint() << 8) |
-  (data[pos + 2].to_uint() << 16) |
-  (data[pos + 3].to_uint() << 24)
+  // As for the wide load, callers leave four bytes starting at pos.
+  data.unsafe_get(pos).to_uint() |
+  (data.unsafe_get(pos + 1).to_uint() << 8) |
+  (data.unsafe_get(pos + 2).to_uint() << 16) |
+  (data.unsafe_get(pos + 3).to_uint() << 24)
 }
 
 ///|
@@ -84,7 +85,9 @@ fn may_beat(
   in_next : Int32,
   best_len : Int32,
 ) -> Bool {
-  data[m + best_len] == data[in_next + best_len] && data[m] == data[in_next]
+  // 0 <= m < in_next, and the caller leaves a byte after best_len matches.
+  data.unsafe_get(m + best_len) == data.unsafe_get(in_next + best_len) &&
+  data.unsafe_get(m) == data.unsafe_get(in_next)
 }
 
 ///|
@@ -117,7 +120,8 @@ fn extend_match(
   max_len : Int32,
 ) -> Int32 {
   let mut len = start
-  while len < max_len && data[a + len] == data[b + len] {
+  // 0 <= b < a and a + max_len <= data.length(), as for the wide load.
+  while len < max_len && data.unsafe_get(a + len) == data.unsafe_get(b + len) {
     len += 1
   }
   len
