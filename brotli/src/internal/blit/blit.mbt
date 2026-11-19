@@ -1,5 +1,5 @@
 // Generated from parts/blit/blit.mbt by scripts/gen_parts.mbtx: edit it there, not here.
-// On native, Wasm and Wasm GC a copy is one block move, which decoded png's
+// On native, Wasm and Wasm GC a long copy is one block move, which decoded png's
 // benchmark image 10 to 15% faster than a byte loop on native and Wasm. On
 // JS, core's block copy is a loop that checks every index and runs
 // backwards; a forward loop without the checks decoded it 10% faster
@@ -129,7 +129,14 @@ pub fn move_down(
   at : Int32,
   n : Int32,
 ) -> Unit {
-  FixedArray::unsafe_blit(buf, to, buf, at, n)
+  // The caller bounds both ranges. to <= at makes forward overlap safe.
+  if n < 16 {
+    for i in 0..<n {
+      buf.unsafe_set(to + i, buf.unsafe_get(at + i))
+    }
+  } else {
+    FixedArray::unsafe_blit(buf, to, buf, at, n)
+  }
 }
 
 ///|
@@ -153,7 +160,15 @@ pub fn move_down(
 /// `dst`.
 #cfg(not(target="js"))
 pub fn from_view(dst : FixedArray[Byte], to : Int32, src : BytesView) -> Unit {
-  dst.blit_from_bytesview(to, src)
+  let n = src.length()
+  if n < 16 {
+    // i is within src, and the caller bounds the destination range.
+    for i in 0..<n {
+      dst.unsafe_set(to + i, src.unsafe_get(i))
+    }
+  } else {
+    dst.blit_from_bytesview(to, src)
+  }
 }
 
 ///|

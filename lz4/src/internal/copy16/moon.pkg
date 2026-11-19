@@ -1,0 +1,3 @@
+// Generated from parts/copy16/moon.pkg by scripts/gen_parts.mbtx: edit it there, not here.
+
+supported_targets = "js + native + wasm + wasm-gc"

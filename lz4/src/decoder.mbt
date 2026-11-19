@@ -1086,6 +1086,14 @@ fn Decoder::sequences(self : Decoder) -> Unit raise Stop {
 }
 
 ///|
+#cfg(any(target="native", target="wasm"))
+const COPY_SHORT_SEQUENCE : Bool = true
+
+///|
+#cfg(not(any(target="native", target="wasm")))
+const COPY_SHORT_SEQUENCE : Bool = false
+
+///|
 /// Decodes whole sequences while the rest of the block is in the step's
 /// input and each sequence fits the window, and stops at the start of the
 /// first one it does not take on, which `sequences` then decodes or
@@ -1165,9 +1173,13 @@ fn Decoder::fast_sequences(self : Decoder) -> Unit {
       hist = self.hist
       guard need <= win.length() - w else { return }
     }
-    // Short copies byte by byte: a block copy costs more than they do.
     if lit > 16 {
       @blit.from_view(win, w, view[lit_at:lit_at + lit])
+    } else if COPY_SHORT_SEQUENCE &&
+      view.length() - lit_at >= 16 &&
+      win.length() - w >= 16 {
+      // Both ranges fit. Bytes past lit are beyond the committed window.
+      @copy16.copy16_from_view(win, w, view, lit_at)
     } else {
       for i in 0..<lit {
         win.unsafe_set(w + i, view.unsafe_get(lit_at + i))
@@ -1181,6 +1193,9 @@ fn Decoder::fast_sequences(self : Decoder) -> Unit {
         @blit.forward(win, w, from, len)
       } else if len > 16 {
         @blit.bytes(win, w, win, from, len)
+      } else if COPY_SHORT_SEQUENCE && offset >= 16 && win.length() - w >= 16 {
+        // The validated offset bounds the source. Only len bytes are committed.
+        @copy16.copy16(win, w, from)
       } else {
         for i in 0..<len {
           win.unsafe_set(w + i, win.unsafe_get(from + i))

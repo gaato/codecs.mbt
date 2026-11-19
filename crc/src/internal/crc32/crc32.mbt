@@ -77,16 +77,6 @@ pub fn update(crc : UInt32, data : ArrayView[Byte]) -> UInt32 {
 }
 
 ///|
-/// The four bytes of `data` at `i`, little-endian, in one load: native and
-/// Wasm read a word wherever it is. The caller has checked that they are
-/// within `data`.
-#cfg(any(target="native", target="wasm"))
-#inline
-fn load32(data : BytesView, i : Int32) -> UInt32 {
-  data.unsafe_read_uint32_le(i)
-}
-
-///|
 /// The CRC-32 of the data so far, `crc`, extended by `data`.
 #cfg(any(target="native", target="wasm"))
 pub fn update_bytes(crc : UInt32, data : BytesView) -> UInt32 {
@@ -95,8 +85,20 @@ pub fn update_bytes(crc : UInt32, data : BytesView) -> UInt32 {
   let mut i = 0
   // i + 7 < n: the eight reads are within `data`. (`i + 8 <= n` would
   // wrap past the largest Int for n within 8 of it.)
+  let bytes = data.data()
+  let base = data.start_offset()
   while n - i >= 8 {
-    c = fold8(c, load32(data, i), load32(data, i + 4))
+    let x = c ^ bytes.unsafe_read_uint32_le(base + i)
+    let hi = bytes.unsafe_read_uint32_le(base + i + 4)
+    // Each index is k * 256 plus a byte, k < 8.
+    c = tables.unsafe_get(7 * 256 + (x & 0xFF).reinterpret_as_int()) ^
+      tables.unsafe_get(6 * 256 + ((x >> 8) & 0xFF).reinterpret_as_int()) ^
+      tables.unsafe_get(5 * 256 + ((x >> 16) & 0xFF).reinterpret_as_int()) ^
+      tables.unsafe_get(4 * 256 + (x >> 24).reinterpret_as_int()) ^
+      tables.unsafe_get(3 * 256 + (hi & 0xFF).reinterpret_as_int()) ^
+      tables.unsafe_get(2 * 256 + ((hi >> 8) & 0xFF).reinterpret_as_int()) ^
+      tables.unsafe_get(256 + ((hi >> 16) & 0xFF).reinterpret_as_int()) ^
+      tables.unsafe_get((hi >> 24).reinterpret_as_int())
     i += 8
   }
   // i < n, and the index is a byte.

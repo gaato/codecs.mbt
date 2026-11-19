@@ -12,8 +12,8 @@
   "ledgered": ["crc", "snappy", "lz4", "lzw", "zstd", "brotli", "deflate", "png"],
   "coverage_scope": {
     "crc": ["src", "src/internal/crc32", "src/internal/crc32c"],
-    "snappy": ["src", "src/internal/whole", "src/internal/blit", "src/internal/crc32c"],
-    "lz4": ["src", "src/internal/whole", "src/internal/blit"],
+    "snappy": ["src", "src/internal/whole", "src/internal/blit", "src/internal/copy16", "src/internal/crc32c"],
+    "lz4": ["src", "src/internal/whole", "src/internal/blit", "src/internal/copy16"],
     "lzw": ["src", "src/internal/whole"],
     "zstd": [
       "src", "src/internal/whole",
@@ -88,10 +88,12 @@
     "snappy": {
       "whole": ["whole.mbt", "whole_test.mbt"],
       "blit": ["blit.mbt", "blit_test.mbt"],
+      "copy16": ["copy16.mbt", "copy16_test.mbt"],
       "crc32c": ["crc32c.mbt", "crc32c_test.mbt"]
     },
     "lz4": {
       "whole": ["whole.mbt", "whole_test.mbt"],
+      "copy16": ["copy16.mbt", "copy16_test.mbt"],
       "blit": ["blit.mbt", "blit_test.mbt"]
     },
     "brotli": {
