@@ -67,67 +67,88 @@ fn decode_elements(
   let mut ip = 0
   let mut op = start
   while ip < n {
-    let tag = src[ip].to_int()
+    // The loop runs only while ip is within src.
+    let tag = src.unsafe_get(ip).to_int()
     ip += 1
     if (tag & 3) == 0 {
-      let mut len = (tag >> 2).to_int64()
-      if len >= 60L {
-        let k = (len - 59L).to_int()
+      let mut size_code = (tag >> 2).reinterpret_as_uint()
+      if size_code >= 60U {
+        let k = (tag >> 2) - 59
         guard k <= n - ip else {
           raise stopped(written, op, "a literal's length cut short")
         }
-        len = 0L
+        // The preceding guard bounds all k length bytes.
+        size_code = 0U
         for j in 0..<k {
-          len = len | (src[ip + j].to_int64() << (8 * j))
+          size_code = size_code | (src.unsafe_get(ip + j).to_uint() << (8 * j))
         }
         ip += k
       }
-      len = len + 1L
-      guard len <= (n - ip).to_int64() && len <= (end - op).to_int64() else {
+      // Check length minus one against the remaining space before adding one.
+      guard size_code < (n - ip).reinterpret_as_uint() &&
+        size_code < (end - op).reinterpret_as_uint() else {
         raise stopped(written, op, "a literal past the input or the length")
       }
-      let len = len.to_int()
-      @blit.from_view(dst, op, src[ip:ip + len])
+      let len = size_code.reinterpret_as_int() + 1
+      if len <= 16 && n - ip >= 16 && end - op >= 16 {
+        // Both ranges fit. Only the first len bytes become output.
+        @copy16.copy16_from_view(dst, op, src, ip)
+      } else {
+        @blit.from_view(dst, op, src[ip:ip + len])
+      }
       ip += len
       op += len
       continue
     }
-    let (len, offset) = match tag & 3 {
+    let mut len = 0
+    let mut offset = 0
+    match tag & 3 {
       1 => {
         guard ip < n else { raise stopped(written, op, "a copy cut short") }
-        let offset = (tag >> 5 << 8) | src[ip].to_int()
+        // ip < n, so the one-byte offset is readable.
+        offset = (tag >> 5 << 8) | src.unsafe_get(ip).to_int()
         ip += 1
-        (4 + ((tag >> 2) & 7), offset.to_int64())
+        len = 4 + ((tag >> 2) & 7)
       }
       2 => {
         guard n - ip >= 2 else {
           raise stopped(written, op, "a copy cut short")
         }
-        let offset = src[ip].to_int() | (src[ip + 1].to_int() << 8)
+        // The preceding guard bounds both offset bytes.
+        offset = src.unsafe_get(ip).to_int() |
+          (src.unsafe_get(ip + 1).to_int() << 8)
         ip += 2
-        (1 + (tag >> 2), offset.to_int64())
+        len = 1 + (tag >> 2)
       }
       _ => {
         guard n - ip >= 4 else {
           raise stopped(written, op, "a copy cut short")
         }
-        let mut offset = 0L
-        for j in 0..<4 {
-          offset = offset | (src[ip + j].to_int64() << (8 * j))
-        }
+        // The preceding guard bounds all four offset bytes.
+        offset = src.unsafe_get(ip).to_int() |
+          (src.unsafe_get(ip + 1).to_int() << 8) |
+          (src.unsafe_get(ip + 2).to_int() << 16) |
+          (src.unsafe_get(ip + 3).to_int() << 24)
         ip += 4
-        (1 + (tag >> 2), offset)
+        len = 1 + (tag >> 2)
       }
     }
-    guard offset > 0L && offset <= (op - start).to_int64() else {
+    // A four-byte offset with its high bit set exceeds any possible history
+    // and is rejected by the positive-offset check.
+    guard offset > 0 && offset <= op - start else {
       raise stopped(written, op, "a copy from before the start of the data")
     }
     guard len <= end - op else {
       raise stopped(written, op, "a copy past the length")
     }
-    let from = op - offset.to_int()
-    if offset.to_int() >= len {
-      @blit.bytes(dst, op, dst, from, len)
+    let from = op - offset
+    if offset >= len {
+      if len <= 16 && offset >= 16 && end - op >= 16 {
+        // The offset bounds the source. Only len bytes become output.
+        @copy16.copy16(dst, op, from)
+      } else {
+        @blit.bytes(dst, op, dst, from, len)
+      }
     } else {
       // Overlapping: the copy repeats bytes it writes.
       @blit.forward(dst, op, from, len)
@@ -170,7 +191,8 @@ pub fn decompress_raw(
   }
   let out = FixedArray::make(length.to_int(), b'\x00')
   decode_elements(rest, out, 0, out.length(), Ref(0))
-  Bytes::from_array(out[:])
+  // The array is exactly the output and has no mutable alias after return.
+  out.unsafe_reinterpret_as_bytes()
 }
 
 ///|

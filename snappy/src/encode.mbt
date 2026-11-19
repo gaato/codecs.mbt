@@ -44,10 +44,10 @@ fn Writer::to_bytes(self : Writer) -> Bytes {
 /// The four bytes at `i`, little-endian; the caller has checked that they are
 /// within `data`.
 fn load32(data : BytesView, i : Int32) -> UInt32 {
-  data[i].to_uint() |
-  (data[i + 1].to_uint() << 8) |
-  (data[i + 2].to_uint() << 16) |
-  (data[i + 3].to_uint() << 24)
+  data.unsafe_get(i).to_uint() |
+  (data.unsafe_get(i + 1).to_uint() << 8) |
+  (data.unsafe_get(i + 2).to_uint() << 16) |
+  (data.unsafe_get(i + 3).to_uint() << 24)
 }
 
 ///|
@@ -155,8 +155,9 @@ fn compress_fragment(
           break
         }
         next_hash = hash(load32(data, next_ip), shift)
-        candidate = start + table[h].to_int()
-        table[h] = (ip - start).to_uint16()
+        // A hash is below 1 << bits, which is within the table.
+        candidate = start + table.unsafe_get(h).to_int()
+        table.unsafe_set(h, (ip - start).to_uint16())
         if load32(data, ip) == load32(data, candidate) {
           break
         }
@@ -179,10 +180,14 @@ fn compress_fragment(
           done = true
           break
         }
-        table[hash(load32(data, ip - 1), shift)] = (ip - 1 - start).to_uint16()
+        // Both hashes index the first 1 << bits entries of the table.
+        table.unsafe_set(
+          hash(load32(data, ip - 1), shift),
+          (ip - 1 - start).to_uint16(),
+        )
         let h = hash(load32(data, ip), shift)
-        candidate = start + table[h].to_int()
-        table[h] = (ip - start).to_uint16()
+        candidate = start + table.unsafe_get(h).to_int()
+        table.unsafe_set(h, (ip - start).to_uint16())
         if load32(data, ip) != load32(data, candidate) {
           break
         }

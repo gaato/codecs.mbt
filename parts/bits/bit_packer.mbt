@@ -231,7 +231,9 @@ pub fn BitPacker::rewind(self : BitPacker, mark : Mark) -> Unit {
 ///|
 /// Complete bytes waiting to be handed out.
 pub fn BitPacker::pending(self : BitPacker) -> Int32 {
-  self.flush()
+  if self.nbits >= 8 {
+    self.flush()
+  }
   self.len - self.drained
 }
 

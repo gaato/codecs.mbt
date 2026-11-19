@@ -2,6 +2,7 @@ import {
   "gaato/codec",
   "gaato/codec_bytes",
   "gaato/lz4/internal/blit",
+  "gaato/lz4/internal/copy16",
   "moonbitlang/core/debug",
   "gaato/lz4/internal/whole",
 }
@@ -12,3 +13,10 @@ import {
 } for "wbtest"
 
 supported_targets = "js + native + wasm + wasm-gc"
+
+options(
+  targets: {
+    "xxh32_bulk.mbt": [ "native", "wasm", "wasm-gc" ],
+    "xxh32_js.mbt": [ "js" ],
+  },
+)

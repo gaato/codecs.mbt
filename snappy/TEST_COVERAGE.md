@@ -25,8 +25,9 @@ CI too. The pitfalls the script pins are described in zstd's ledger,
 - Sources: every non-test `.mbt` of `src/` (the raw format, the encoder's
   fragments, the framing format's decoder and encoder, the whole-stream
   functions and the trait implementations) and of the copies of the shared
-  parts `src/internal/blit/` and `src/internal/crc32c/` (generated from
-  `parts/`, with their tests). The crosscheck's executable,
+  parts `src/internal/blit/`, `src/internal/copy16/` and
+  `src/internal/crc32c/` (generated from `parts/`, with their tests).
+  The crosscheck's executable,
   `src/internal/crosscheck/`, is run by `scripts/crosscheck.mbtx`, not by
   the tests.
 - Counts are Coveralls lines: lines with at least one instrumented point,
@@ -69,4 +70,5 @@ Budgets are the exact uncovered counts: the script fails on any difference.
 | src/whole.mbt | 2 | The `abort` of `compress` for inputs over 2,147,221,517 bytes, whose bound passes 2^31 - 1 bytes, which a test cannot allocate; and its `abort` if the output did not fit `compress_bound`, which cannot happen: "framed streams round-trip however split, and flushes decode" checks every stream against the bound. |
 | src/internal/blit/blit.mbt | 10 | `bytes`, `into_view`, `move_down` and `from_view` for JS (`#cfg(target="js")`), forward loops without index checks, and `forward` for JS and Wasm GC, a byte at a time where native and Wasm copy eight: the ledger measures native, which compiles the block copies and the eight-byte steps instead. The gates run the same tests on JS and Wasm GC: `src/internal/blit/blit_test.mbt`, and the raw tests' copies, overlapping ones among them, which `forward` makes. |
 | src/internal/crc32c/crc32c.mbt | 13 | `update_bytes` for JS and Wasm GC (`#cfg(not(any(target="native", target="wasm")))`), which assembles bytes in the caller's loop to preserve those backends' performance. Native compiles the word-load variant instead. The same `crc32c_test.mbt` runs on JS and Wasm GC, checking the bitwise reference, offsets 0 to 7, lengths 0 to 64, and CRC continuation across every tested split; the framed tests check every chunk's CRC-32C on all four targets too. |
+| src/internal/copy16/copy16.mbt | 6 | The JS byte loops and Wasm GC block copies are compiled only on their own targets. `src/internal/copy16/copy16_test.mbt` checks both copies on all four targets, including unaligned ranges and a nonzero view origin. |
 | src/internal/whole/whole.mbt | 4 | The output reaching 2^31 - 1 bytes with no `max_output` (`None => MAX_LENGTH` in `decode`, the `abort` of `encode`), which no test can allocate, and `copy` for JS (`#cfg(target="js")`), a loop without index checks: the ledger measures native, which compiles the block copy instead. The gates run the same tests on JS: `src/internal/whole/whole_test.mbt`, and every `compress` and `decompress` test of the module. |

@@ -9,6 +9,15 @@
 const HISTORY : Int32 = 65536
 
 ///|
+#cfg(not(target="js"))
+const HASH_CONTENT_PER_BLOCK : Bool = true
+
+///|
+/// Whole-input encoding on JS was faster hashing the input view as it arrives.
+#cfg(target="js")
+const HASH_CONTENT_PER_BLOCK : Bool = false
+
+///|
 /// A streaming LZ4 frame encoder. It holds a block of input (64 KiB by
 /// default), the 64 KiB before it for linked blocks or a dictionary, the
 /// hash table and a block's output.
@@ -263,7 +272,7 @@ pub fn Encoder::step(
     if take > 0 {
       let chunk = input[self.consumed:self.consumed + take]
       @blit.from_view(self.buf, self.pre + self.fill, chunk)
-      if self.checksum {
+      if !HASH_CONTENT_PER_BLOCK && self.checksum {
         self.xxh.update_view(chunk)
       }
       self.fill += take
@@ -345,6 +354,10 @@ fn Encoder::write_block(self : Encoder) -> Unit {
   let size_at = out.pos
   out.pos += 4
   let data_at = out.pos
+  // Hash the original block before its buffer is reused for the next one.
+  if HASH_CONTENT_PER_BLOCK && self.checksum {
+    self.xxh.update(self.buf, start, n)
+  }
   let independent = !self.linked
   let mode = if independent && self.dictionary is None {
     // From a cleared table, as lz4 compresses a block on its own.
