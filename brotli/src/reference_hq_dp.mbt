@@ -68,10 +68,12 @@ fn HqDp::evaluate(
   gap : Int32,
   initial : FixedArray[Int32],
 ) -> Unit {
-  let cost = Float::reinterpret_from_uint(self.info[pos])
+  // hq_parse evaluates positions in 0..<length, in ascending order.
+  // Node arrays have length + 1 entries and literals has length + 2.
+  let cost = Float::reinterpret_from_uint(ref_get(self.info, pos))
   let copy = self.copy_length(pos)
-  let insert = (self.inserts[pos] & 0x7ffffffU).reinterpret_as_int()
-  let distance = self.distances[pos]
+  let insert = (ref_get(self.inserts, pos) & 0x7ffffffU).reinterpret_as_int()
+  let distance = ref_get(self.distances, pos)
   let shortcut = if pos == 0 {
     0U
   } else if distance.to_int64() + copy.to_int64() <=
@@ -82,50 +84,65 @@ fn HqDp::evaluate(
     self.distance_code(pos) > 0 {
     pos.reinterpret_as_uint()
   } else {
-    self.info[pos - copy - insert]
+    // A command starts at a prior node. An unfilled node steps back by one.
+    ref_get(self.info, pos - copy - insert)
   }
-  self.info[pos] = shortcut
-  if cost <= self.model.literals[pos] {
+  ref_set(self.info, pos, shortcut)
+  let literal_cost = ref_get(self.model.literals, pos)
+  if cost <= literal_cost {
+    // Masked slots fit the eight-entry queue and its four distances per slot.
     let mut slot = (-1 - self.index) & 7
     self.index += 1
-    self.positions[slot] = pos
-    self.costs[slot] = cost
-    self.differences[slot] = cost - self.model.literals[pos]
+    ref_set(self.positions, slot, pos)
+    ref_set(self.costs, slot, cost)
+    ref_set(self.differences, slot, cost - literal_cost)
     let mut i = 0
     let mut p = shortcut.reinterpret_as_int()
     while i < 4 && p > 0 {
-      self.cache[4 * slot + i] = self.distances[p]
+      // Shortcuts select the current or an earlier evaluated node. Its
+      // parent is nonnegative for p > 0 and precedes p.
+      ref_set(self.cache, 4 * slot + i, ref_get(self.distances, p))
       i += 1
       let parent = p -
         self.copy_length(p) -
-        (self.inserts[p] & 0x7ffffffU).reinterpret_as_int()
-      p = self.info[parent].reinterpret_as_int()
+        (ref_get(self.inserts, p) & 0x7ffffffU).reinterpret_as_int()
+      p = ref_get(self.info, parent).reinterpret_as_int()
     }
     for j in i..<4 {
-      self.cache[4 * slot + j] = initial[j - i]
+      // 0 <= j - i < 4, the size of the initial distance cache.
+      ref_set(self.cache, 4 * slot + j, ref_get(initial, j - i))
     }
     for _ in 1..<self.index.min(8) {
       let next = (slot + 1) & 7
-      if self.differences[slot] > self.differences[next] {
-        let p = self.positions[slot]
-        self.positions[slot] = self.positions[next]
-        self.positions[next] = p
-        let c = self.costs[slot]
-        self.costs[slot] = self.costs[next]
-        self.costs[next] = c
-        let d = self.differences[slot]
-        self.differences[slot] = self.differences[next]
-        self.differences[next] = d
+      if ref_get(self.differences, slot) > ref_get(self.differences, next) {
+        let p = ref_get(self.positions, slot)
+        ref_set(self.positions, slot, ref_get(self.positions, next))
+        ref_set(self.positions, next, p)
+        let c = ref_get(self.costs, slot)
+        ref_set(self.costs, slot, ref_get(self.costs, next))
+        ref_set(self.costs, next, c)
+        let d = ref_get(self.differences, slot)
+        ref_set(self.differences, slot, ref_get(self.differences, next))
+        ref_set(self.differences, next, d)
         for j in 0..<4 {
-          let v = self.cache[4 * slot + j]
-          self.cache[4 * slot + j] = self.cache[4 * next + j]
-          self.cache[4 * next + j] = v
+          let v = ref_get(self.cache, 4 * slot + j)
+          ref_set(self.cache, 4 * slot + j, ref_get(self.cache, 4 * next + j))
+          ref_set(self.cache, 4 * next + j, v)
         }
       }
       slot = next
     }
   }
 }
+
+///|
+// Expanding the command helpers slowed q11 on Wasm GC.
+#cfg(target="wasm-gc")
+const HQ_INLINE_COMMANDS : Bool = false
+
+///|
+#cfg(not(target="wasm-gc"))
+const HQ_INLINE_COMMANDS : Bool = true
 
 ///|
 fn HqDp::set(
@@ -172,16 +189,23 @@ fn HqDp::update(
   let current = absolute + pos.reinterpret_as_uint()
   let masked = current & mask
   self.evaluate(pos, absolute, encoder.max_distance, gap, initial)
+  // The queue has eight slots, with evaluated block positions in 0..=pos.
+  // Each slot has four cached distances. Literals has length + 2 entries.
   let best = (0 - self.index) & 7
-  let start_cost = self.costs[best] +
+  let start_cost = ref_get(self.costs, best) +
     self.model.minimum +
-    (self.model.literals[pos] - self.model.literals[self.positions[best]])
+    (
+      ref_get(self.model.literals, pos) -
+      ref_get(self.model.literals, ref_get(self.positions, best))
+    )
   let mut minimum = 2
   let mut min_cost = start_cost
   let mut next_bucket = 4
   let mut next_offset = 10
+  // info has length + 1 nodes, including the guarded terminal node.
   while pos + minimum <= length &&
-        Float::reinterpret_from_uint(self.info[pos + minimum]) <= min_cost {
+        Float::reinterpret_from_uint(ref_get(self.info, pos + minimum)) <=
+        min_cost {
     minimum += 1
     if minimum == next_offset {
       min_cost += 1.0
@@ -193,11 +217,12 @@ fn HqDp::update(
   let mut result = 0
   for k in 0..<(if self.quality == 10 { 1 } else { 5 }).min(self.index.min(8)) {
     let slot = (k - self.index) & 7
-    let command_start = self.positions[slot]
+    let command_start = ref_get(self.positions, slot)
     let ic = insert_code(pos - command_start)
-    let base = self.differences[slot] +
-      Float::from_int(insert_length_extra[ic]) +
-      self.model.literals[pos]
+    // insert_code returns an index in the 24 insert length codes.
+    let base = ref_get(self.differences, slot) +
+      Float::from_int(ref_get(insert_length_extra, ic)) +
+      ref_get(self.model.literals, pos)
     let mut best_length = minimum - 1
     for j = 0; j < 16 && best_length < max_length; j = j + 1 {
       let index = if j < 4 { j } else if j < 10 { 0 } else { 1 }
@@ -207,7 +232,8 @@ fn HqDp::update(
         let pair = if j < 10 { j - 4 } else { j - 10 }
         (if (pair & 1) == 0 { -1 } else { 1 }) * (1 + pair / 2)
       }
-      let backward = self.cache[4 * slot + index] + offset
+      // index is 0..3 within the masked slot's four cached distances.
+      let backward = ref_get(self.cache, 4 * slot + index) + offset
       if masked.to_uint64() + best_length.to_uint64() > mask.to_uint64() {
         break
       }
@@ -215,14 +241,17 @@ fn HqDp::update(
         backward.to_int64() > reach.to_int64() + gap.to_int64() {
         continue
       }
-      let continuation = data[cur + best_length]
+      // best_length < max_length and cur + max_length is the block end.
+      let continuation = ref_get(data, cur + best_length)
       let mut matched = 0
       if backward <= reach {
         let previous = (current - backward.reinterpret_as_uint()) & mask
+        // The retained history covers backward when it is within reach.
         if previous.to_uint64() + best_length.to_uint64() > mask.to_uint64() ||
-          continuation != data[cur - backward + best_length] {
+          continuation != ref_get(data, cur - backward + best_length) {
           continue
         }
+        // The retained window covers backward. cur + max_length is the block end.
         matched = ref_match_length(data, cur - backward, cur, max_length)
       } else if encoder.dictionary is Some(dict) {
         let offset = (dict.length().to_int64() +
@@ -233,20 +262,53 @@ fn HqDp::update(
           continuation != dict.content[offset + best_length] {
           continue
         }
+        // limit is at most max_length in the input.
         while matched < limit &&
-              dict.content[offset + matched] == data[cur + matched] {
+              dict.content[offset + matched] == ref_get(data, cur + matched) {
           matched += 1
         }
       }
-      let dist_cost = base + self.model.distances[j]
+      // The 16 short codes fit the 64 distance costs.
+      let dist_cost = base + ref_get(self.model.distances, j)
       for n in (best_length + 1)..<=matched {
-        let cc = copy_code(n)
-        let symbol = command_symbol(ic, cc, j == 0)
+        // n is at least 2. Both length codes are below 24, giving one of
+        // the nine explicit cells.
+        let cc = if !HQ_INLINE_COMMANDS {
+          copy_code(n)
+        } else if n < COPY_TABLE_SIZE {
+          ref_get(copy_code_table, n).to_int()
+        } else {
+          length_code_above(copy_length_base, n)
+        }
+        let symbol = if HQ_INLINE_COMMANDS {
+          let cell = if j == 0 && ic < 8 && cc < 16 {
+            cc >> 3
+          } else {
+            ref_get(explicit_cells, (ic >> 3) * 3 + (cc >> 3))
+          }
+          (cell << 6) | ((ic & 7) << 3) | (cc & 7)
+        } else {
+          command_symbol(ic, cc, j == 0)
+        }
+        // The code and symbol are in their 24- and 704-entry tables.
+        // matched <= max_length bounds pos + n by the last node.
+        let next = pos + n
         let cost = (if symbol < 128 { base } else { dist_cost }) +
-          Float::from_int(copy_length_extra[cc]) +
-          self.model.commands[symbol]
-        if cost < Float::reinterpret_from_uint(self.info[pos + n]) {
-          self.set(pos, command_start, n, n, backward, j + 1, cost)
+          Float::from_int(ref_get(copy_length_extra, cc)) +
+          ref_get(self.model.commands, symbol)
+        if cost < Float::reinterpret_from_uint(ref_get(self.info, next)) {
+          if HQ_INLINE_COMMANDS {
+            ref_set(self.lengths, next, (n | (9 << 25)).reinterpret_as_uint())
+            ref_set(self.distances, next, backward)
+            ref_set(
+              self.inserts,
+              next,
+              (((j + 1) << 27) | (pos - command_start)).reinterpret_as_uint(),
+            )
+            ref_set(self.info, next, cost.reinterpret_as_uint())
+          } else {
+            self.set(pos, command_start, n, n, backward, j + 1, cost)
+          }
           result = result.max(n)
         }
         best_length = n
@@ -261,9 +323,10 @@ fn HqDp::update(
       let packed = matches[2 * j + 1]
       let dictionary = distance.to_int64() > reach.to_int64() + gap.to_int64()
       let symbol = distance_symbol(distance)
+      // Matches have distances in 1..=MAX_CODED_DISTANCE, so symbol < 64.
       let dist_cost = base +
         Float::from_int(distance_extra_bits(symbol)) +
-        self.model.distances[symbol]
+        ref_get(self.model.distances, symbol)
       let max_match = (packed >> 5).reinterpret_as_int()
       if n < max_match && (dictionary || max_match > max_zopfli) {
         n = max_match
@@ -274,13 +337,45 @@ fn HqDp::update(
         } else {
           n
         }
-        let cc = copy_code(code)
-        let symbol = command_symbol(ic, cc, false)
+        // code is a nonnegative match or dictionary word length, and the
+        // lookup below returns one of 24 length codes.
+        let cc = if !HQ_INLINE_COMMANDS {
+          copy_code(code)
+        } else if code < COPY_TABLE_SIZE {
+          ref_get(copy_code_table, code).to_int()
+        } else {
+          length_code_above(copy_length_base, code)
+        }
+        let symbol = if HQ_INLINE_COMMANDS {
+          // Both length codes are below 24, giving one of nine cells.
+          let cell = ref_get(explicit_cells, (ic >> 3) * 3 + (cc >> 3))
+          (cell << 6) | ((ic & 7) << 3) | (cc & 7)
+        } else {
+          command_symbol(ic, cc, false)
+        }
+        // The code and symbol are in their 24- and 704-entry tables.
+        // max_match <= max_length bounds pos + n by the last node.
+        let next = pos + n
         let cost = dist_cost +
-          Float::from_int(copy_length_extra[cc]) +
-          self.model.commands[symbol]
-        if cost < Float::reinterpret_from_uint(self.info[pos + n]) {
-          self.set(pos, command_start, n, code, distance, 0, cost)
+          Float::from_int(ref_get(copy_length_extra, cc)) +
+          ref_get(self.model.commands, symbol)
+        if cost < Float::reinterpret_from_uint(ref_get(self.info, next)) {
+          if HQ_INLINE_COMMANDS {
+            ref_set(
+              self.lengths,
+              next,
+              (n | ((n + 9 - code) << 25)).reinterpret_as_uint(),
+            )
+            ref_set(self.distances, next, distance)
+            ref_set(
+              self.inserts,
+              next,
+              (pos - command_start).reinterpret_as_uint(),
+            )
+            ref_set(self.info, next, cost.reinterpret_as_uint())
+          } else {
+            self.set(pos, command_start, n, code, distance, 0, cost)
+          }
           result = result.max(n)
         }
         n += 1

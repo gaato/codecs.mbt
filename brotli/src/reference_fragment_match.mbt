@@ -94,6 +94,8 @@ fn FragmentMatcher::found(
   consecutive : Bool,
 ) -> FragmentMatch {
   let pos = self.pos
+  // The table and distance cache point back within data; limit leaves the
+  // minimum match inside the fragment and end is within the input.
   let matched = self.minimum +
     ref_match_length(
       self.data,

@@ -78,31 +78,38 @@ fn HqTree::search(
   best : Int32,
   collect : Bool,
 ) -> Int32 {
+  // find supplies the rest of the block. store_range and stitch only
+  // pass positions with 128 bytes available. The tree holds prior positions
+  // in the retained window.
   let comparison = limit.min(128)
   let reroot = limit >= 128
-  let key = ((ref_load4(data, pos) * 0x1e35a7bdU) >> 15).reinterpret_as_int()
-  let mut previous = self.buckets[key]
+  // All callers leave at least four bytes. The hash selects one of 2^17 buckets.
+  let key = ((ref_load4_hot(data, pos) * 0x1e35a7bdU) >> 15).reinterpret_as_int()
+  let mut previous = ref_get(self.buckets, key)
+  // Two children per position. The mask is within a full forest; a
+  // shortened one-shot forest starts at absolute zero and covers all input
+  // positions, including any earlier node reached by this search.
   let mut left = 2 * (absolute & self.window_mask).reinterpret_as_int()
   let mut right = left + 1
   let mut left_length = 0
   let mut right_length = 0
   let mut best = best
   if reroot {
-    self.buckets[key] = absolute
+    ref_set(self.buckets, key, absolute)
   }
   for depth = 64; ; depth = depth - 1 {
     let backward = (absolute - previous).to_uint64()
     if backward == 0UL || backward > reach.to_uint64() || depth == 0 {
       if reroot {
-        self.forest[left] = self.invalid
-        self.forest[right] = self.invalid
+        ref_set(self.forest, left, self.invalid)
+        ref_set(self.forest, right, self.invalid)
       }
       break
     }
     let prev = pos - backward.to_int()
     let common = left_length.min(right_length)
     let length = common +
-      ref_match_length(data, pos + common, prev + common, limit - common)
+      ref_match_length(data, prev + common, pos + common, limit - common)
     if collect && length > best {
       best = length
       self.add(backward.to_int(), length)
@@ -110,25 +117,26 @@ fn HqTree::search(
     let child = 2 * (previous & self.window_mask).reinterpret_as_int()
     if length >= comparison {
       if reroot {
-        self.forest[left] = self.forest[child]
-        self.forest[right] = self.forest[child + 1]
+        ref_set(self.forest, left, ref_get(self.forest, child))
+        ref_set(self.forest, right, ref_get(self.forest, child + 1))
       }
       break
     }
-    if data[pos + length] > data[prev + length] {
+    // The match ended before comparison <= limit, and 0 <= prev < pos.
+    if ref_get(data, pos + length) > ref_get(data, prev + length) {
       left_length = length
       if reroot {
-        self.forest[left] = previous
+        ref_set(self.forest, left, previous)
       }
       left = child + 1
-      previous = self.forest[left]
+      previous = ref_get(self.forest, left)
     } else {
       right_length = length
       if reroot {
-        self.forest[right] = previous
+        ref_set(self.forest, right, previous)
       }
       right = child
-      previous = self.forest[right]
+      previous = ref_get(self.forest, right)
     }
   }
   best
@@ -228,6 +236,7 @@ fn HqTree::find(
     if data[pos] != data[prev] || data[pos + 1] != data[prev + 1] {
       continue
     }
+    // hq_parse retains the window and limits the match to the block end.
     let length = ref_match_length(data, prev, pos, limit)
     if length > best {
       best = length

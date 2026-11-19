@@ -230,9 +230,19 @@ not taken up again without new numbers:
 - **Sizing the Zstandard decoder's ring from the frame's content size.**
   That would allocate what a header claims before any output proves it;
   the ring grows with the output instead.
-- **Block copies through `Uint8Array.copyWithin` and `set` on JS.** They
-  need `extern "js"`, which the repository does not use; `parts/blit` is a
-  forward loop without index checks there.
+- **`extern "js"` for typed arrays on JS.** Block copies through
+  `Uint8Array.copyWithin` and `set` were left out on 2026-11-14 because the
+  repository had no `extern "js"` yet and `parts/blit`'s forward loop
+  without index checks was enough. On 2026-11-20 a typed array for the
+  Brotli encoder's q9 hash table measured 55.3 → 30.8 ms on JS and was left
+  out too: it depends on how the JS backend represents arrays, which
+  MoonBit does not specify. With moonc 0.10.21, `FixedArray[Byte]` is a
+  `Uint8Array`, but `FixedArray[UInt]` is a plain `Array` holding `UInt`
+  as signed numbers, so a `Uint32Array` in its place reads back values of
+  2^31 and above (positions past 2 GiB) that `==` no longer matches; only
+  the subtractions the hasher does happen to agree. Revisit if the JS
+  backend gives numeric `FixedArray`s a typed representation
+  (moonbit-docs#646) or documents the one it uses.
 - **SIMD Adler-32 in the zlib encoder.** The encoder reads a `BytesView`,
   the SIMD package an `ArrayView`, and the checksum is 2.4% of encoding.
 - **A 64-bit bit reader in the Brotli decoder.** After the three-byte

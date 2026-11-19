@@ -6,6 +6,7 @@ import {
   "gaato/brotli/internal/bits",
   "gaato/brotli/internal/huffman",
   "gaato/brotli/internal/lz77",
+  "gaato/brotli/internal/match_length_fast",
   "gaato/brotli/internal/rules",
   "gaato/brotli/internal/prefix_code",
   "gaato/brotli/internal/transform",
@@ -26,3 +27,7 @@ import {
 } for "test"
 
 supported_targets = "js + native + wasm + wasm-gc"
+
+// Only native and Wasm use match_length_fast here.
+
+warnings = "-unused_package"

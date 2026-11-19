@@ -121,6 +121,8 @@ fn QuickHasher::find(
   cache : FixedArray[Int32],
   best_in : Int32,
 ) -> RefMatch {
+  // quick_parse bounds end by data_len and retains the matching window.
+  // Cached and bucket distances are checked before counting a match.
   let result = RefMatch::new()
   result.length = best_in
   let key = QuickHasher::hash(data, pos)

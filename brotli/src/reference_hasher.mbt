@@ -157,17 +157,66 @@ fn ref_load4(data : FixedArray[Byte], pos : Int32) -> UInt32 {
 }
 
 ///|
+// Caller reserves four bytes starting at pos. Keep the scalar loads on
+// backends without the unaligned word load.
+#cfg(any(target="native", target="wasm"))
+#inline
+fn ref_load4_hot(data : FixedArray[Byte], pos : Int32) -> UInt32 {
+  data.unsafe_reinterpret_as_bytes().unsafe_read_uint32_le(pos)
+}
+
+///|
+#cfg(not(any(target="native", target="wasm")))
+#inline
+fn ref_load4_hot(data : FixedArray[Byte], pos : Int32) -> UInt32 {
+  ref_load4(data, pos)
+}
+
+///|
+// The hot matchers establish the bounds at each call site.
+#cfg(any(target="native", target="wasm"))
+#inline
+fn[T] ref_get(table : FixedArray[T], at : Int32) -> T {
+  table.unsafe_get(at)
+}
+
+///|
+#cfg(not(any(target="native", target="wasm")))
+#inline
+fn[T] ref_get(table : FixedArray[T], at : Int32) -> T {
+  table[at]
+}
+
+///|
+// The hot matchers establish the bounds at each call site.
+#cfg(any(target="native", target="wasm"))
+#inline
+fn[T] ref_set(table : FixedArray[T], at : Int32, value : T) -> Unit {
+  table.unsafe_set(at, value)
+}
+
+///|
+#cfg(not(any(target="native", target="wasm")))
+#inline
+fn[T] ref_set(table : FixedArray[T], at : Int32, value : T) -> Unit {
+  table[at] = value
+}
+
+///|
 fn RefHasher::hash(
   self : RefHasher,
   data : FixedArray[Byte],
   pos : Int32,
 ) -> Int32 {
+  // Parse and stitch reserve at least four bytes (eight for the long hash),
+  // using the batch's tail padding for a stitch across the block boundary.
   let tag_bits = if self.tagged { 8 } else { 0 }
   if self.long_hash {
-    let n = ref_load4(data, pos).to_uint64() | (data[pos + 4].to_uint64() << 32)
+    let n = ref_load4_hot(data, pos).to_uint64() |
+      (ref_get(data, pos + 4).to_uint64() << 32)
     ((n * (0x1fe35a7bd3579bd3UL << 24)) >> (64 - 15 - tag_bits)).to_int()
   } else {
-    ((ref_load4(data, pos) * 0x1e35a7bdU) >> (32 - self.bits - tag_bits)).reinterpret_as_int()
+    ((ref_load4_hot(data, pos) * 0x1e35a7bdU) >> (32 - self.bits - tag_bits)).reinterpret_as_int()
   }
 }
 
@@ -180,27 +229,40 @@ fn RefHasher::store(
 ) -> Unit {
   let hash = self.hash(data, pos)
   if self.chain {
+    // The chain hash has 15 bits. Each bank has 1 << bank_bits slots.
     let bank = hash & (self.free.length() - 1)
-    let slot = self.free[bank].to_int() & ((1 << self.bank_bits) - 1)
-    self.free[bank] = (self.free[bank].to_int() + 1).to_uint16()
-    let delta = (absolute - self.addresses[hash])
+    let free = ref_get(self.free, bank).to_int()
+    let slot = free & ((1 << self.bank_bits) - 1)
+    ref_set(self.free, bank, (free + 1).to_uint16())
+    let delta = (absolute - ref_get(self.addresses, hash))
       .to_uint64()
       .min(65535UL)
       .to_int()
     let at = (bank << self.bank_bits) + slot
-    self.deltas[at] = delta.to_uint16()
-    self.next[at] = self.heads[hash]
-    self.heads[hash] = slot.to_uint16()
-    self.addresses[hash] = absolute
-    self.tiny[(absolute & 65535U).reinterpret_as_int()] = (hash & 255).to_byte()
+    ref_set(self.deltas, at, delta.to_uint16())
+    ref_set(self.next, at, ref_get(self.heads, hash))
+    ref_set(self.heads, hash, slot.to_uint16())
+    ref_set(self.addresses, hash, absolute)
+    // The low 16 bits index the 65536-entry tiny hash.
+    ref_set(
+      self.tiny,
+      (absolute & 65535U).reinterpret_as_int(),
+      (hash & 255).to_byte(),
+    )
   } else {
+    // Stripping the tag leaves bits bits. Each key owns 1 << block_bits
+    // consecutive entries and the count mask stays within those entries.
     let key = if self.tagged { hash >> 8 } else { hash }
-    let count = self.counts[key].to_int()
+    let count = ref_get(self.counts, key).to_int()
     let at = (key << self.block_bits) + (count & ((1 << self.block_bits) - 1))
-    self.buckets[at] = absolute
-    self.counts[key] = (if self.tagged { count - 1 } else { count + 1 }).to_uint16()
+    ref_set(self.buckets, at, absolute)
+    ref_set(
+      self.counts,
+      key,
+      (if self.tagged { count - 1 } else { count + 1 }).to_uint16(),
+    )
     if self.tagged {
-      self.tags[at] = (hash & 255).to_byte()
+      ref_set(self.tags, at, (hash & 255).to_byte())
     }
   }
 }
@@ -220,6 +282,24 @@ fn ref_score(length : Int32, distance : Int32) -> Int32 {
 }
 
 ///|
+/// Both runs fit through `pos + limit`, and the candidate is at or before
+/// `pos`. A chain or bucket can contain the current position.
+#cfg(any(target="native", target="wasm"))
+fn ref_match_length(
+  data : FixedArray[Byte],
+  previous : Int32,
+  pos : Int32,
+  limit : Int32,
+) -> Int32 {
+  if previous == pos {
+    limit
+  } else {
+    @match_length_fast.length(data, pos, previous, pos + limit)
+  }
+}
+
+///|
+#cfg(not(any(target="native", target="wasm")))
 fn ref_match_length(
   data : FixedArray[Byte],
   a : Int32,
@@ -245,7 +325,8 @@ fn RefHasher::static_match(
   if self.dict_matches < self.dict_lookups >> 7 {
     return
   }
-  let key = ((ref_load4(data, pos) * 0x1e35a7bdU) >> 18).reinterpret_as_int() <<
+  // find is called with at least four bytes left in the block.
+  let key = ((ref_load4_hot(data, pos) * 0x1e35a7bdU) >> 18).reinterpret_as_int() <<
     1
   for k in key..<(key + 2) {
     self.dict_lookups += 1L
@@ -296,17 +377,24 @@ fn RefHasher::find(
 ) -> RefMatch {
   let result = RefMatch::new()
   let hash = self.hash(data, pos)
+  // ref_parse bounds end by data_len and retains reach bytes of history
+  // at pos. Each candidate is within that reach.
   let limit = end - pos
   let mut best = 0
   for i in 0..<self.checks {
-    let distance = cache[i]
+    // The prepared distance cache holds 16 entries and checks is at most 16.
+    let distance = ref_get(cache, i)
     if distance <= 0 || distance > reach {
       continue
     }
     let prev = pos - distance
+    // The low 16 bits index the 65536-entry tiny hash.
     if self.chain &&
       i > 0 &&
-      self.tiny[((absolute - distance.reinterpret_as_uint()) & 65535U).reinterpret_as_int()] !=
+      ref_get(
+        self.tiny,
+        ((absolute - distance.reinterpret_as_uint()) & 65535U).reinterpret_as_int(),
+      ) !=
       (hash & 255).to_byte() {
       continue
     }
@@ -316,10 +404,11 @@ fn RefHasher::find(
         self.ring_mask.ref_match_unsigned() {
         break
       }
+      // best <= limit, so these probes fit through the first padding byte.
       if ((absolute - distance.reinterpret_as_uint()) & self.ring_mask).ref_match_unsigned() +
         best.ref_match_unsigned() >
         self.ring_mask.ref_match_unsigned() ||
-        data[pos + best] != data[prev + best] {
+        ref_get(data, pos + best) != ref_get(data, prev + best) {
         continue
       }
     }
@@ -339,17 +428,19 @@ fn RefHasher::find(
   }
   best = best.max(3)
   if self.chain {
+    // The chain hash has 15 bits. Heads and links stay within their bank:
+    // they start at zero and store writes only masked slots into heads.
     let bank = hash & (self.free.length() - 1)
-    let mut backward = (absolute - self.addresses[hash]).ref_match_unsigned()
-    let mut slot = self.heads[hash].to_int()
+    let mut backward = (absolute - ref_get(self.addresses, hash)).ref_match_unsigned()
+    let mut slot = ref_get(self.heads, hash).to_int()
     for _ in 0..<self.hops {
       if backward > reach.ref_match_unsigned() {
         break
       }
       let prev = pos - backward.ref_match_int()
       let at = (bank << self.bank_bits) + slot
-      slot = self.next[at].to_int()
-      let delta = self.deltas[at].to_int()
+      slot = ref_get(self.next, at).to_int()
+      let delta = ref_get(self.deltas, at).to_int()
       if (absolute & self.ring_mask).ref_match_unsigned() +
         best.ref_match_unsigned() >
         self.ring_mask.ref_match_unsigned() ||
@@ -374,8 +465,9 @@ fn RefHasher::find(
       backward += delta.ref_match_unsigned()
     }
   } else {
+    // The key is bits bits wide, and slot is masked into its bucket.
     let key = if self.tagged { hash >> 8 } else { hash }
-    let count = self.counts[key].to_int()
+    let count = ref_get(self.counts, key).to_int()
     let capacity = 1 << self.block_bits
     let available = (if self.tagged { 65535 - count } else { count }).min(
       capacity,
@@ -384,10 +476,10 @@ fn RefHasher::find(
       let slot = (if self.tagged { count + 1 + i } else { count - 1 - i }) &
         (capacity - 1)
       let at = (key << self.block_bits) + slot
-      if self.tagged && self.tags[at] != (hash & 255).to_byte() {
+      if self.tagged && ref_get(self.tags, at) != (hash & 255).to_byte() {
         continue
       }
-      let backward = (absolute - self.buckets[at]).ref_match_unsigned()
+      let backward = (absolute - ref_get(self.buckets, at)).ref_match_unsigned()
       if backward > reach.ref_match_unsigned() {
         break
       }
