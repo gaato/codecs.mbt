@@ -421,7 +421,7 @@ fn Decoder::ensure_space(self : Decoder, k : Int32) -> Bool {
     grown = grown * 2
   }
   let ring = FixedArray::make(grown.min(self.ring_max), b'\x00')
-  FixedArray::unsafe_blit(ring, 0, self.ring, 0, self.wpos)
+  @blit.bytes(ring, 0, self.ring, 0, self.wpos)
   self.ring = ring
   self.ensure_space(k)
 }
@@ -496,7 +496,7 @@ fn Decoder::put_array(
   let mut from = at
   while remaining > 0 {
     let chunk = remaining.min(self.ring.length() - self.wpos)
-    FixedArray::unsafe_blit(self.ring, self.wpos, src, from, chunk)
+    @blit.bytes(self.ring, self.wpos, src, from, chunk)
     self.advance(chunk)
     from += chunk
     remaining -= chunk
@@ -509,7 +509,8 @@ fn Decoder::copy_input(self : Decoder, n : Int32) -> Unit {
   let mut remaining = n
   while remaining > 0 {
     let chunk = remaining.min(self.ring.length() - self.wpos)
-    self.ring.blit_from_bytesview(
+    @blit.from_view(
+      self.ring,
       self.wpos,
       self.view[self.in_pos:self.in_pos + chunk],
     )
@@ -534,7 +535,7 @@ fn Decoder::copy_back(self : Decoder, dist : Int32, n : Int32) -> Unit {
     let dst = self.wpos
     let chunk = remaining.min(cap - src).min(cap - dst)
     if dist >= chunk {
-      FixedArray::unsafe_blit(ring, dst, ring, src, chunk)
+      @blit.bytes(ring, dst, ring, src, chunk)
     } else {
       // Overlapping: each byte may repeat one written in this copy.
       for i in 0..<chunk {

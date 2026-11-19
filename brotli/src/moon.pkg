@@ -9,6 +9,7 @@ import {
   "gaato/brotli/internal/rules",
   "gaato/brotli/internal/prefix_code",
   "gaato/brotli/internal/transform",
+  "gaato/brotli/internal/whole",
 }
 
 import {

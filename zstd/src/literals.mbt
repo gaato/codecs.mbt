@@ -23,7 +23,7 @@ fn Decoder::decode_literals(self : Decoder, size : Int32) -> Int32 raise Stop {
     RawLiterals => {
       self.reserve_literals(regenerated)
       self.literals_len = regenerated
-      FixedArray::unsafe_blit(self.literals, 0, block, header, regenerated)
+      @blit.bytes(self.literals, 0, block, header, regenerated)
     }
     RleLiterals => {
       self.reserve_literals(regenerated)

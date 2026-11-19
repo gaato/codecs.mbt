@@ -7,6 +7,22 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+### Changed
+
+- **Faster one-shot calls**: `compress` and `decompress` of the raw, zlib
+  and gzip formats, and deflate64's `decompress`, write the stream straight
+  into one growing array instead of appending 64 KiB pieces to a buffer.
+  Decoding the benchmarks' 512 KiB text whole took 9.3 ms on JS, now 3.7,
+  with the window and stored blocks also copied without core's checked
+  copy on JS.
+- **Faster encoding on Wasm and JS** at levels 1 to 9, with the same bytes
+  out: the match finders' position tables slide eight entries at a time on
+  Wasm and without index checks on JS, and the encoder's window moves
+  without core's checked copy on JS.
+- **`decompress` with a negative `max_output`** takes it as 0: an empty
+  output is returned instead of raising, and a stream that decodes to any
+  byte still raises `LimitExceeded` with a limit of 0.
+
 ## [0.4.0] - 2026-11-17
 
 ### Added

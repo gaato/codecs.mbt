@@ -37,17 +37,12 @@ fn encode_whole(
     rest = rest[encoder.last_consumed():]
     pos += encoder.last_produced()
     if status is Done {
-      return if pos == out.length() {
-        // The array is not used again.
-        out.unsafe_reinterpret_as_bytes()
-      } else {
-        Bytes::from_array(out[:pos])
-      }
+      return @whole.take(out, pos)
     }
     // Only NeedMoreOutput comes before Done under Finish: the array is
     // full.
     let grown = FixedArray::make(out.length() * 2, b'\x00')
-    FixedArray::unsafe_blit(grown, 0, out, 0, pos)
+    @blit.bytes(grown, 0, out, 0, pos)
     out = grown
   }
 }

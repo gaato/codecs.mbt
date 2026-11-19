@@ -464,7 +464,7 @@ fn Decoder::make_room(self : Decoder, k : Int32) -> Unit {
       grown = grown * 2
     }
     let win = FixedArray::make(grown.min(WINDOW), b'\x00')
-    FixedArray::unsafe_blit(win, 0, self.win, 0, self.wpos)
+    @blit.bytes(win, 0, self.win, 0, self.wpos)
     self.win = win
     return
   }
@@ -472,7 +472,7 @@ fn Decoder::make_room(self : Decoder, k : Int32) -> Unit {
   let keep = self.hist.min(MAX_DISTANCE).max(self.pending)
   if keep < self.wpos {
     self.hash_content()
-    FixedArray::unsafe_blit(self.win, 0, self.win, self.wpos - keep, keep)
+    @blit.move_down(self.win, 0, self.wpos - keep, keep)
     self.wpos = keep
   }
 }
@@ -1167,7 +1167,7 @@ fn Decoder::fast_sequences(self : Decoder) -> Unit {
     }
     // Short copies byte by byte: a block copy costs more than they do.
     if lit > 16 {
-      win.blit_from_bytesview(w, view[lit_at:lit_at + lit])
+      @blit.from_view(win, w, view[lit_at:lit_at + lit])
     } else {
       for i in 0..<lit {
         win.unsafe_set(w + i, view.unsafe_get(lit_at + i))
@@ -1180,7 +1180,7 @@ fn Decoder::fast_sequences(self : Decoder) -> Unit {
         // Overlapping: the copy repeats bytes it writes.
         @blit.forward(win, w, from, len)
       } else if len > 16 {
-        FixedArray::unsafe_blit(win, w, win, from, len)
+        @blit.bytes(win, w, win, from, len)
       } else {
         for i in 0..<len {
           win.unsafe_set(w + i, win.unsafe_get(from + i))

@@ -497,7 +497,8 @@ pub fn Encoder::step(
     }
     let take = (input.length() - self.consumed).min(BLOCK_SIZE - self.input_len)
     if take > 0 {
-      self.input.blit_from_bytesview(
+      @blit.from_view(
+        self.input,
         self.input_len,
         input[self.consumed:self.consumed + take],
       )
@@ -563,9 +564,9 @@ fn Encoder::write_chunk(self : Encoder) -> Unit {
   out.byte(((crc >> 16) & 0xFF).reinterpret_as_int())
   out.byte((crc >> 24).reinterpret_as_int())
   if compressed {
-    FixedArray::unsafe_blit(out.data, out.pos, raw.data, 0, raw.pos)
+    @blit.bytes(out.data, out.pos, raw.data, 0, raw.pos)
   } else {
-    out.data.blit_from_bytesview(out.pos, data)
+    @blit.from_view(out.data, out.pos, data)
   }
   out.pos += body
   self.input_len = 0

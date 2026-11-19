@@ -26,15 +26,8 @@ pub fn compress(
   } else {
     Encoder(window_bits=wbits, dictionary?)
   }
-  let chunk = FixedArray::make(1 << 16, b'\x00')
-  let out = Buffer()
-  let mut rest = input
-  for ;; {
-    let status = encoder.step_into(rest, chunk, action=Finish)
-    rest = rest[encoder.last_consumed():]
-    out.write_bytesview(Bytes::from_array(chunk[:encoder.last_produced()])[:])
-    if status is Done {
-      return out.to_bytes()
-    }
-  }
+  @whole.encode(input, (rest, room) => {
+    let status = encoder.step(rest, room, action=Finish)
+    (encoder.last_consumed(), encoder.last_produced(), status is Done)
+  })
 }

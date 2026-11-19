@@ -3,6 +3,7 @@ import {
   "gaato/codec_bytes",
   "gaato/lz4/internal/blit",
   "moonbitlang/core/debug",
+  "gaato/lz4/internal/whole",
 }
 
 import {

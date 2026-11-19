@@ -6,6 +6,7 @@ import {
   "gaato/deflate/internal/crc32",
   "gaato/deflate/gzip/internal/header",
   "moonbitlang/core/debug",
+  "gaato/deflate/internal/whole",
 }
 
 import {
