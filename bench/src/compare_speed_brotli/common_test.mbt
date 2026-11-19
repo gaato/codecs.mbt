@@ -1,0 +1,1 @@
+../compare_speed/common_test.mbt

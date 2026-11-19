@@ -1,0 +1,1 @@
+../compare_speed/brotli_test.mbt

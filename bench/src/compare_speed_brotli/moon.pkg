@@ -1,0 +1,19 @@
+// The Brotli benchmarks of the comparison with other MoonBit implementations,
+// in a package of their own so that the benchmark binary holds one format's
+// decoders and encoders.
+
+import {
+  "gaato/brotli",
+  "gaato/codec_bench/compare",
+  "moonbitlang/core/bench",
+  "moonbitlang/core/env",
+  "moonbitlang/core/encoding/base64",
+} for "test"
+
+supported_targets = "js + native + wasm + wasm-gc"
+
+// data_test.mbt and common_test.mbt are linked from the package that holds
+// every format, so this one leaves the other formats' data and helpers
+// unused.
+
+warnings = "-unused_value"

@@ -20,7 +20,26 @@ TIFF and as .Z (compress's bytes, `lzw/src/vectors_wbtest.mbt`).
 `brotli` and `gzip` commands.
 
 Pin the run to one CPU and compare runs taken alternately: differences of a
-few percent between single runs are noise.
+few percent between single runs are noise. For Wasm and JS, pin it to two
+CPUs instead (`taskset -c 3,5`): pinned to one, V8's background compilation
+starves, and the same binary can take twice as long from one run to the
+next.
+
+`src/step_bench_test.mbt` measures what a call of `step` costs when the
+input comes in small pieces: every streaming decoder and encoder over the
+first 64 KiB of the text, fed 1 and 16 bytes at a time into a 64 KiB
+buffer. The whole-input benchmarks hide this cost; a reader of a socket or
+a pipe pays it.
+
+On Wasm (linear memory), a checked `a[i]` compiles to calls of
+`$moonbit.array_length` and `$moonbit.check_range`, and `#inline` is not
+applied, so a hot loop's speed depends on what V8 inlines, which is less in
+a larger module. `scripts/wasm_calls.mbtx` counts the calls in chosen
+functions of a binary built with `--no-strip`, to compare a hot path before
+and after a change. `scripts/asan_test.mbtx MODULE` runs a module's native
+tests under AddressSanitizer, which reports a read or write past a heap
+block where an unchecked access was wrong; its opening comment says what a
+build needs for that.
 
 The PNG benchmarks decode a 512 x 384 8-bit RGB image, once as it is and
 once interlaced (`src/png_data/`), filtered row by row as libpng chooses by
@@ -319,7 +338,9 @@ The packages are called through `src/compare`, one adapter each, the way
 their READMEs show: their one-shot call for a whole input, and their
 streaming API, if they have one, for input in pieces. `src/compare_check`,
 `src/compare_stream` and `src/compare_ratio` are executables over those
-adapters, and `src/compare_speed` holds the benchmarks.
+adapters, and `src/compare_speed` holds the benchmarks, which
+`src/compare_speed_zstd`, `src/compare_speed_brotli` and
+`src/compare_speed_deflate` also run one format at a time.
 
 ### Features
 
@@ -646,8 +667,16 @@ KiB text and the 128 KiB binary stream of `src/data_test.mbt`, made by
 `zstd -3`, `brotli -q 9 -w 22` and `gzip -6 -n`; raw DEFLATE is the data
 inside the gzip member), and to compress what they decode to, over three
 runs on each target, the targets taken in turn, pinned to one CPU with
-nothing else running (`compare_codecs.mbtx speed --runs 3`, which runs
-`src/compare_speed` with `moon bench --release`). Each run's figure is
+nothing else running (`compare_codecs.mbtx speed --runs 3 --combined`,
+which runs `src/compare_speed`, every format in one binary, with `moon
+bench --release`). Without `--combined` the script now runs one binary per
+format, and with `--cpus N,M` pins Wasm and JS to two CPUs: a smaller
+module, which V8 inlines more of, and a steadier JS engine. These tables
+are from before that split. The split shrinks the Wasm binary of zstd from
+5.7 MB to 1.1 MB and of DEFLATE to 1.2 MB, but not of Brotli (3.6 MB:
+several of the packages compared carry the Brotli dictionary), whose
+times stay as here; in a harness of its own (126 KB), gaato/brotli's
+decoder took 5.2 ms where this table gives 8.04. Each run's figure is
 `moon bench`'s mean. Each benchmark runs for 300 ms before it is measured,
 and the first measurement of a run is taken twice and the first one not
 counted: on JS and Wasm the first benchmarks of a run otherwise take up to
@@ -859,7 +888,7 @@ taskset -c N moon run scripts/compare_codecs.mbtx -- memory --timeout 300
 moon run scripts/compare_codecs.mbtx -- ratio --format deflate --time 0 --jobs 8 --corpus SILESIA --corpus CANTERBURY
 moon run scripts/compare_codecs.mbtx -- ratio --format brotli --time 0 --jobs 8 --corpus SILESIA --corpus CANTERBURY
 moon run scripts/compare_codecs.mbtx -- ratio --format zstd --time 0 --jobs 8 --corpus SILESIA --corpus CANTERBURY
-taskset -c N moon run scripts/compare_codecs.mbtx -- speed --runs 3
+moon run scripts/compare_codecs.mbtx -- speed --runs 3 --cpus N,M
 ```
 
 They need the zstd, brotli, gzip and node commands, `/usr/bin/time` and
