@@ -8,6 +8,10 @@ import {
   "moonbitlang/core/v128",
 }
 
+import {
+  "moonbitlang/core/quickcheck",
+} for "test"
+
 // core's @v128 is experimental: every use would warn. It is confined to
 // this package, so that a change to it touches nothing else. Each import is
 // used on some targets only (@v128 on native and Wasm, ../adler32 on JS

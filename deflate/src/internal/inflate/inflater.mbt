@@ -387,8 +387,20 @@ fn Inflater::step_with(
       guard kept + more <= STASH_SIZE else {
         abort("an unfinished unit holds more than its bytes")
       }
-      FixedArray::unsafe_blit(self.stash, 0, self.stash, self.stash_pos, kept)
-      self.stash.blit_from_bytesview(kept, self.view[self.in_pos:])
+      let stash = self.stash
+      let start = self.stash_pos
+      if start > 0 {
+        for i in 0..<kept {
+          // i < start + i < stash_len <= STASH_SIZE.
+          stash.unsafe_set(i, stash.unsafe_get(start + i))
+        }
+      }
+      let view = self.view
+      let at = self.in_pos
+      for i in 0..<more {
+        // The guard bounds kept + i. Also at + i < view.length().
+        stash.unsafe_set(kept + i, view.unsafe_get(at + i))
+      }
       self.stash_len = kept + more
       self.stash_pos = 0
       self.in_pos = self.view.length()
@@ -420,8 +432,13 @@ fn Inflater::finish_step(
   status : @codec_bytes.Status,
 ) -> @codec_bytes.Status {
   if self.stash_pos > 0 {
-    let kept = self.stash_len - self.stash_pos
-    FixedArray::unsafe_blit(self.stash, 0, self.stash, self.stash_pos, kept)
+    let start = self.stash_pos
+    let kept = self.stash_len - start
+    let stash = self.stash
+    for i in 0..<kept {
+      // i < start + i < stash_len <= STASH_SIZE.
+      stash.unsafe_set(i, stash.unsafe_get(start + i))
+    }
     self.stash_len = kept
     self.stash_pos = 0
   }
@@ -612,7 +629,9 @@ fn Inflater::drain(self : Inflater) -> Unit {
   let read = (self.wpos - self.pending) & self.window_mask
   let first = n.min(self.window_size - read)
   self.write_out(read, first)
-  self.write_out(0, n - first)
+  if n > first {
+    self.write_out(0, n - first)
+  }
   self.pending -= n
 }
 
