@@ -254,6 +254,20 @@ fn Encoder::step_with(
       (input[:(size - self.total_in).to_int()], EncodeAction::Continue, true)
     _ => (input, action, false)
   }
+  let len = input.length()
+  // A complete block waits for the next byte or a different action. With
+  // nothing to drain or finish, a fitting piece only extends the block.
+  if action is Continue &&
+    !over &&
+    !self.flush_requested &&
+    !self.finish_requested &&
+    !self.emitted_final &&
+    len > 0 &&
+    len <= self.block_max - self.data_len &&
+    self.writer.pending() == 0 {
+    self.append(input)
+    return self.finish_step(NeedMoreInput, len, 0)
+  }
   if input.length() == 0 {
     self.latch(action)
   }

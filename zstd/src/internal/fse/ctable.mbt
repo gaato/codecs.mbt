@@ -125,6 +125,25 @@ pub fn CTable::start(self : CTable, symbol : Int32) -> Int32 {
 /// Emits `symbol` before those of `state`: writes the bits that take the
 /// decoder from the state of `symbol` to `state`, and returns the state of
 /// `symbol`.
+#cfg(not(target="wasm-gc"))
+pub fn CTable::encode(
+  self : CTable,
+  out : @bits.BitPacker,
+  state : Int32,
+  symbol : Int32,
+) -> Int32 {
+  // Sequence streams and Huffman weights emit symbols present in the
+  // selected distribution, within the size of both delta arrays.
+  let nbits = (state + self.delta_bits.unsafe_get(symbol)) >> 16
+  out.write(nbits, state & ((1 << nbits) - 1))
+  // The selected nbits brings state >> nbits into [p, 2p). Adding the
+  // symbol's starting index minus p selects a slot in its p states.
+  self.states.unsafe_get((state >> nbits) + self.delta_state.unsafe_get(symbol))
+}
+
+///|
+/// Wasm GC uses the checked FSE table accesses.
+#cfg(target="wasm-gc")
 pub fn CTable::encode(
   self : CTable,
   out : @bits.BitPacker,

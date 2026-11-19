@@ -154,6 +154,16 @@ fn Decoder::reserve_window(self : Decoder, n : Int32) -> Unit raise Stop {
 }
 
 ///|
+/// Native and Wasm benefit from keeping the window counters in the loop.
+#cfg(any(target="native", target="wasm"))
+const INLINE_SEQUENCE_COPIES : Bool = true
+
+///|
+/// Keep the smaller sequence loop on JS and Wasm GC.
+#cfg(not(any(target="native", target="wasm")))
+const INLINE_SEQUENCE_COPIES : Bool = false
+
+///|
 /// Decodes `count` sequences from the bitstream `block[at:block_size]` and
 /// executes each as it comes, then copies the remaining literals. The read
 /// position is a local here, and the states' tables are read directly, so
@@ -174,26 +184,50 @@ fn Decoder::execute(
   let data = self.block
   let mut pos = bits.pos
   let rep = self.rep
+  let @seqenc.Distance(first) = rep.get(0)
+  let @seqenc.Distance(second) = rep.get(1)
+  let @seqenc.Distance(third) = rep.get(2)
+  let mut r0 = first
+  let mut r1 = second
+  let mut r2 = third
   let mut lit = 0
+  let literals = self.literals
+  let literals_len = self.literals_len
+  let ring_max = self.ring_max
+  let window = self.window
+  let block_max = self.block_max
+  let mut ring = self.ring
+  let mut cap = ring.length()
+  let mut wpos = self.wpos
+  let mut filled = self.filled
+  let mut block_out = self.block_out
+  // This block starts with nothing pending, and block_max <= ring_max.
+  // Even if it grows the ring, it can never have to drain mid-block.
   for i in 0..<count {
     if pos < 0 {
+      if INLINE_SEQUENCE_COPIES {
+        self.save_sequence_window(wpos, filled, block_out)
+      }
       raise corrupt("a sequences bitstream that ends early")
     }
-    // Each state's entry, loaded once: its symbol now, and its next state's
-    // base and bits after the extra bits.
-    let of_entry = of.entry_of(of_state)
-    let ml_entry = ml.entry_of(ml_state)
-    let ll_entry = ll.entry_of(ll_state)
+    // Each initial state uses log bits. Every transition's base plus any
+    // value of its nbits also lies in 0..<1 << log, within the entry array.
+    let of_entry = of.entry.unsafe_get(of_state)
+    let ml_entry = ml.entry.unsafe_get(ml_state)
+    let ll_entry = ll.entry.unsafe_get(ll_state)
     let of_code = entry_symbol(of_entry)
     let ml_code = entry_symbol(ml_entry)
     let ll_code = entry_symbol(ll_entry)
     if of_code > MAX_OF_CODE {
+      if INLINE_SEQUENCE_COPIES {
+        self.save_sequence_window(wpos, filled, block_out)
+      }
       raise corrupt("an offset code above \{MAX_OF_CODE}")
     }
-    // ml_code and ll_code index tables of their alphabets' sizes: the
-    // symbols of tables built from distributions over them.
-    let ml_extra = ml_bits[ml_code]
-    let ll_extra = ll_bits[ll_code]
+    // The predefined, RLE and transmitted tables (including dictionaries)
+    // bound these symbols by MAX_ML_CODE and MAX_LL_CODE, respectively.
+    let ml_extra = ml_bits.unsafe_get(ml_code)
+    let ll_extra = ll_bits.unsafe_get(ll_code)
     let mut offset_bits = 0
     let mut ml_add = 0
     let mut ll_add = 0
@@ -254,37 +288,143 @@ fn Decoder::execute(
       }
     }
     let offset_value = (1 << of_code) + offset_bits
-    let match_len = ml_base[ml_code] + ml_add
-    let lit_len = ll_base[ll_code] + ll_add
+    // The same alphabet bounds apply to the base tables.
+    let match_len = ml_base.unsafe_get(ml_code) + ml_add
+    let lit_len = ll_base.unsafe_get(ll_code) + ll_add
     // The offset, and the repeat offsets after it (RFC 8878 section
     // 3.1.1.5).
-    let @seqenc.Distance(distance) = rep.resolve(
-      @seqenc.OffsetValue(offset_value.reinterpret_as_uint()),
-      lit_len,
-    )
+    let v = offset_value.reinterpret_as_uint()
+    let distance = if v > 3 {
+      let d = v - 3
+      r2 = r1
+      r1 = r0
+      r0 = d
+      d
+    } else {
+      let index = v.reinterpret_as_int() -
+        1 +
+        (if lit_len == 0 { 1 } else { 0 })
+      let d = match index {
+        0 => r0
+        1 => r1
+        2 => r2
+        _ => r0 - 1
+      }
+      if index != 0 {
+        if index > 1 {
+          r2 = r1
+        }
+        r1 = r0
+        r0 = d
+      }
+      d
+    }
     let offset = distance.reinterpret_as_int()
-    if lit_len > self.literals_len - lit {
+    if lit_len > literals_len - lit {
+      if INLINE_SEQUENCE_COPIES {
+        self.save_sequence_window(wpos, filled, block_out)
+      }
       raise corrupt("a sequence with more literals than the block holds")
     }
-    if !self.put_literals_fast(lit, lit_len) {
-      self.put_literals(lit, lit_len)
+    if INLINE_SEQUENCE_COPIES {
+      let lit_end = wpos + lit_len
+      if block_out + lit_len <= block_max && lit_end <= cap {
+        // The literal range was checked above. Wild copies may overwrite
+        // only spare space after the write, outside the filled history.
+        if wide_copies &&
+          lit_end + 8 <= cap - (filled - wpos).max(0) &&
+          lit + lit_len + 8 <= literals.length() {
+          wild_copy(ring, wpos, literals, lit, lit_len)
+        } else {
+          copy_forward(ring, wpos, literals, lit, lit_len)
+        }
+        wpos = if lit_end == ring_max { 0 } else { lit_end }
+        filled = (filled + lit_len).min(window)
+        block_out += lit_len
+      } else {
+        self.save_sequence_window(wpos, filled, block_out)
+        self.put_literals(lit, lit_len)
+        ring = self.ring
+        cap = ring.length()
+        wpos = self.wpos
+        filled = self.filled
+        block_out = self.block_out
+      }
+      if block_out + match_len > block_max {
+        self.save_sequence_window(wpos, filled, block_out)
+        raise corrupt("a block that decodes past the block limit")
+      }
+      let in_window = offset != 0 && offset <= filled
+      let src = wpos - offset
+      let match_end = wpos + match_len
+      if in_window && src >= 0 && match_end <= cap {
+        if wide_copies && match_end + 8 <= cap - (filled - wpos).max(0) {
+          wild_match(ring, wpos, offset, match_len)
+        } else if offset >= match_len {
+          copy_forward(ring, wpos, ring, src, match_len)
+        } else {
+          // Overlapping: each byte may repeat one written in this copy.
+          @blit.forward(ring, wpos, src, match_len)
+        }
+        wpos = if match_end == ring_max { 0 } else { match_end }
+        filled = (filled + match_len).min(window)
+        block_out += match_len
+      } else {
+        self.save_sequence_window(wpos, filled, block_out)
+        if in_window {
+          self.reserve_window(match_len)
+          self.copy_back(offset, match_len)
+        } else {
+          // Before the frame's output: only a dictionary has bytes there.
+          self.copy_from_dictionary(offset, match_len)
+        }
+        ring = self.ring
+        cap = ring.length()
+        wpos = self.wpos
+        filled = self.filled
+        block_out = self.block_out
+      }
+    } else {
+      if !self.put_literals_fast(lit, lit_len) {
+        self.put_literals(lit, lit_len)
+      }
+      if self.block_out + match_len > self.block_max {
+        raise corrupt("a block that decodes past the block limit")
+      }
+      if offset == 0 || offset > self.filled {
+        // Before the frame's output: only a dictionary has bytes there.
+        self.copy_from_dictionary(offset, match_len)
+      } else if !self.copy_back_fast(offset, match_len) {
+        self.reserve_window(match_len)
+        self.copy_back(offset, match_len)
+      }
     }
     lit += lit_len
-    if self.block_out + match_len > self.block_max {
-      raise corrupt("a block that decodes past the block limit")
-    }
-    if offset == 0 || offset > self.filled {
-      // Before the frame's output: only a dictionary has bytes there.
-      self.copy_from_dictionary(offset, match_len)
-    } else if !self.copy_back_fast(offset, match_len) {
-      self.reserve_window(match_len)
-      self.copy_back(offset, match_len)
-    }
+  }
+  if INLINE_SEQUENCE_COPIES {
+    self.save_sequence_window(wpos, filled, block_out)
   }
   if pos != 0 {
     raise corrupt("a sequences bitstream that is not used up exactly")
   }
-  self.put_literals(lit, self.literals_len - lit)
+  // An error is terminal until reset. Only the next block needs the repeats.
+  rep.set(r0, r1, r2)
+  self.put_literals(lit, literals_len - lit)
+}
+
+///|
+/// Publishes the loop's counters before a slow copy, at block end, or
+/// before raising so the decoder can drain output from before the error.
+fn Decoder::save_sequence_window(
+  self : Decoder,
+  wpos : Int32,
+  filled : Int32,
+  block_out : Int32,
+) -> Unit {
+  self.wpos = wpos
+  self.pending = block_out
+  self.filled = filled
+  self.block_out = block_out
 }
 
 ///|

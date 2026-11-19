@@ -51,18 +51,23 @@ pub fn Block::add(
     let ms = FixedArray::make(n, 0)
     let os = FixedArray::make(n, OffsetValue(0))
     for i in 0..<self.count {
-      ls[i] = self.ll[i]
-      ms[i] = self.ml[i]
-      os[i] = self.offsets[i]
+      // All three arrays grow together. The old ones hold count entries
+      // and the new ones are larger, since another match fits the block.
+      ls.unsafe_set(i, self.ll.unsafe_get(i))
+      ms.unsafe_set(i, self.ml.unsafe_get(i))
+      os.unsafe_set(i, self.offsets.unsafe_get(i))
     }
     self.ll = ls
     self.ml = ms
     self.offsets = os
   }
   let value = self.repeats.encode(distance, ll)
-  self.ll[self.count] = ll
-  self.ml[self.count] = ml
-  self.offsets[self.count] = value
+  // A sequence has a match of at least three bytes, so before adding it
+  // count is below the block's cap of floor(128 KiB / 3). Growth above
+  // ensures a free slot at count in all three arrays.
+  self.ll.unsafe_set(self.count, ll)
+  self.ml.unsafe_set(self.count, ml)
+  self.offsets.unsafe_set(self.count, value)
   self.count += 1
 }
 
