@@ -1,0 +1,118 @@
+----
+import {
+  "moonbitlang/core/async",
+  "moonbitlang/core/async/fs",
+  "moonbitlang/core/async/shell",
+  "moonbitlang/core/env",
+}
+----
+
+// Runs a module's native tests under AddressSanitizer.
+//
+// The decoders read and write without index checks on Native and Wasm
+// wherever their hot loops gain from it (each place says why the index is in
+// range). A wrong reason there corrupts memory silently on those targets;
+// JS and Wasm GC keep their checks and catch it only if a test reaches the
+// case. Under AddressSanitizer, Native reports the first read or write past
+// a heap block instead.
+//
+// What it takes, as of moon 0.1.20261117: a release build (a debug build
+// compiles the package's C with the bundled TinyCC, which AddressSanitizer
+// does not instrument), the system allocator instead of mimalloc (whose
+// blocks AddressSanitizer does not see), and the compiler and archiver
+// named apart (moon derives the archiver's name from the compiler's). The
+// script writes a compiler wrapper to `_build/asan/cc`, and builds into
+// `_build/asan` so that the usual build stays as it is.
+//
+// Usage, from the repository root (needs cc with AddressSanitizer, and ar):
+//   moon run scripts/asan_test.mbtx -- MODULE
+// MODULE is a directory of the workspace (deflate, zstd, ...); every package
+// under MODULE/src is tested.
+//
+// Exit status: moon test's, or 2 on a setup failure.
+
+///|
+/// Prints `message` on stderr and exits with `code`.
+fn[T] die(code : Int32, message : String) -> T {
+  eprintln(message)
+  @env.exit(code)
+}
+
+///|
+/// The `name = "..."` of `dir`/moon.mod.
+async fn module_name(dir : String) -> String {
+  for line in @fs.read_text("\{dir}/moon.mod").split("\n") {
+    if line.strip_prefix("name = \"") is Some(rest) &&
+      rest.strip_suffix("\"") is Some(name) {
+      return name.to_owned()
+    }
+  }
+  die(2, "\{dir}/moon.mod has no name")
+}
+
+///|
+/// The packages under `dir` (relative to the module's `src`), as the module
+/// names them.
+async fn packages(src : String, rel : String, owner : String) -> Array[String] {
+  let here = if rel == "" { src } else { "\{src}/\{rel}" }
+  let found = []
+  if @fs.exists("\{here}/moon.pkg") {
+    found.push(if rel == "" { owner } else { "\{owner}/\{rel}" })
+  }
+  let names = @fs.readdir(here)
+  names.sort()
+  for name in names {
+    if name.has_prefix(".") || name == "_build" {
+      continue
+    }
+    let path = "\{here}/\{name}"
+    if @fs.kind(path) is Directory {
+      let sub = if rel == "" { name } else { "\{rel}/\{name}" }
+      found.push_iter(packages(src, sub, owner).iter())
+    }
+  }
+  found
+}
+
+///|
+async fn main {
+  let args = @env.args()
+  guard args[1:].to_owned() is [dir] else {
+    die(2, "usage: asan_test.mbtx -- MODULE")
+  }
+  let owner = module_name(dir)
+  let list = packages("\{dir}/src", "", owner)
+  if list.length() == 0 {
+    die(2, "no package under \{dir}/src")
+  }
+  let work = "_build/asan"
+  @fs.mkdir(work, recursive=true)
+  let cc = "\{work}/cc"
+  @fs.write_text(
+    cc,
+    (
+      #|#!/bin/sh
+      #|exec cc -fsanitize=address -fno-omit-frame-pointer -g "$@" \
+      #|  -UMOONBIT_ALLOCATOR -DMOONBIT_ALLOCATOR=MOONBIT_ALLOCATOR_SYSTEM
+      #|
+    ),
+  )
+  @shell.Cmd("chmod", ["+x", cc]).run()
+  let ar = @shell.Cmd("sh", ["-c", "command -v ar"]).output()
+  if ar.exit_code() != 0 {
+    die(2, "no ar on PATH")
+  }
+  let cwd = @shell.Cmd("pwd", []).output().stdout().trim(chars="\n").to_owned()
+  let command = [
+    "test", "--release", "--target", "native", "--target-dir", work,
+  ]
+  for p in list {
+    command.push("-p")
+    command.push(p)
+  }
+  let status = @shell.Cmd("moon", command, env={
+    "MOON_CC": "\{cwd}/\{cc}",
+    "MOON_AR": ar.stdout().trim(chars="\n").to_owned(),
+  }).status()
+  @env.exit(status)
+}

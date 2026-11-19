@@ -42,7 +42,7 @@ import {
 //   moon run scripts/compare_codecs.mbtx -- memory [--timeout S] [--only NAME]
 //   moon run scripts/compare_codecs.mbtx -- claims [--fixtures FILE] [--limit MIB] [--timeout S] [--only NAME]
 //   moon run scripts/compare_codecs.mbtx -- ratio --format zstd|brotli|deflate [--qualities 0,1,...,11] [--time MS] [--jobs N] [--corpus DIR]...
-//   moon run scripts/compare_codecs.mbtx -- speed [--runs N] [--out DIR]
+//   moon run scripts/compare_codecs.mbtx -- speed [--runs N] [--out DIR] [--cpus N,M] [--combined]
 // check   (the default) as above; with --pieces, the decoders that take
 //         input in pieces run over the valid streams fed P bytes at a time,
 //         into an output buffer of O bytes (where they write into the
@@ -74,12 +74,19 @@ import {
 //         only the package's own decoder reads back. With --time 0, --jobs N
 //         runs up to N encodings and decodings at once (default 1), the
 //         output in the same order.
-// speed   runs `moon bench --release` on src/compare_speed N times (default
-//         3) on each of native, wasm, wasm-gc and js, taking the targets in
-//         turn so that a slow spell of the machine does not land on one of
-//         them; keeps each run's output in --out (default
-//         _build/compare/speed) and prints each benchmark's median over
-//         the runs, named by its test, then the runs, in milliseconds.
+// speed   runs `moon bench --release` on src/compare_speed_zstd,
+//         src/compare_speed_brotli and src/compare_speed_deflate (with
+//         --combined, on src/compare_speed, which holds every format in one
+//         binary) N times (default 3) on each of native, wasm, wasm-gc and
+//         js, taking the targets in turn so that a slow spell of the machine
+//         does not land on one of them; keeps each run's output in --out
+//         (default _build/compare/speed) and prints each benchmark's median
+//         over the runs, named by its test, then the runs, in milliseconds.
+//         One package per format keeps each Wasm binary small: V8 inlines
+//         less in a larger module, so a format's times depend on what else
+//         the binary holds. With --cpus N,M, native runs on CPU N alone, and
+//         Wasm and JS on N and M: pinned to one CPU, V8's background
+//         compilation starves, and a run can take twice as long.
 // --dir     where the streams go (default _build/compare)
 // --only    runs the decoders or encoders whose name contains NAME
 // --timeout seconds before a decoder counts as hanging (default 60)
@@ -1674,27 +1681,53 @@ fn bench_line(line : String) -> (String, Double)? {
 ///|
 /// `speed`: `runs` runs of src/compare_speed on each target, in turn; each
 /// run's output goes to `out`/<target>-<run>.txt.
-async fn speed(out : String, runs : Int32) -> Unit {
+async fn speed(
+  out : String,
+  runs : Int32,
+  cpus : Array[String],
+  combined : Bool,
+) -> Unit {
   let targets = ["native", "wasm", "wasm-gc", "js"]
+  let packages = if combined {
+    ["compare_speed"]
+  } else {
+    ["compare_speed_zstd", "compare_speed_brotli", "compare_speed_deflate"]
+  }
   if !@fs.exists(out) {
     @fs.mkdir(out, recursive=true)
   }
   for run in 1..<=runs {
     for target in targets {
-      let result = @shell.Cmd(
-        "moon",
-        [
-          "bench", "--release", "--target", target, "-p", "gaato/codec_bench/compare_speed",
-        ],
-        env={ "MOON_CC": "cc" },
-      ).output(max_output_bytes=1 << 24)
-      @fs.write_text(
-        "\{out}/\{target}-\{run}.txt",
-        "\{result.stdout()}\{result.stderr()}",
-      )
-      if result.exit_code() != 0 {
-        println("\{target} run \{run}: exit status \{result.exit_code()}")
+      // Native on the first CPU given; Wasm and JS on all of them (see the
+      // opening comment).
+      let pin = match cpus {
+        [] => []
+        [first, ..] if target == "native" => ["taskset", "-c", first]
+        _ => ["taskset", "-c", cpus.join(",")]
       }
+      let text = StringBuilder()
+      for pkg in packages {
+        let command = [
+          ..pin,
+          "moon",
+          "bench",
+          "--release",
+          "--target",
+          target,
+          "-p",
+          "gaato/codec_bench/\{pkg}",
+        ]
+        let result = @shell.Cmd(command[0], command[1:].to_owned(), env={
+          "MOON_CC": "cc",
+        }).output(max_output_bytes=1 << 24)
+        text.write_string("\{result.stdout()}\{result.stderr()}")
+        if result.exit_code() != 0 {
+          println(
+            "\{target} run \{run} \{pkg}: exit status \{result.exit_code()}",
+          )
+        }
+      }
+      @fs.write_text("\{out}/\{target}-\{run}.txt", text.to_string())
     }
   }
   // Each benchmark's median over the runs, and the runs. A benchmark is
@@ -1707,7 +1740,7 @@ async fn speed(out : String, runs : Int32) -> Unit {
     for run in 1..<=runs {
       let mut section = ""
       for line in read_text("\{out}/\{target}-\{run}.txt").split("\n") {
-        if line.contains(" bench compare_speed/") &&
+        if line.contains(" bench compare_speed") &&
           line.split("(\"").collect() is [_, rest, ..] &&
           rest.split("\")").collect() is [name, ..] {
           section = name.to_owned()
@@ -1760,6 +1793,8 @@ async fn main {
   let mut fixtures = "bench/compare/fixtures.tsv"
   let mut limit_mib = 1024
   let mut runs = 3
+  let mut cpus : Array[String] = []
+  let mut combined = false
   let mut out = ""
   let dirs = []
   let mut qualities = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
@@ -1800,6 +1835,11 @@ async fn main {
       "--fixtures" => fixtures = args[i + 1]
       "--limit" => limit_mib = @string.parse_int(args[i + 1])
       "--runs" => runs = @string.parse_int(args[i + 1])
+      "--cpus" => cpus = args[i + 1].split(",").map(c => c.to_owned()).collect()
+      "--combined" => {
+        combined = true
+        i -= 1
+      }
       "--out" => out = args[i + 1]
       "--pieces" => {
         pieces = [args[i + 1], args[i + 2]]
@@ -1825,7 +1865,8 @@ async fn main {
     "memory" => memory(dir, timeout_s, only)
     "claims" => claims(dir, fixtures, limit_mib, timeout_s, only)
     "ratio" => ratio(dir, format, min_ms, only, dirs, qualities, jobs)
-    "speed" => speed(if out == "" { "\{dir}/speed" } else { out }, runs)
+    "speed" =>
+      speed(if out == "" { "\{dir}/speed" } else { out }, runs, cpus, combined)
     c => setup_failure("unknown command: \{c}")
   }
 }

@@ -1,0 +1,138 @@
+----
+import {
+  "moonbitlang/core/async",
+  "moonbitlang/core/async/shell",
+  "moonbitlang/core/env",
+}
+----
+
+// Counts the calls in functions of a Wasm (linear-memory) binary: how many,
+// how many of them are MoonBit's array checks, and to what.
+//
+// On the Wasm backend a checked `a[i]` compiles to calls of
+// `$moonbit.array_length` and `$moonbit.check_range`, and `#inline` is not
+// applied: every small helper stays a call. V8 inlines some of them, less as
+// the module grows, so a hot loop that calls them runs slower in a large
+// binary than in a small one (the brotli decoder measured 5.2 ms in a
+// 126 KB binary and 7.9 ms in a 3.2 MB one, on 2026-11-19). This prints, for
+// each function whose name contains a pattern, the counts and the callees
+// the loops would have to inline, so that a change to a hot path can be
+// checked before and after it.
+//
+// The binary must keep its function names: build an executable package
+// (one with `"is-main": true`, such as a small harness that calls the
+// decoder in a loop) with
+//   moon build --release --no-strip --target wasm PACKAGE_DIR
+// Test and bench binaries lose their names whatever the options (moon
+// 0.1.20261117).
+//
+// Usage, from the repository root (needs `wasm-tools` on PATH):
+//   moon run scripts/wasm_calls.mbtx -- WASM PATTERN...
+// A pattern matches a function's MoonBit name or its mangled one, where `_`
+// is written `__`: `fast_commands` and `brotli7Decoder` both match
+// `$_M0MP25gaato6brotli7Decoder14fast__commands`.
+//
+// Output, tab-separated: function, calls, array checks
+// (`$moonbit.check_range` and `$moonbit.array_length`), reference counting
+// (`$moonbit.incref` and `$moonbit.decref`), then the most frequent callees.
+//
+// Exit status: 0 = printed, 2 = setup failure (no wasm-tools, bad file, no
+// function matched).
+
+///|
+/// Prints `message` on stderr and exits with `code`.
+fn[T] die(code : Int32, message : String) -> T {
+  eprintln(message)
+  @env.exit(code)
+}
+
+///|
+/// The calls of one function: their count by callee, in order of first call.
+struct Calls {
+  name : String
+  order : Array[String]
+  count : Map[String, Int32]
+}
+
+///|
+/// The functions of the text format, with the callee of every `call`.
+fn functions(wat : String) -> Array[Calls] {
+  let found : Array[Calls] = []
+  let mut current : Calls? = None
+  for line in wat.split("\n") {
+    let trimmed = line.trim(chars=" ")
+    if trimmed.has_prefix("(func $") {
+      let rest = trimmed["(func $".length():].to_owned()
+      let name = match rest.split(" ").collect() {
+        [n, ..] => n.to_owned()
+        [] => rest
+      }
+      let calls = { name, order: [], count: Map([]), }
+      found.push(calls)
+      current = Some(calls)
+      continue
+    }
+    guard current is Some(calls) else { continue }
+    guard trimmed.has_prefix("call $") else { continue }
+    let rest = trimmed["call $".length():].to_owned()
+    let callee = match rest.split(" ").collect() {
+      [c, ..] => c.to_owned()
+      [] => rest
+    }
+    match calls.count.get(callee) {
+      Some(n) => calls.count[callee] = n + 1
+      None => {
+        calls.order.push(callee)
+        calls.count[callee] = 1
+      }
+    }
+  }
+  found
+}
+
+///|
+/// Whether a function's mangled name holds `pattern`, as written or with
+/// each `_` doubled, as the mangling writes it.
+fn matches(name : String, pattern : String) -> Bool {
+  name.contains(pattern) ||
+  name.contains(pattern.replace_all(old="_", new="__"))
+}
+
+///|
+async fn main {
+  let args = @env.args()
+  // `moon run` passes the script's path first; the rest are ours.
+  let ours = args[1:].to_owned()
+  guard ours is [wasm, .. patterns] && patterns.length() > 0 else {
+    die(2, "usage: wasm_calls.mbtx -- WASM PATTERN...")
+  }
+  let printed = @shell.Cmd("wasm-tools", ["print", wasm]).output(
+    max_output_bytes=1 << 30,
+  ) catch {
+    e => die(2, "wasm-tools print \{wasm}: \{e}")
+  }
+  if printed.exit_code() != 0 {
+    die(2, "wasm-tools print \{wasm}: \{printed.stderr()}")
+  }
+  let selected = functions(printed.stdout()).filter(f => {
+    patterns.iter().any(p => matches(f.name, p))
+  })
+  if selected.length() == 0 {
+    die(2, "no function of \{wasm} matches \{patterns.join(", ")}")
+  }
+  println("function\tcalls\tarray checks\trefcounts\tcallees")
+  for f in selected {
+    let total = f.count.values().fold(init=0, (a, b) => a + b)
+    let of = (callee : String) => f.count.get(callee).unwrap_or(0)
+    let checks = of("moonbit.check_range") + of("moonbit.array_length")
+    let refs = of("moonbit.incref") + of("moonbit.decref")
+    let ranked = f.order.copy()
+    ranked.sort_by((a, b) => of(b).compare(of(a)))
+    let top = ranked[:ranked.length().min(8)]
+      .iter()
+      .map(c => "\{c} \{of(c)}")
+      .collect()
+      .join(", ")
+    println("\{f.name}\t\{total}\t\{checks}\t\{refs}\t\{top}")
+  }
+}

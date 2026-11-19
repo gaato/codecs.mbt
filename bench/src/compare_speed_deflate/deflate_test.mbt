@@ -1,0 +1,1 @@
+../compare_speed/deflate_test.mbt

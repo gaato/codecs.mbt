@@ -1,0 +1,1 @@
+../compare_speed/zstd_test.mbt
