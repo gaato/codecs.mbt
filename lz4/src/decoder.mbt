@@ -109,6 +109,7 @@ pub struct Decoder {
   priv mut has_content_checksum : Bool
   priv mut content_size : UInt64?
   priv mut block_max : Int32
+  // Output of completed blocks in frames with a declared content size.
   priv mut frame_out : UInt64
   priv xxh : Xxh32
   // The current block: what is left of its stored bytes, what it has
@@ -484,7 +485,6 @@ fn Decoder::advance(self : Decoder, n : Int32) -> Unit {
   self.pending += n
   self.hist = (self.hist + n).min(1 << 24)
   self.block_out += n
-  self.frame_out += n.to_uint64()
   if self.has_content_checksum {
     self.unhashed += n
   }
@@ -828,6 +828,11 @@ fn Decoder::stored_block(self : Decoder) -> Unit raise Stop {
 ///|
 /// After a block's last byte: its checksum, or the next block.
 fn Decoder::end_block(self : Decoder) -> Unit {
+  // block_out is capped by block_max (an Int32). The frame only needs
+  // the total for members that declare a content size.
+  if self.content_size is Some(_) {
+    self.frame_out += self.block_out.to_uint64()
+  }
   self.hash_block_input()
   self.state = if self.raw {
     Done
@@ -939,7 +944,9 @@ fn Decoder::check_length(self : Decoder, n : Int32) -> Unit raise Stop {
   if n > self.block_max - self.block_out {
     self.too_long()
   }
-  if self.content_size is Some(cs) && self.frame_out + n.to_uint64() > cs {
+  // The block limit bounds the Int32 sum before it is added to the frame.
+  if self.content_size is Some(cs) &&
+    self.frame_out + (self.block_out + n).to_uint64() > cs {
     raise Fail(
       ChecksumMismatch,
       "the frame holds more than its declared content size",
@@ -1112,7 +1119,7 @@ fn Decoder::fast_sequences(self : Decoder) -> Unit {
   let mut hist = self.hist
   let mut budget = self.block_max - self.block_out
   if self.content_size is Some(cs) {
-    let left = cs - self.frame_out
+    let left = cs - (self.frame_out + self.block_out.to_uint64())
     if left < budget.to_uint64() {
       budget = left.to_int()
     }

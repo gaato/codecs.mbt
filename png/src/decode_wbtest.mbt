@@ -153,6 +153,22 @@ test "the image data in IDAT chunks of every size, split anyhow" {
 }
 
 ///|
+test "one-byte input crosses IDAT boundaries and can end inside IDAT" {
+  let (png, raw) = image(8, 2, 8, 0, idat_size=2)
+  let full = run(Decoder(), png, chunk=1, room=1)
+  assert_true(full.error is None)
+  assert_eq(full.output, raw.rows)
+  assert_eq(full.consumed, png.length())
+  // Pass the first IDAT (2 data bytes), then stop after the first data
+  // byte of the next IDAT, where the inflater and the chunk need input.
+  let cut = 8 + 25 + 14 + 8 + 1
+  let partial = run(Decoder(), png[:cut].to_owned(), chunk=1, room=1)
+  assert_eq(partial.output, b"")
+  assert_eq(partial.consumed, cut)
+  assert_eq(partial.error, Some((Truncated, "the input ends inside the image")))
+}
+
+///|
 /// The first error of `input`, as kind and message.
 fn refusal(input : Bytes, chunk~ : Int32 = 1 << 20) -> String raise {
   match run(Decoder(), input, chunk~).error {

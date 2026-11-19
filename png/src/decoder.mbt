@@ -1314,7 +1314,10 @@ fn Decoder::image_data(
           continue
         }
       }
-      if used > 0 || made > 0 || self.inflated {
+      // NeedMoreInput has drained the inflater. With all n bytes used,
+      // another call could only wait for input or the next IDAT.
+      if (used > 0 || made > 0 || self.inflated) &&
+        !(status is NeedMoreInput && used == n) {
         continue
       }
     }

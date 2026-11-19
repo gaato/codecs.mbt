@@ -1,0 +1,21 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "gaato/lzw/internal/blit"
+
+// Values
+pub fn bytes(FixedArray[Byte], Int32, FixedArray[Byte], Int32, Int32) -> Unit
+
+pub fn forward(FixedArray[Byte], Int32, Int32, Int32) -> Unit
+
+pub fn from_view(FixedArray[Byte], Int32, BytesView) -> Unit
+
+pub fn into_view(MutArrayView[Byte], Int32, FixedArray[Byte], Int32, Int32) -> Unit
+
+pub fn move_down(FixedArray[Byte], Int32, Int32, Int32) -> Unit
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+
+// Traits

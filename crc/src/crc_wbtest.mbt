@@ -216,6 +216,15 @@ test "panic Crc::new refuses a polynomial wider than the width" {
 }
 
 ///|
+#cfg(any(target="wasm", target="js"))
+fn RegisterTable::length(self : RegisterTable) -> Int32 {
+  match self {
+    Narrow(table) => table.length()
+    Wide(table) => table.length()
+  }
+}
+
+///|
 test "a Crc holds a table of 256 entries, and the fast ones' tables are fixed" {
   for e in catalogue {
     guard Crc::named(e.name) is Some(c) else { fail(e.name) }

@@ -11,6 +11,7 @@
     "lz4/src/internal/copy16",
     "lz4/src/internal/whole",
     "lzw/src/internal/whole",
+    "lzw/src/internal/blit",
     "zstd/src/internal/bits",
     "zstd/src/internal/whole",
     "zstd/src/internal/huffman_code",

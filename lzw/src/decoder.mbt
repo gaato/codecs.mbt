@@ -9,6 +9,15 @@
 // 2^max_bits for .Z), and a string is no longer than the table.
 
 ///|
+// The extra guard slowed whole-input TIFF decoding on native.
+#cfg(target="native")
+const SKIP_SHORT_FAST_INPUT : Bool = false
+
+///|
+#cfg(not(target="native"))
+const SKIP_SHORT_FAST_INPUT : Bool = true
+
+///|
 priv enum State {
   Header
   Codes
@@ -299,7 +308,9 @@ fn Decoder::run_codes(
         self.header()
       }
       Codes => {
-        if self.skip == 0 && self.fast_codes(input, output) {
+        if self.skip == 0 &&
+          (!SKIP_SHORT_FAST_INPUT || input.length() - self.consumed >= 3) &&
+          self.fast_codes(input, output) {
           continue
         }
         // Skip .Z's padding first.
@@ -536,6 +547,7 @@ fn Decoder::fast_codes(
   let format = self.active
   let msb = format.msb_first
   let limit = format.table_limit()
+  // start allocates at least limit entries in each table.
   let prefix = self.prefix
   let suffix = self.suffix
   let first = self.first
@@ -582,10 +594,12 @@ fn Decoder::fast_codes(
     nbits -= bits
     run += 1
     took = true
+    // The bit reader produces a nonnegative code. The first branch reads
+    // code < next, and the other reads 0 <= prev < next.
     let len = if code < next {
-      length[code].to_int()
+      fast_get(length, code).to_int()
     } else {
-      length[prev].to_int() + 1
+      fast_get(length, prev).to_int() + 1
     }
     if code > next ||
       (format.block_mode && code == format.clear_code()) ||
@@ -597,10 +611,20 @@ fn Decoder::fast_codes(
       return true
     }
     if next < limit {
-      prefix[next] = prev.to_uint16()
-      first[next] = first[prev]
-      length[next] = (length[prev].to_int() + 1).to_uint16()
-      suffix[next] = if code == next { first[prev] } else { first[code] }
+      // next < limit bounds the writes. prev < next, and code <= next
+      // here, so each read uses a code already defined in the table.
+      fast_set(prefix, next, prev.to_uint16())
+      fast_set(first, next, fast_get(first, prev))
+      fast_set(length, next, (fast_get(length, prev).to_int() + 1).to_uint16())
+      fast_set(
+        suffix,
+        next,
+        if code == next {
+          fast_get(first, prev)
+        } else {
+          fast_get(first, code)
+        },
+      )
       next += 1
     }
     // Codes and the codes they extend are under `next`, within the table;
@@ -615,6 +639,36 @@ fn Decoder::fast_codes(
   }
   self.commit(acc, nbits, bits, next, prev, pos, out, run)
   took
+}
+
+///|
+#cfg(target="wasm")
+#inline
+fn[T] fast_get(table : FixedArray[T], index : Int32) -> T {
+  // fast_codes only reads defined codes, as checked at the call sites.
+  table.unsafe_get(index)
+}
+
+///|
+#cfg(not(target="wasm"))
+#inline
+fn[T] fast_get(table : FixedArray[T], index : Int32) -> T {
+  table[index]
+}
+
+///|
+#cfg(target="wasm")
+#inline
+fn[T] fast_set(table : FixedArray[T], index : Int32, value : T) -> Unit {
+  // fast_codes only writes next after checking it against the table limit.
+  table.unsafe_set(index, value)
+}
+
+///|
+#cfg(not(target="wasm"))
+#inline
+fn[T] fast_set(table : FixedArray[T], index : Int32, value : T) -> Unit {
+  table[index] = value
 }
 
 ///|

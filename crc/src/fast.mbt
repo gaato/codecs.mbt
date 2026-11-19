@@ -72,6 +72,7 @@ let crc64_tables : FixedArray[UInt64] = FixedArray::makei(8 * 256, i => {
 ///|
 /// The CRC-64/XZ of the data so far, `crc` (0 for none), extended by
 /// `data`, eight bytes at a time, as xz's `lzma_crc64` computes it.
+#cfg(not(target="js"))
 pub fn crc64_xz_update(crc : UInt64, data : BytesView) -> UInt64 {
   let t = crc64_tables
   let mut c = crc.lnot()
@@ -110,4 +111,58 @@ pub fn crc64_xz_update(crc : UInt64, data : BytesView) -> UInt64 {
     i += 1
   }
   c.lnot()
+}
+
+///|
+#cfg(target="js")
+let crc64_low : FixedArray[UInt32] = crc64_tables.map(c => c.to_uint())
+
+///|
+#cfg(target="js")
+let crc64_high : FixedArray[UInt32] = crc64_tables.map(c => (c >> 32).to_uint())
+
+///|
+#cfg(target="js")
+#inline
+fn crc64_fold(
+  table : FixedArray[UInt32],
+  low : UInt32,
+  high : UInt32,
+) -> UInt32 {
+  // Each index is a byte plus the offset of one of the eight tables.
+  table.unsafe_get(7 * 256 + (low & 0xFF).reinterpret_as_int()) ^
+  table.unsafe_get(6 * 256 + ((low >> 8) & 0xFF).reinterpret_as_int()) ^
+  table.unsafe_get(5 * 256 + ((low >> 16) & 0xFF).reinterpret_as_int()) ^
+  table.unsafe_get(4 * 256 + (low >> 24).reinterpret_as_int()) ^
+  table.unsafe_get(3 * 256 + (high & 0xFF).reinterpret_as_int()) ^
+  table.unsafe_get(2 * 256 + ((high >> 8) & 0xFF).reinterpret_as_int()) ^
+  table.unsafe_get(256 + ((high >> 16) & 0xFF).reinterpret_as_int()) ^
+  table.unsafe_get((high >> 24).reinterpret_as_int())
+}
+
+///|
+/// The CRC-64/XZ of the data so far, `crc` (0 for none), extended by
+/// `data`, eight bytes at a time, as xz's `lzma_crc64` computes it.
+#cfg(target="js")
+pub fn crc64_xz_update(crc : UInt64, data : BytesView) -> UInt64 {
+  let mut low = crc.to_uint().lnot()
+  let mut high = (crc >> 32).to_uint().lnot()
+  let n = data.length()
+  let mut i = 0
+  while n - i >= 8 {
+    // Eight bytes remain, so the two four-byte reads fit.
+    let x = low ^ data.unsafe_read_uint32_le(i)
+    let y = high ^ data.unsafe_read_uint32_le(i + 4)
+    low = crc64_fold(crc64_low, x, y)
+    high = crc64_fold(crc64_high, x, y)
+    i += 8
+  }
+  while i < n {
+    // i < n, and the byte index is within the first 256 entries.
+    let j = ((low ^ data.unsafe_get(i).to_uint()) & 0xFF).reinterpret_as_int()
+    low = crc64_low.unsafe_get(j) ^ (low >> 8) ^ (high << 24)
+    high = crc64_high.unsafe_get(j) ^ (high >> 8)
+    i += 1
+  }
+  (high.lnot().to_uint64() << 32) | low.lnot().to_uint64()
 }
