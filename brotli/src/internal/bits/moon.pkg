@@ -2,4 +2,8 @@
 // Writing bits least significant first, as DEFLATE, Brotli and Zstandard
 // pack them, into a byte buffer that the encoder hands out.
 
+import {
+  "gaato/brotli/internal/blit",
+}
+
 supported_targets = "js + native + wasm + wasm-gc"

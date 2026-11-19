@@ -4,6 +4,8 @@ package "gaato/codec_parts/match_length_fast"
 // Values
 pub fn length(FixedArray[Byte], Int32, Int32, Int32) -> Int32
 
+pub fn slide(FixedArray[Int16]) -> Unit
+
 // Errors
 
 // Types and methods

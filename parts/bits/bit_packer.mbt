@@ -69,7 +69,7 @@ fn BitPacker::reserve(self : BitPacker, n : Int32) -> Unit {
   let need = self.len + n
   guard need > self.buf.length() else { return }
   let grown = FixedArray::make(need.max(self.buf.length() * 2), b'\x00')
-  FixedArray::unsafe_blit(grown, 0, self.buf, 0, self.len)
+  @blit.bytes(grown, 0, self.buf, 0, self.len)
   self.buf = grown
 }
 
@@ -190,7 +190,7 @@ pub fn BitPacker::write_bytes(
 ) -> Unit {
   self.flush()
   self.reserve(n)
-  FixedArray::unsafe_blit(self.buf, self.len, data, start, n)
+  @blit.bytes(self.buf, self.len, data, start, n)
   self.len += n
 }
 
@@ -201,7 +201,7 @@ pub fn BitPacker::write_pending(self : BitPacker, other : BitPacker) -> Unit {
   self.flush()
   let n = other.pending()
   self.reserve(n)
-  FixedArray::unsafe_blit(self.buf, self.len, other.buf, other.drained, n)
+  @blit.bytes(self.buf, self.len, other.buf, other.drained, n)
   self.len += n
   other.drained += n
   other.empty_if_drained()
@@ -259,10 +259,7 @@ pub fn BitPacker::drain(
 ) -> Int32 {
   let n = self.pending().min(output.length() - pos)
   if n > 0 {
-    output.blit_from_array(
-      self.buf[self.drained:self.drained + n],
-      dst_offset=pos,
-    )
+    @blit.into_view(output, pos, self.buf, self.drained, n)
   }
   self.drained += n
   self.empty_if_drained()
@@ -278,7 +275,7 @@ pub fn BitPacker::drain_into(
 ) -> Int32 {
   let n = self.pending().min(output.length() - pos)
   if n > 0 {
-    FixedArray::unsafe_blit(output, pos, self.buf, self.drained, n)
+    @blit.bytes(output, pos, self.buf, self.drained, n)
   }
   self.drained += n
   self.empty_if_drained()

@@ -14,3 +14,7 @@ private = true
 license = "Apache-2.0"
 
 preferred_target = "native"
+
+import {
+  "gaato/codec@0.1.1",
+}

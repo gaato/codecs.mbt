@@ -47,3 +47,46 @@ test "forward copies a match of every distance and length, and nothing past it" 
     }
   }
 }
+
+///|
+test "move_down moves a range down over itself" {
+  for n in [0, 1, 7, 8, 9, 31] {
+    for gap in [0, 1, 5, 16] {
+      for to in [0, 3] {
+        let at = to + gap
+        let size = at + n + 4
+        let buf = FixedArray::makei(size, i => (i * 5 + 1).to_byte())
+        let expected = FixedArray::makei(size, i => buf[i])
+        // The model: a byte at a time, front to back.
+        for i in 0..<n {
+          expected[to + i] = expected[at + i]
+        }
+        @blit.move_down(buf, to, at, n)
+        for i in 0..<size {
+          assert_eq(buf[i], expected[i])
+        }
+      }
+    }
+  }
+}
+
+///|
+test "from_view copies the view, and nothing past it" {
+  let backing = Bytes::makei(40, i => (i + 1).to_byte())
+  for n in [0, 1, 7, 8, 9, 31] {
+    for start in [0, 3, 40 - n] {
+      for to in [0, 5] {
+        let dst = FixedArray::make(40, b'\xff')
+        @blit.from_view(dst, to, backing[start:start + n])
+        for i in 0..<40 {
+          let expected = if i >= to && i < to + n {
+            backing[start + i - to]
+          } else {
+            b'\xff'
+          }
+          assert_eq(dst[i], expected)
+        }
+      }
+    }
+  }
+}

@@ -117,3 +117,50 @@ pub fn forward(
     ring.unsafe_set(to + i, ring.unsafe_get(from + i))
   }
 }
+
+///|
+/// Moves `buf[at:at + n]` down to `buf[to:to + n]`, `to <= at`: the ranges
+/// may overlap, as when a window slides. The caller has checked that both
+/// are within `buf`.
+#cfg(not(target="js"))
+pub fn move_down(
+  buf : FixedArray[Byte],
+  to : Int32,
+  at : Int32,
+  n : Int32,
+) -> Unit {
+  FixedArray::unsafe_blit(buf, to, buf, at, n)
+}
+
+///|
+/// Moves `buf[at:at + n]` down to `buf[to:to + n]`, `to <= at`: front to
+/// back, so that each byte is read before it is written over.
+#cfg(target="js")
+pub fn move_down(
+  buf : FixedArray[Byte],
+  to : Int32,
+  at : Int32,
+  n : Int32,
+) -> Unit {
+  for i in 0..<n {
+    buf.unsafe_set(to + i, buf.unsafe_get(at + i))
+  }
+}
+
+///|
+/// Copies all of `src` to `dst[to:to + src.length()]`. The caller has
+/// checked that the range is within `dst`, and that `src` does not view
+/// `dst`.
+#cfg(not(target="js"))
+pub fn from_view(dst : FixedArray[Byte], to : Int32, src : BytesView) -> Unit {
+  dst.blit_from_bytesview(to, src)
+}
+
+///|
+/// Copies all of `src` to `dst[to:to + src.length()]`, as above.
+#cfg(target="js")
+pub fn from_view(dst : FixedArray[Byte], to : Int32, src : BytesView) -> Unit {
+  for i in 0..<src.length() {
+    dst.unsafe_set(to + i, src.unsafe_get(i))
+  }
+}

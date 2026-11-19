@@ -1,0 +1,11 @@
+// A whole input to a whole output, through a streaming encoder or decoder.
+
+import {
+  "gaato/codec",
+}
+
+import {
+  "moonbitlang/core/quickcheck",
+} for "test"
+
+supported_targets = "js + native + wasm + wasm-gc"

@@ -126,9 +126,5 @@ fn extend_match(
 /// Moves every stored position of `table` 32 KiB down, as the base moves up:
 /// those that fall out of reach become `NO_POSITION`.
 fn rebase(table : FixedArray[Int16]) -> Unit {
-  for i in 0..<table.length() {
-    // Without a branch: a negative v (out of reach) gives 0 - WINDOW, which
-    // is NO_POSITION. i < table.length().
-    write(table, i, Int16::from_int(read(table, i).to_int().max(0) - WINDOW))
-  }
+  @match_length_fast.slide(table)
 }

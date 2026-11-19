@@ -12,11 +12,11 @@
   "ledgered": ["crc", "snappy", "lz4", "lzw", "zstd", "brotli", "deflate", "png"],
   "coverage_scope": {
     "crc": ["src", "src/internal/crc32", "src/internal/crc32c"],
-    "snappy": ["src", "src/internal/blit", "src/internal/crc32c"],
-    "lz4": ["src", "src/internal/blit"],
-    "lzw": ["src"],
+    "snappy": ["src", "src/internal/whole", "src/internal/blit", "src/internal/crc32c"],
+    "lz4": ["src", "src/internal/whole", "src/internal/blit"],
+    "lzw": ["src", "src/internal/whole"],
     "zstd": [
-      "src",
+      "src", "src/internal/whole",
       "src/internal/blit",
       "src/internal/bits",
       "src/internal/frame",
@@ -36,7 +36,7 @@
       "src/internal/xxhash"
     ],
     "brotli": [
-      "src",
+      "src", "src/internal/whole",
       "src/internal/blit",
       "src/internal/match_length_fast",
       "src/internal/bits",
@@ -52,6 +52,7 @@
       "src",
       "src/internal/blit",
       "src/internal/match_length_fast",
+      "src/internal/whole",
       "src/zlib",
       "src/zlib/internal/adler32",
       "src/zlib/internal/adler32_fast",
@@ -85,13 +86,16 @@
       "crc32c": ["crc32c.mbt", "crc32c_test.mbt"]
     },
     "snappy": {
+      "whole": ["whole.mbt", "whole_test.mbt"],
       "blit": ["blit.mbt", "blit_test.mbt"],
       "crc32c": ["crc32c.mbt", "crc32c_test.mbt"]
     },
     "lz4": {
+      "whole": ["whole.mbt", "whole_test.mbt"],
       "blit": ["blit.mbt", "blit_test.mbt"]
     },
     "brotli": {
+      "whole": ["whole.mbt", "whole_test.mbt"],
       "blit": ["blit.mbt", "blit_test.mbt"],
       "match_length_fast": ["length.mbt", "length_test.mbt"],
       "bits": ["bit_packer.mbt", "bit_packer_test.mbt"],
@@ -112,7 +116,8 @@
     },
     "deflate": {
       "blit": ["blit.mbt", "blit_test.mbt"],
-      "match_length_fast": ["length.mbt", "length_test.mbt"],
+      "match_length_fast": ["length.mbt", "length_test.mbt", "slide.mbt", "slide_test.mbt"],
+      "whole": ["whole.mbt", "whole_test.mbt"],
       "crc32": [
         "crc32.mbt",
         "crc32_test.mbt"
@@ -145,7 +150,11 @@
       "proof_bits": ["shifts.mbt", "shifts.mbtp", "shifts_test.mbt"],
       "proof_codes": ["codes.mbt", "codes.mbtp", "codes_test.mbt"]
     },
+    "lzw": {
+      "whole": ["whole.mbt", "whole_test.mbt"]
+    },
     "zstd": {
+      "whole": ["whole.mbt", "whole_test.mbt"],
       "blit": ["blit.mbt", "blit_test.mbt"],
       "match_length_fast": ["length.mbt", "length_test.mbt"],
       "bits": ["bit_packer.mbt", "bit_packer_test.mbt"],

@@ -6,7 +6,9 @@ share; each format's module carries copies of the files it uses.
 | Package | Holds | Copied into |
 | --- | --- | --- |
 | `huffman` | Huffman code lengths and canonical codes for encoders, and `CodeMaker`, libdeflate's way of building length-limited codes; decoding tables (`Builder`) and their size bounds (`max_entries`) for decoders. `moon prove` checks its reversal of bits and its canonical codes | brotli, deflate, zstd (zstd's copy is `internal/huffman_code`, without the decoding tables) |
-| `blit` | Copying bytes from one array into another: a block move on native, Wasm and Wasm GC, and a forward loop without index checks on JS, where core's block copy checks every index | brotli, deflate, lz4, png, snappy, zstd |
+| `blit` | Copying bytes from one array into another, down within one (a window that slides), or from a view: a block move on native, Wasm and Wasm GC, and a forward loop without index checks on JS, where core's block copy checks every index | brotli, deflate, lz4, png, snappy, zstd |
+| `match_length_fast` | The SIMD of the LZ77 match finders, where core's experimental `@v128` is confined: the length of a match sixteen bytes at a time on native and Wasm, and (`slide.mbt`) the 16-bit position tables moved 32 KiB down eight entries at a time on Wasm | brotli, deflate, zstd (`slide.mbt`: deflate only) |
+| `whole` | A whole input to a whole output through a streaming encoder or decoder, for the one-shot `compress` and `decompress`: the output goes into one array that doubles as it fills, with `max_output` checked | deflate |
 | `crc32` | CRC-32 (ISO 3309, the reflected polynomial 0xEDB88320), eight bytes at a time (slice-by-8) from tables computed at start-up, 9 KiB | crc, deflate (gzip), png |
 | `crc32c` | CRC-32C (Castagnoli, RFC 3720, the reflected polynomial 0x82F63B78), as `crc32` computes CRC-32 | crc, snappy |
 | `bits` | `BitPacker`, an encoder's least-significant-bit-first bit writer and output buffer, with the end mark of a Zstandard stream read backward | brotli, zstd |
