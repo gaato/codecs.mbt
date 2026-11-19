@@ -14,13 +14,13 @@ pub fn deflate_whole() -> Array[Whole] {
       decode: input => @flate.inflate_all(input),
     },
     {
-      name: "gmlewis/flate 0.36.17",
+      name: "gmlewis/flate 0.36.19",
       decode: input => {
         collect(sink => gm_inflate(Trickle::new(input, 1 << 30), 1 << 16, sink))
       },
     },
     {
-      name: "mizchi/zlib 0.4.10",
+      name: "mizchi/zlib 0.4.12",
       decode: input => @mizchi_zlib.deflate_decompress(input),
     },
     {
@@ -28,6 +28,7 @@ pub fn deflate_whole() -> Array[Whole] {
       decode: input => of_fixed(@fzip.inflate_sync(fixed(input))),
     },
     core_raw_whole(),
+    moonzip_deflate_whole(),
   ]
 }
 
@@ -41,13 +42,13 @@ pub fn zlib_whole() -> Array[Whole] {
       decode: input => @flate_zlib.decompress(input),
     },
     {
-      name: "gmlewis/zlib 0.21.17",
+      name: "gmlewis/zlib 0.21.19",
       decode: input => {
         collect(sink => gm_unzlib(Trickle::new(input, 1 << 30), 1 << 16, sink))
       },
     },
     {
-      name: "mizchi/zlib 0.4.10",
+      name: "mizchi/zlib 0.4.12",
       decode: input => @mizchi_zlib.zlib_decompress(input),
     },
     {
@@ -55,6 +56,7 @@ pub fn zlib_whole() -> Array[Whole] {
       decode: input => of_fixed(@fzip.unzlib_sync(fixed(input))),
     },
     core_zlib_whole(),
+    moonzip_zlib_whole(),
   ]
 }
 
@@ -84,7 +86,7 @@ pub fn zlib_dictionary() -> Array[(String, (Bytes, Bytes) -> Bytes raise)] {
       },
     ),
     (
-      "gmlewis/zlib 0.21.17",
+      "gmlewis/zlib 0.21.19",
       (input, dict) => {
         let (r, err) = @gm_zlib.Reader::new_dict(
           Trickle::new(input, 1 << 30),
@@ -118,13 +120,13 @@ pub fn gzip_whole() -> Array[Whole] {
       decode: input => @flate_gzip.decompress(input),
     },
     {
-      name: "gmlewis/gzip 0.34.17",
+      name: "gmlewis/gzip 0.34.19",
       decode: input => {
         collect(sink => gm_gunzip(Trickle::new(input, 1 << 30), 1 << 16, sink))
       },
     },
     {
-      name: "mizchi/zlib 0.4.10",
+      name: "mizchi/zlib 0.4.12",
       decode: input => @mizchi_zlib.gzip_decompress(input),
     },
     {
@@ -132,6 +134,7 @@ pub fn gzip_whole() -> Array[Whole] {
       decode: input => of_fixed(@fzip.gunzip_sync(fixed(input))),
     },
     core_gzip_whole(),
+    moonzip_gzip_whole(),
   ]
 }
 
@@ -236,7 +239,7 @@ pub fn deflate_pieces() -> Array[Pieces] {
       },
     },
     {
-      name: "gmlewis/flate 0.36.17",
+      name: "gmlewis/flate 0.36.19",
       caller_buffer: true,
       run: (input, piece, out, sink) => {
         gm_inflate(Trickle::new(input, piece), out, sink)
@@ -254,6 +257,7 @@ pub fn deflate_pieces() -> Array[Pieces] {
       },
     },
     core_raw_pieces(),
+    moonzip_deflate_pieces(),
   ]
 }
 
@@ -285,7 +289,7 @@ pub fn zlib_pieces() -> Array[Pieces] {
       },
     },
     {
-      name: "gmlewis/zlib 0.21.17",
+      name: "gmlewis/zlib 0.21.19",
       caller_buffer: true,
       run: (input, piece, out, sink) => {
         gm_unzlib(Trickle::new(input, piece), out, sink)
@@ -303,6 +307,7 @@ pub fn zlib_pieces() -> Array[Pieces] {
       },
     },
     core_zlib_pieces(),
+    moonzip_zlib_pieces(),
   ]
 }
 
@@ -334,7 +339,7 @@ pub fn gzip_pieces() -> Array[Pieces] {
       },
     },
     {
-      name: "gmlewis/gzip 0.34.17",
+      name: "gmlewis/gzip 0.34.19",
       caller_buffer: true,
       run: (input, piece, out, sink) => {
         gm_gunzip(Trickle::new(input, piece), out, sink)
@@ -352,6 +357,7 @@ pub fn gzip_pieces() -> Array[Pieces] {
       },
     },
     core_gzip_pieces(),
+    moonzip_gzip_pieces(),
   ]
 }
 
@@ -373,7 +379,7 @@ pub fn deflate_compress() -> Array[Compress] {
       encode: (input, level) => @flate.deflate_all(input, level~),
     },
     {
-      name: "gmlewis/flate 0.36.17",
+      name: "gmlewis/flate 0.36.19",
       default_level: 0,
       max_level: 0,
       encode: (input, _) => {
@@ -384,7 +390,7 @@ pub fn deflate_compress() -> Array[Compress] {
       },
     },
     {
-      name: "mizchi/zlib 0.4.10",
+      name: "mizchi/zlib 0.4.12",
       default_level: 0,
       max_level: 0,
       // deflate_compress is deflate_compress_best on every target.
@@ -400,5 +406,6 @@ pub fn deflate_compress() -> Array[Compress] {
       },
     },
     core_raw_compress(),
+    moonzip_deflate_compress(),
   ]
 }

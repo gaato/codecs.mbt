@@ -50,7 +50,7 @@ fn left_out() -> Array[String] {
 ///|
 #cfg(not(target="native"))
 fn left_out() -> Array[String] {
-  ["gmlewis/flate 0.36.17"]
+  ["gmlewis/flate 0.36.19"]
 }
 
 ///|
