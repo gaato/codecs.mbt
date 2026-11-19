@@ -1,0 +1,12 @@
+// Generated from parts/whole/moon.pkg by scripts/gen_parts.mbtx: edit it there, not here.
+// A whole input to a whole output, through a streaming encoder or decoder.
+
+import {
+  "gaato/codec",
+}
+
+import {
+  "moonbitlang/core/quickcheck",
+} for "test"
+
+supported_targets = "js + native + wasm + wasm-gc"

@@ -23,7 +23,8 @@ CI too. The pitfalls the script pins are described in zstd's ledger,
 ### What is measured
 
 - Sources: every non-test `.mbt` of `src/`: the formats, the decoder, the
-  encoder, the whole-input functions and the trait implementations. The
+  encoder, the whole-input functions and the trait implementations; and
+  `src/internal/whole/`, the copy of parts/whole they run through. The
   crosscheck's executable, `src/internal/crosscheck/`, is run by
   `scripts/crosscheck.mbtx` and `scripts/gen_vectors.mbtx`, not by the
   tests.
@@ -48,7 +49,8 @@ Must be covered by tests:
   codes, `EndOfMember`, `Flush`, the bounds; the `gaato/codec_bytes` traits
   through generic code.
 
-Accepted as uncovered (needs a row): none at present.
+Accepted as uncovered (needs a row): what the copy of parts/whole leaves
+to JS and to outputs of 2 GiB.
 
 Budgets are the exact uncovered counts: the script fails on any difference.
 
@@ -56,3 +58,4 @@ Budgets are the exact uncovered counts: the script fails on any difference.
 
 | File | Budget | Reason |
 | --- | --- | --- |
+| src/internal/whole/whole.mbt | 4 | The output reaching 2^31 - 1 bytes with no `max_output` (`None => MAX_LENGTH` in `decode`, the `abort` of `encode`), which no test can allocate, and `copy` for JS (`#cfg(target="js")`), a loop without index checks: the ledger measures native, which compiles the block copy instead. The gates run the same tests on JS: `src/internal/whole/whole_test.mbt`, and every `compress` and `decompress` test of the module. |
