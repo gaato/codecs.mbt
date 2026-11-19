@@ -86,7 +86,11 @@ async fn main {
     die(2, "no package under \{dir}/src")
   }
   let work = "_build/asan"
-  @fs.mkdir(work, recursive=true)
+  // `mkdir` with `recursive=true` still fails on an existing directory, so a
+  // second run would stop here.
+  if !@fs.exists(work) {
+    @fs.mkdir(work, recursive=true)
+  }
   let cc = "\{work}/cc"
   @fs.write_text(
     cc,
