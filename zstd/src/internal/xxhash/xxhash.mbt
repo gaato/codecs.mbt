@@ -184,7 +184,7 @@ pub fn Xxh64::digest(self : Xxh64) -> UInt64 {
 ///|
 /// Adds the whole stripes of `data[i:end]` to the lanes `acc`, and returns
 /// where they end. The lanes stay in locals across the stripes.
-#cfg(not(target="js"))
+#cfg(not(any(target="wasm", target="js")))
 fn consume_stripes(
   acc : FixedArray[UInt64],
   data : FixedArray[Byte],
@@ -202,6 +202,41 @@ fn consume_stripes(
     v1 = round(v1, read64(data, i + 8))
     v2 = round(v2, read64(data, i + 16))
     v3 = round(v3, read64(data, i + 24))
+    i += 32
+  }
+  acc[0] = v0
+  acc[1] = v1
+  acc[2] = v2
+  acc[3] = v3
+  i
+}
+
+///|
+/// Wasm loads the four lanes directly from a single view of the input.
+#cfg(target="wasm")
+fn consume_stripes(
+  acc : FixedArray[UInt64],
+  data : FixedArray[Byte],
+  start : Int32,
+  end : Int32,
+) -> Int32 {
+  let mut i = start
+  guard end - i >= 32 else { return i }
+  let mut v0 = acc[0]
+  let mut v1 = acc[1]
+  let mut v2 = acc[2]
+  let mut v3 = acc[3]
+  let bytes = data.unsafe_reinterpret_as_bytes()
+  while end - i >= 32 {
+    // The caller supplies a valid range and this loop has 32 bytes left.
+    let w0 = v0 + bytes.unsafe_read_uint64_le(i) * PRIME64_2
+    let w1 = v1 + bytes.unsafe_read_uint64_le(i + 8) * PRIME64_2
+    let w2 = v2 + bytes.unsafe_read_uint64_le(i + 16) * PRIME64_2
+    let w3 = v3 + bytes.unsafe_read_uint64_le(i + 24) * PRIME64_2
+    v0 = ((w0 << 31) | (w0 >> 33)) * PRIME64_1
+    v1 = ((w1 << 31) | (w1 >> 33)) * PRIME64_1
+    v2 = ((w2 << 31) | (w2 >> 33)) * PRIME64_1
+    v3 = ((w3 << 31) | (w3 >> 33)) * PRIME64_1
     i += 32
   }
   acc[0] = v0
@@ -274,6 +309,7 @@ fn round_limbs(
 /// The high 32 bits of the 64-bit product of `a` and `b`, from 16-bit
 /// halves whose products fit in 32 bits.
 #cfg(target="js")
+#inline
 fn mul_high(a : UInt32, b : UInt32) -> UInt32 {
   let a0 = a & 0xFFFF
   let a1 = a >> 16
@@ -288,9 +324,11 @@ fn mul_high(a : UInt32, b : UInt32) -> UInt32 {
 
 ///|
 #cfg(target="js")
+#inline
 fn read32_u(data : FixedArray[Byte], i : Int32) -> UInt32 {
-  data[i].to_uint() |
-  (data[i + 1].to_uint() << 8) |
-  (data[i + 2].to_uint() << 16) |
-  (data[i + 3].to_uint() << 24)
+  // round_limbs reads the two halves of one of the four complete lanes.
+  data.unsafe_get(i).to_uint() |
+  (data.unsafe_get(i + 1).to_uint() << 8) |
+  (data.unsafe_get(i + 2).to_uint() << 16) |
+  (data.unsafe_get(i + 3).to_uint() << 24)
 }

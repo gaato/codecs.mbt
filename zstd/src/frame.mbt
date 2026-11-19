@@ -8,7 +8,8 @@ fn Decoder::magic(self : Decoder) -> Unit raise Stop {
   // a byte after the last frame is trailing data even when it is alone.
   let take = (4 - self.hdr_len).min(self.view.length() - self.in_pos)
   if take > 0 {
-    self.hdr.blit_from_bytesview(
+    @blit.from_view(
+      self.hdr,
       self.hdr_len,
       self.view[self.in_pos:self.in_pos + take],
     )
@@ -239,7 +240,8 @@ fn Decoder::compressed_block(self : Decoder) -> Status? raise Stop {
     self.view.length() - self.in_pos,
   )
   if take > 0 {
-    self.block.blit_from_bytesview(
+    @blit.from_view(
+      self.block,
       self.block_len,
       self.view[self.in_pos:self.in_pos + take],
     )

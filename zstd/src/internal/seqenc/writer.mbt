@@ -67,13 +67,25 @@ pub fn Writer::write(
   if n == 0 {
     return
   }
-  self.ll.counts.fill(0)
-  self.ml.counts.fill(0)
-  self.of.counts.fill(0)
+  let ll = block.ll
+  let ml = block.ml
+  let offsets = block.offsets
+  let ll_counts = self.ll.counts
+  let ml_counts = self.ml.counts
+  let of_counts = self.of.counts
+  ll_counts.fill(0)
+  ml_counts.fill(0)
+  of_counts.fill(0)
   for i in 0..<n {
-    self.ll.counts[ll_code(block.ll[i])] += 1
-    self.ml.counts[ml_code(block.ml[i])] += 1
-    self.of.counts[offset_code(block.offsets[i])] += 1
+    // Block::add has written the first n entries of all three arrays.
+    let lc = ll_code(ll.unsafe_get(i))
+    let mc = ml_code(ml.unsafe_get(i))
+    let oc = offset_code(offsets.unsafe_get(i))
+    // The counts arrays cover their respective alphabets: 36, 53, and
+    // 32 codes. A positive OffsetValue has a highest bit in 0..31.
+    ll_counts.unsafe_set(lc, ll_counts.unsafe_get(lc) + 1)
+    ml_counts.unsafe_set(mc, ml_counts.unsafe_get(mc) + 1)
+    of_counts.unsafe_set(oc, of_counts.unsafe_get(oc) + 1)
   }
   self.ll.select(n)
   self.of.select(n)
@@ -85,21 +97,26 @@ pub fn Writer::write(
   let lt = self.ll.table
   let mt = self.ml.table
   let ot = self.of.table
-  let mut ls = lt.start(ll_code(block.ll[n - 1]))
-  let mut ms = mt.start(ml_code(block.ml[n - 1]))
-  let mut os = ot.start(offset_code(block.offsets[n - 1]))
+  let mut ls = lt.start(ll_code(ll[n - 1]))
+  let mut ms = mt.start(ml_code(ml[n - 1]))
+  let mut os = ot.start(offset_code(offsets[n - 1]))
   for i = n - 1; i >= 0; i = i - 1 {
-    let lc = ll_code(block.ll[i])
-    let mc = ml_code(block.ml[i])
-    let oc = offset_code(block.offsets[i])
-    let extra = offset_extra(block.offsets[i], oc)
+    // i stays in 0..<n, the written prefix of each sequence array.
+    let literal_len = ll.unsafe_get(i)
+    let match_len = ml.unsafe_get(i)
+    let offset = offsets.unsafe_get(i)
+    let lc = ll_code(literal_len)
+    let mc = ml_code(match_len)
+    let oc = offset_code(offset)
+    let extra = offset_extra(offset, oc)
     if i < n - 1 {
       os = ot.encode(out, os, oc)
       ms = mt.encode(out, ms, mc)
       ls = lt.encode(out, ls, lc)
     }
-    out.write(ll_bits[lc], block.ll[i] - ll_base[lc])
-    out.write(ml_bits[mc], block.ml[i] - ml_base[mc])
+    // The extra-bit and base tables cover every LL and ML code.
+    out.write(ll_bits.unsafe_get(lc), literal_len - ll_base.unsafe_get(lc))
+    out.write(ml_bits.unsafe_get(mc), match_len - ml_base.unsafe_get(mc))
     // At most 31 bits in one call. BitPacker splits internally on JS
     // when these and a partial byte would exceed its 32-bit accumulator.
     out.write(oc, extra.reinterpret_as_int())

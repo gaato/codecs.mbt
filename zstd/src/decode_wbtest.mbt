@@ -411,20 +411,26 @@ test "a frame that names a dictionary carries its id" {
 }
 
 ///|
-/// Steps a fresh decoder over `input`, given whole with `end`, into `room`
-/// bytes at a time, until it finishes or raises: the output, the input
+/// Steps a fresh decoder over `input` into `room` bytes at a time,
+/// optionally feeding input in pieces. Returns the output, the input
 /// consumed, and the error, if any.
 fn run_to_error(
   input : BytesView,
   room : Int32,
+  piece~ : Int32 = input.length().max(1),
 ) -> (Bytes, Int32, @codec.ErrorKind?) raise {
   let decoder = Decoder()
   let out = FixedArray::make(room, b'\x00')
   let got = Buffer()
   let mut taken = 0
+  let mut offered = piece.min(input.length())
   for ;; {
     let (status, error) = try
-      decoder.step_into(input[taken:], out, end=true)
+      decoder.step_into(
+        input[taken:offered],
+        out,
+        end=offered == input.length(),
+      )
     catch {
       CodecError(kind, _) => (None, Some(kind))
     } noraise {
@@ -447,9 +453,42 @@ fn run_to_error(
     match status {
       Some(NeedMoreOutput) => continue
       Some(Done) => return (got.to_bytes(), taken, None)
-      _ => fail("NeedMoreInput after the end")
+      Some(NeedMoreInput) => {
+        assert_eq(taken, offered)
+        assert_true(offered < input.length())
+        offered += piece.min(input.length() - offered)
+      }
+      None => fail("step gave neither status nor error")
     }
   }
+}
+
+///|
+/// Both target-selected sequence copy paths use the same goldens. Check
+/// outputs for byte-sized input and pin error positions and output prefixes.
+test "sequence copy paths agree on byte-sized input and corrupt vectors" {
+  for v in vectors {
+    guard v.size <= 300000 else { continue }
+    let got = drive(
+      Decoder(max_window_bits=v.window_bits),
+      v.input(),
+      next_in=() => 1,
+      next_out=() => 4096,
+    )
+    assert_eq(@checksum.sha256(got), v.sha256, msg=v.name)
+  }
+  let errors = []
+  for (name, compressed) in corrupt_vectors {
+    let input = @base64.decode(compressed, ignore_whitespace=true)
+    let (whole, whole_taken, whole_error) = run_to_error(input, 4096)
+    let (split, split_taken, split_error) = run_to_error(input, 1, piece=1)
+    assert_eq(whole_error, Some(Corrupt), msg=name)
+    assert_eq(split_error, whole_error, msg=name)
+    assert_eq(split, whole, msg=name)
+    assert_eq(split_taken, whole_taken, msg=name)
+    errors.push((split_taken, split))
+  }
+  assert_eq(errors, [(17, b"\x00\x00\x00\x00\x00\x00"), (19, b""), (27, b"")])
 }
 
 ///|

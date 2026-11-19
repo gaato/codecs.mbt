@@ -62,7 +62,8 @@ pub struct Decoder {
   priv mut out : MutArrayView[Byte]
   priv mut fixed_out : FixedArray[Byte]?
   priv mut out_pos : Int32
-  priv empty_out : FixedArray[Byte]
+  priv empty_input : BytesView
+  priv empty_output : MutArrayView[Byte]
   // The window: a ring of up to `ring_max` bytes, allocated as output
   // grows; it wraps only once it is `ring_max` long. `pending` bytes before
   // `wpos` are not handed out yet; `filled` is how far back an offset may
@@ -137,18 +138,20 @@ pub fn Decoder::Decoder(
   until~ : @codec_bytes.Until = EndOfInput,
   dictionary? : Dictionary,
 ) -> Decoder {
-  let empty_out = FixedArray::make(0, b'\x00')
+  let empty_input = b""[:]
+  let empty_output = FixedArray::make(0, b'\x00').mut_view()
   {
     max_window_bits: max_window_bits.clamp(min=10, max=30),
     until,
-    view: b""[:],
+    view: empty_input,
     in_pos: 0,
     hdr: FixedArray::make(14, b'\x00'),
     hdr_len: 0,
-    out: empty_out.mut_view(),
+    out: empty_output,
     fixed_out: None,
     out_pos: 0,
-    empty_out,
+    empty_input,
+    empty_output,
     ring: FixedArray::make(0, b'\x00'),
     ring_max: 0,
     wpos: 0,
@@ -363,9 +366,9 @@ fn Decoder::finish_failed(
 ///|
 /// Drops the caller's buffers so a suspended decoder holds neither.
 fn Decoder::release_step(self : Decoder) -> Unit {
-  self.view = b""[:]
+  self.view = self.empty_input
   self.in_pos = 0
-  self.out = self.empty_out.mut_view()
+  self.out = self.empty_output
   self.fixed_out = None
   self.out_pos = 0
 }
@@ -377,7 +380,8 @@ fn Decoder::release_step(self : Decoder) -> Unit {
 fn Decoder::fill(self : Decoder, n : Int32) -> Unit raise Stop {
   let take = (n - self.hdr_len).min(self.view.length() - self.in_pos)
   if take > 0 {
-    self.hdr.blit_from_bytesview(
+    @blit.from_view(
+      self.hdr,
       self.hdr_len,
       self.view[self.in_pos:self.in_pos + take],
     )

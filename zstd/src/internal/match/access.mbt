@@ -156,25 +156,15 @@ fn hash_bytes(
   width : Int32,
   log : Int32,
 ) -> Int32 {
+  // The match finders supply 0 <= p and p + width <= the valid data end.
+  let word = hash_word(data, p)
   if width == 4 {
-    let v = data[p].to_uint() |
-      (data[p + 1].to_uint() << 8) |
-      (data[p + 2].to_uint() << 16) |
-      (data[p + 3].to_uint() << 24)
-    return ((v * 2654435761U) >> (32 - log)).reinterpret_as_int()
+    return ((word * 2654435761U) >> (32 - log)).reinterpret_as_int()
   }
-  // Byte i of the word lands at bit 64 - 8 * (width - i).
-  let mut lo = 0U
-  let mut hi = 0U
-  for i in 0..<width {
-    let k = 8 - width + i
-    let b = data[p + i].to_uint()
-    if k < 4 {
-      lo = lo | (b << (8 * k))
-    } else {
-      hi = hi | (b << (8 * (k - 4)))
-    }
-  }
+  // For widths 5..8 the upper half is the last four bytes. Shifting the
+  // first four leaves the other bytes at the top of the lower half.
+  let lo = word << (64 - 8 * width)
+  let hi = hash_word(data, p + width - 4)
   let prime_hi = match width {
     5 => 0xCFU
     6 => 0xCF1BU
@@ -190,6 +180,17 @@ fn hash_bytes(
   // The high half of the product modulo 2^64.
   let top = mul_high(lo, prime_lo) + hi * prime_lo + lo * prime_hi
   (top >> (32 - log)).reinterpret_as_int()
+}
+
+///|
+/// Reads four bytes within the hash's valid range.
+#cfg(target="js")
+#inline
+fn hash_word(data : FixedArray[Byte], p : Int32) -> UInt32 {
+  data.unsafe_get(p).to_uint() |
+  (data.unsafe_get(p + 1).to_uint() << 8) |
+  (data.unsafe_get(p + 2).to_uint() << 16) |
+  (data.unsafe_get(p + 3).to_uint() << 24)
 }
 
 ///|

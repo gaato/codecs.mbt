@@ -30,13 +30,6 @@ fn Fse::set_rle(self : Fse, symbol : Byte) -> Unit {
 }
 
 ///|
-/// The entry of `state`.
-#inline
-fn Fse::entry_of(self : Fse, state : Int32) -> Int32 {
-  self.entry[state]
-}
-
-///|
 /// The symbol of `state`.
 fn Fse::symbol_of(self : Fse, state : Int32) -> Int32 {
   entry_symbol(self.entry[state])
