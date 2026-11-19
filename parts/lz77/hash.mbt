@@ -24,10 +24,11 @@ fn load4(data : FixedArray[Byte], pos : Int32) -> UInt32 {
 ///|
 #cfg(not(any(target="native", target="wasm")))
 fn load4(data : FixedArray[Byte], pos : Int32) -> UInt32 {
-  data[pos].to_uint() |
-  (data[pos + 1].to_uint() << 8) |
-  (data[pos + 2].to_uint() << 16) |
-  (data[pos + 3].to_uint() << 24)
+  // hash4's callers leave four bytes starting at pos in data.
+  data.unsafe_get(pos).to_uint() |
+  (data.unsafe_get(pos + 1).to_uint() << 8) |
+  (data.unsafe_get(pos + 2).to_uint() << 16) |
+  (data.unsafe_get(pos + 3).to_uint() << 24)
 }
 
 ///|
@@ -44,28 +45,13 @@ pub fn match_length(
 }
 
 ///|
-/// `data[i]`, without the index check on native and Wasm, where each check
-/// is a call on Wasm: each caller says why `i` is within `data`.
-#cfg(any(target="native", target="wasm"))
+/// `data[i]` without the index check: each caller bounds `i` within `data`.
 fn[T] read(data : FixedArray[T], i : Int32) -> T {
   data.unsafe_get(i)
 }
 
 ///|
-#cfg(not(any(target="native", target="wasm")))
-fn[T] read(data : FixedArray[T], i : Int32) -> T {
-  data[i]
-}
-
-///|
-/// `data[i] = value`, as `read`.
-#cfg(any(target="native", target="wasm"))
+/// `data[i] = value`, as `read`: each caller bounds `i` within `data`.
 fn[T] write(data : FixedArray[T], i : Int32, value : T) -> Unit {
   data.unsafe_set(i, value)
-}
-
-///|
-#cfg(not(any(target="native", target="wasm")))
-fn[T] write(data : FixedArray[T], i : Int32, value : T) -> Unit {
-  data[i] = value
 }

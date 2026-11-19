@@ -509,3 +509,31 @@ test "the decoder is a gaato/codec_bytes Decode" {
     @codec_bytes.Decode::reset(decoder)
   }
 }
+
+///|
+test "gzip finalizes after empty calls while the inflater is starved" {
+  let d = Decoder()
+  let stream = compress(b"starved wrapper")
+  let room = FixedArray::make(64, b'\x00')
+  for truncated in [true, false] {
+    d.reset()
+    assert_eq(d.step_into(stream[:11], room, end=false), NeedMoreInput)
+    for _ in 0..<2 {
+      assert_eq(d.step_into(b"", room, end=false), NeedMoreInput)
+      assert_eq(d.last_consumed(), 0)
+      assert_eq(d.last_produced(), 0)
+    }
+    if truncated {
+      try d.step_into(b"", room, end=true) catch {
+        @codec.CodecError(Truncated, "the input ends inside the DEFLATE data") =>
+          ()
+        err => fail("unexpected final error: \{Repr(err)}")
+      } noraise {
+        _ => fail("truncated stream accepted")
+      }
+    } else {
+      assert_eq(d.step_into(stream[11:], room, end=false), NeedMoreInput)
+      assert_eq(d.step_into(b"", room, end=true), Done)
+    }
+  }
+}

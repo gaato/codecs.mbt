@@ -260,8 +260,16 @@ fn Decoder::run(self : Decoder, end~ : Bool) -> Status raise Stop {
       }
       Data => {
         let inner = self.inner
-        let rest = self.view[self.in_pos:]
-        let room = self.out.mut_view(start=self.out_pos)
+        let rest = if self.in_pos == 0 {
+          self.view
+        } else {
+          self.view[self.in_pos:]
+        }
+        let room = if self.out_pos == 0 {
+          self.out
+        } else {
+          self.out.mut_view(start=self.out_pos)
+        }
         let status = try {
           match self.fixed_out {
             Some(fixed) if self.out_pos == 0 =>
@@ -278,10 +286,12 @@ fn Decoder::run(self : Decoder, end~ : Bool) -> Status raise Stop {
           }
         }
         let produced = inner.last_produced()
-        self.adler = @adler32_fast.update(
-          self.adler,
-          room.exact_view(end=produced),
-        )
+        if produced > 0 {
+          self.adler = @adler32_fast.update(
+            self.adler,
+            room.exact_view(end=produced),
+          )
+        }
         self.in_pos += inner.last_consumed()
         self.out_pos += produced
         match status {

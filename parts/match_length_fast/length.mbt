@@ -41,7 +41,7 @@ pub fn length(
 }
 
 ///|
-/// Checked reference on targets without efficient SIMD loads.
+/// Counts equal bytes individually for 0 <= q < p <= end <= data.length().
 #cfg(not(any(target="native", target="wasm")))
 pub fn length(
   data : FixedArray[Byte],
@@ -50,7 +50,8 @@ pub fn length(
   end : Int32,
 ) -> Int32 {
   let mut n = 0
-  while p + n < end && data[p + n] == data[q + n] {
+  // Both reads are inside data: 0 <= q < p and p + n < end.
+  while n < end - p && data.unsafe_get(p + n) == data.unsafe_get(q + n) {
     n += 1
   }
   n

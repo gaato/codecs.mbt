@@ -567,9 +567,11 @@ pub fn Deflater::step(
   for ;; {
     // Hand out what waits; nothing more is written until all of it is out.
     let n = (self.out_pos - self.out_drained).min(output.length() - produced)
-    @blit.into_view(output, produced, self.out, self.out_drained, n)
-    self.out_drained += n
-    produced += n
+    if n > 0 {
+      @blit.into_view(output, produced, self.out, self.out_drained, n)
+      self.out_drained += n
+      produced += n
+    }
     if self.out_drained < self.out_pos {
       return self.finish_step(NeedMoreOutput, taken, produced)
     }
