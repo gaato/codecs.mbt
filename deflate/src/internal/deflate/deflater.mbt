@@ -586,7 +586,7 @@ pub fn Deflater::step(
     if self.end < 0 {
       let n = (input.length() - taken).min(self.buf.length() - self.avail)
       if n > 0 {
-        self.buf.blit_from_bytesview(self.avail, input[taken:taken + n])
+        @blit.from_view(self.buf, self.avail, input[taken:taken + n])
         self.avail += n
         taken += n
         self.need_flush = true
@@ -672,7 +672,7 @@ fn Deflater::slide(self : Deflater) -> Unit {
   let keep = if self.strategy is Stored { 0 } else { WINDOW }
   let delta = self.in_next - keep
   guard delta > 0 else { return }
-  FixedArray::unsafe_blit(self.buf, 0, self.buf, delta, self.avail - delta)
+  @blit.move_down(self.buf, 0, delta, self.avail - delta)
   self.avail -= delta
   self.in_next -= delta
   self.block_begin -= delta
@@ -764,7 +764,7 @@ fn Deflater::write_stored(
     self.align()
     self.put(len, 16)
     self.put(len ^ 0xFFFF, 16)
-    FixedArray::unsafe_blit(self.out, self.out_pos, self.buf, p, len)
+    @blit.bytes(self.out, self.out_pos, self.buf, p, len)
     self.out_pos += len
     p += len
     if last {

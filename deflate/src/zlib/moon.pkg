@@ -6,6 +6,7 @@ import {
   "gaato/deflate/zlib/internal/adler32",
   "gaato/deflate/zlib/internal/adler32_fast",
   "gaato/deflate/zlib/internal/header",
+  "gaato/deflate/internal/whole",
 }
 
 import {

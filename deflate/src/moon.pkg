@@ -3,6 +3,7 @@ import {
   "gaato/codec_bytes",
   "gaato/deflate/internal/inflate",
   "gaato/deflate/internal/deflate" @deflater,
+  "gaato/deflate/internal/whole",
 }
 
 import {

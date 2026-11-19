@@ -14,6 +14,11 @@ never does. Every breaking change is listed with a migration note.
 
 - Optional `quality` and `window_bits` arguments on `compress_bound`, preserving its default quality-4 result and accounting for the smaller fragment/block sizes at qualities 0..3.
 
+### Changed
+
+- **Faster one-shot calls**, and faster encoding and decoding on JS, with the same bytes out: `compress` and `decompress` write straight into one growing array instead of appending 64 KiB pieces to a buffer, and the window, the encoder's input and bit writer copy without core's checked copy on JS. Decoding the benchmarks' 512 KiB text whole took 16.2 ms on JS, now 8.1.
+- **`decompress` with a negative `max_output`** returns an empty output instead of raising, as the documented limit of 0 allows; a stream that decodes to any byte still raises `LimitExceeded`.
+
 ### Fixed
 
 - `Decoder(until=EndOfMember)` returns whole bytes prefetched from the current input before suspending for output. Bytes belonging to a following member remain unconsumed even with one-byte output buffers; completing a stream no longer tries to return bytes counted by an earlier step.

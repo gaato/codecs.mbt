@@ -3,6 +3,7 @@ import {
   "gaato/codec_bytes",
   "gaato/snappy/internal/blit",
   "gaato/snappy/internal/crc32c",
+  "gaato/snappy/internal/whole",
 }
 
 import {

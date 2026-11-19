@@ -7,6 +7,10 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+### Changed
+
+- **Faster one-shot calls**, with the same bytes out: `compress` and `decompress` write straight into one growing array instead of appending 64 KiB pieces to a buffer. Decoding the benchmarks' 512 KiB text whole took 8.8 ms on JS, now 4.1.
+
 ## [0.1.0] - 2026-11-16
 
 ### Added

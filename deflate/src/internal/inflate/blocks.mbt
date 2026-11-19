@@ -102,7 +102,8 @@ fn Inflater::stored(self : Inflater) -> @codec_bytes.Status? {
     if n == 0 {
       return Some(NeedMoreInput)
     }
-    self.ring.blit_from_bytesview(
+    @blit.from_view(
+      self.ring,
       self.wpos,
       self.view[self.in_pos:self.in_pos + n],
     )

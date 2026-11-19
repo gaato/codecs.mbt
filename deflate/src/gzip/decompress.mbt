@@ -1,7 +1,7 @@
 ///|
 /// Decodes a whole gzip stream held in memory: every member, each checked
 /// against its CRC-32 and length, their data concatenated. `max_output` caps
-/// the decoded size (unlimited by default) and raises
+/// the decoded size (unlimited by default; 0 for a negative one) and raises
 /// `LimitExceeded({ resource: Output, .. })` past it; bytes after the last
 /// member that begin no member raise `TrailingData`. Headers are skipped
 /// (`keep_header=false`): their extra fields, names and comments are not
@@ -11,29 +11,10 @@ pub fn decompress(
   max_output? : Int32,
 ) -> Bytes raise @codec.CodecError {
   let decoder = Decoder(keep_header=false)
-  let chunk = FixedArray::make(1 << 16, b'\x00')
-  let out = Buffer()
-  let mut rest = input
-  for ;; {
-    let status = decoder.step_into(rest, chunk, end=true)
-    rest = rest[decoder.last_consumed():]
-    let produced = decoder.last_produced()
-    // `out` holds at most `limit` bytes, so this cannot overflow.
-    if max_output is Some(limit) && produced > limit - out.length() {
-      raise CodecError(
-        LimitExceeded({
-          resource: Output,
-          needed: None,
-          limit: limit.max(0).to_uint64(),
-        }),
-        "the output exceeds \{limit} bytes",
-      )
-    }
-    out.write_bytesview(Bytes::from_array(chunk[:produced])[:])
-    if status is Done {
-      return out.to_bytes()
-    }
-  }
+  @whole.decode(input, max_output?, (rest, room) => {
+    let status = decoder.step(rest, room, end=true)
+    (decoder.last_consumed(), decoder.last_produced(), status is Done)
+  })
 }
 
 ///|
@@ -46,15 +27,8 @@ pub fn compress(
   header? : Header,
 ) -> Bytes {
   let encoder = Encoder(level~, header?)
-  let chunk = FixedArray::make(1 << 16, b'\x00')
-  let out = Buffer()
-  let mut rest = input
-  for ;; {
-    let status = encoder.step_into(rest, chunk, action=Finish)
-    rest = rest[encoder.last_consumed():]
-    out.write_bytesview(Bytes::from_array(chunk[:encoder.last_produced()])[:])
-    if status is Done {
-      return out.to_bytes()
-    }
-  }
+  @whole.encode(input, (rest, room) => {
+    let status = encoder.step(rest, room, action=Finish)
+    (encoder.last_consumed(), encoder.last_produced(), status is Done)
+  })
 }

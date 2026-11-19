@@ -7,6 +7,11 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+### Changed
+
+- **Faster one-shot `decompress`**, and faster encoding and decoding on JS, with the same bytes out: `decompress` writes straight into one growing array instead of appending 64 KiB pieces to a buffer, and the window, the encoder's history, literals and bit writer copy without core's checked copy on JS. Decoding the benchmarks' 512 KiB text whole took 15.3 ms on JS, now 8.0.
+- **`decompress` with a negative `max_output`** takes it as 0: an empty output is returned instead of raising, and a stream that decodes to any byte still raises `LimitExceeded` with a limit of 0, as documented for brotli, lz4, lzw and snappy.
+
 ## [0.6.0] - 2026-11-17
 
 ### Added

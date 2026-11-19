@@ -394,25 +394,19 @@ fn Encoder::append(self : Encoder, bytes : BytesView) -> Unit {
       size = size * 2
     }
     let grown = FixedArray::make(size.min(self.data_max), b'\x00')
-    FixedArray::unsafe_blit(grown, 0, self.data, 0, self.data_len)
+    @blit.bytes(grown, 0, self.data, 0, self.data_len)
     self.data = grown
   }
   if self.data_len + n > self.data.length() {
     // Keep the window before the input not encoded yet. `data_max` leaves
     // room for at least a meta-block, so the shift is at least that.
     let shift = self.block_start - self.max_distance
-    FixedArray::unsafe_blit(
-      self.data,
-      0,
-      self.data,
-      shift,
-      self.data_len - shift,
-    )
+    @blit.move_down(self.data, 0, shift, self.data_len - shift)
     self.data_len -= shift
     self.block_start -= shift
     self.matcher.slide(shift)
   }
-  self.data.blit_from_bytesview(self.data_len, bytes)
+  @blit.from_view(self.data, self.data_len, bytes)
   self.data_len += n
 }
 

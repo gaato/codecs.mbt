@@ -11,6 +11,7 @@ import {
   "gaato/zstd/internal/seqenc",
   "gaato/zstd/internal/xxhash",
   "moonbitlang/core/debug",
+  "gaato/zstd/internal/whole",
 }
 
 import {

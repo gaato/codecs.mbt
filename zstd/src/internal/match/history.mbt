@@ -52,7 +52,7 @@ fn History::prepare(self : History, block_max : Int32) -> Int32 {
   let cut = (self.start - self.window).max(0)
   // prepare runs with no unfinished block. Both ranges lie in valid data;
   // unsafe_blit has memmove semantics for their overlap.
-  FixedArray::unsafe_blit(self.data, 0, self.data, cut, self.end - cut)
+  @blit.move_down(self.data, 0, cut, self.end - cut)
   self.start -= cut
   self.end -= cut
   rebase_positions(self.first, cut)
@@ -77,7 +77,7 @@ fn History::grow(self : History, n : Int32) -> Unit {
       .max((self.data.length() * 2).max(1024))
       .min(self.limit())
     let grown = FixedArray::make(size, b'\x00')
-    FixedArray::unsafe_blit(grown, 0, self.data, 0, self.end)
+    @blit.bytes(grown, 0, self.data, 0, self.end)
     self.data = grown
   }
 }
@@ -87,7 +87,7 @@ fn History::grow(self : History, n : Int32) -> Unit {
 /// cutter limits the total to the block size passed to `prepare`.
 pub fn History::append(self : History, bytes : BytesView) -> Unit {
   self.grow(bytes.length())
-  self.data.blit_from_bytesview(self.end, bytes)
+  @blit.from_view(self.data, self.end, bytes)
   self.end += bytes.length()
 }
 
@@ -98,7 +98,7 @@ fn History::append_fixed(
   n : Int32,
 ) -> Unit {
   self.grow(n)
-  FixedArray::unsafe_blit(self.data, self.end, bytes, 0, n)
+  @blit.bytes(self.data, self.end, bytes, 0, n)
   self.end += n
 }
 

@@ -23,20 +23,13 @@ pub fn compress(
     dictionary?,
     dictionary_id?,
   )
-  let chunk = FixedArray::make(1 << 16, b'\x00')
-  let out = Buffer()
-  let mut rest = input
-  for ;; {
+  @whole.encode(input, (rest, room) => {
     // Without a content size, the encoder never raises.
-    let status = encoder.step(rest, chunk.mut_view(), action=Finish) catch {
+    let status = encoder.step(rest, room, action=Finish) catch {
       _ => abort("compress: the encoder raised without a content size")
     }
-    rest = rest[encoder.last_consumed():]
-    out.write_bytesview(Bytes::from_array(chunk[:encoder.last_produced()])[:])
-    if status is Done {
-      return out.to_bytes()
-    }
-  }
+    (encoder.last_consumed(), encoder.last_produced(), status is Done)
+  })
 }
 
 ///|
@@ -50,29 +43,10 @@ pub fn decompress(
   dictionary? : BytesView,
 ) -> Bytes raise @codec.CodecError {
   let decoder = Decoder(dictionary?)
-  let chunk = FixedArray::make(1 << 16, b'\x00')
-  let out = Buffer()
-  let mut rest = input
-  for ;; {
-    let status = decoder.step(rest, chunk.mut_view(), end=true)
-    rest = rest[decoder.last_consumed():]
-    let produced = decoder.last_produced()
-    // `out` holds at most `limit` bytes, so this cannot overflow.
-    if max_output is Some(limit) && produced > limit.max(0) - out.length() {
-      raise @codec.CodecError(
-        LimitExceeded({
-          resource: Output,
-          needed: None,
-          limit: limit.max(0).to_uint64(),
-        }),
-        "the output exceeds \{limit} bytes",
-      )
-    }
-    out.write_bytesview(Bytes::from_array(chunk[:produced])[:])
-    if status is Done {
-      return out.to_bytes()
-    }
-  }
+  @whole.decode(input, max_output?, (rest, room) => {
+    let status = decoder.step(rest, room, end=true)
+    (decoder.last_consumed(), decoder.last_produced(), status is Done)
+  })
 }
 
 ///|
@@ -90,17 +64,10 @@ pub fn decompress_block(
 ) -> Bytes raise @codec.CodecError {
   let decoder = Decoder::make(EndOfInput, dictionary, true)
   decoder.block_max = max_output.max(0)
-  let chunk = FixedArray::make(1 << 16, b'\x00')
-  let out = Buffer()
-  let mut rest = input
-  for ;; {
-    let status = decoder.step(rest, chunk.mut_view(), end=true)
-    rest = rest[decoder.last_consumed():]
-    out.write_bytesview(Bytes::from_array(chunk[:decoder.last_produced()])[:])
-    if status is Done {
-      return out.to_bytes()
-    }
-  }
+  @whole.decode(input, (rest, room) => {
+    let status = decoder.step(rest, room, end=true)
+    (decoder.last_consumed(), decoder.last_produced(), status is Done)
+  })
 }
 
 ///|

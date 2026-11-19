@@ -162,7 +162,7 @@ fn Inflater::go_fast(self : Inflater) -> Unit raise Stop {
         ring.unsafe_set(wpos + i, ring.unsafe_get((from + i) & WINDOW_MASK))
       }
     } else if distance >= length && length > 32 {
-      FixedArray::unsafe_blit(ring, wpos, ring, from, length)
+      @blit.bytes(ring, wpos, ring, from, length)
     } else {
       // Forward, so that an overlapping match repeats the bytes it wrote.
       @blit.forward(ring, wpos, from, length)

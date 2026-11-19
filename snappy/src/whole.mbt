@@ -14,7 +14,7 @@ pub fn compress(input : BytesView) -> Bytes {
   let out = FixedArray::make(bound.to_int(), b'\x00')
   let status = encoder.step(input, out.mut_view(), action=Finish)
   guard status is Done else { abort("compress: the bound was too small") }
-  Bytes::from_array(out[0:encoder.last_produced()])
+  @whole.take(out, encoder.last_produced())
 }
 
 ///|
@@ -26,29 +26,10 @@ pub fn decompress(
   max_output? : Int32,
 ) -> Bytes raise @codec.CodecError {
   let decoder = Decoder()
-  let chunk = FixedArray::make(BLOCK_SIZE, b'\x00')
-  let out = Buffer()
-  let mut rest = input
-  for ;; {
-    let status = decoder.step(rest, chunk.mut_view(), end=true)
-    rest = rest[decoder.last_consumed():]
-    let produced = decoder.last_produced()
-    // `out` holds at most `limit` bytes, so this cannot overflow.
-    if max_output is Some(limit) && produced > limit.max(0) - out.length() {
-      raise @codec.CodecError(
-        LimitExceeded({
-          resource: Output,
-          needed: None,
-          limit: limit.max(0).to_uint64(),
-        }),
-        "the output exceeds \{limit} bytes",
-      )
-    }
-    out.write_bytesview(Bytes::from_array(chunk[:produced])[:])
-    if status is Done {
-      return out.to_bytes()
-    }
-  }
+  @whole.decode(input, max_output?, (rest, room) => {
+    let status = decoder.step(rest, room, end=true)
+    (decoder.last_consumed(), decoder.last_produced(), status is Done)
+  })
 }
 
 ///|

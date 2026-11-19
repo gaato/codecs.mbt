@@ -87,7 +87,7 @@ fn decode_elements(
         raise stopped(written, op, "a literal past the input or the length")
       }
       let len = len.to_int()
-      dst.blit_from_bytesview(op, src[ip:ip + len])
+      @blit.from_view(dst, op, src[ip:ip + len])
       ip += len
       op += len
       continue
@@ -127,7 +127,7 @@ fn decode_elements(
     }
     let from = op - offset.to_int()
     if offset.to_int() >= len {
-      FixedArray::unsafe_blit(dst, op, dst, from, len)
+      @blit.bytes(dst, op, dst, from, len)
     } else {
       // Overlapping: the copy repeats bytes it writes.
       @blit.forward(dst, op, from, len)

@@ -262,7 +262,7 @@ pub fn Encoder::step(
     }
     if take > 0 {
       let chunk = input[self.consumed:self.consumed + take]
-      self.buf.blit_from_bytesview(self.pre + self.fill, chunk)
+      @blit.from_view(self.buf, self.pre + self.fill, chunk)
       if self.checksum {
         self.xxh.update_view(chunk)
       }
@@ -374,7 +374,7 @@ fn Encoder::write_block(self : Encoder) -> Unit {
   let size = if compressed && out.pos - data_at < n {
     out.pos - data_at
   } else {
-    FixedArray::unsafe_blit(out.data, data_at, self.buf, start, n)
+    @blit.bytes(out.data, data_at, self.buf, start, n)
     out.pos = data_at + n
     n | (1 << 31)
   }
@@ -391,7 +391,7 @@ fn Encoder::write_block(self : Encoder) -> Unit {
     let keep = end.min(HISTORY)
     let delta = end - keep
     if delta > 0 {
-      FixedArray::unsafe_blit(self.buf, 0, self.buf, delta, keep)
+      @blit.move_down(self.buf, 0, delta, keep)
       let table = self.table
       for i in 0..<table.length() {
         table[i] = (table[i] - delta).max(-1)
