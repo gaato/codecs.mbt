@@ -41,7 +41,7 @@ import {
 //   moon run scripts/compare_codecs.mbtx -- stream [--timeout S] [--only NAME]
 //   moon run scripts/compare_codecs.mbtx -- memory [--timeout S] [--only NAME]
 //   moon run scripts/compare_codecs.mbtx -- claims [--fixtures FILE] [--limit MIB] [--timeout S] [--only NAME]
-//   moon run scripts/compare_codecs.mbtx -- ratio --format zstd|brotli|deflate [--qualities 0,1,...,11] [--time MS] [--corpus DIR]...
+//   moon run scripts/compare_codecs.mbtx -- ratio --format zstd|brotli|deflate [--qualities 0,1,...,11] [--time MS] [--jobs N] [--corpus DIR]...
 //   moon run scripts/compare_codecs.mbtx -- speed [--runs N] [--out DIR]
 // check   (the default) as above; with --pieces, the decoders that take
 //         input in pieces run over the valid streams fed P bytes at a time,
@@ -71,13 +71,15 @@ import {
 //         level (bench/src/compare_ratio): sizes and MB/s over at least
 //         --time ms (default 1000; 0 gives the sizes only). Every stream is
 //         also decoded by the reference, so that no size counts for a stream
-//         only the package's own decoder reads back.
+//         only the package's own decoder reads back. With --time 0, --jobs N
+//         runs up to N encodings and decodings at once (default 1), the
+//         output in the same order.
 // speed   runs `moon bench --release` on src/compare_speed N times (default
 //         3) on each of native, wasm, wasm-gc and js, taking the targets in
 //         turn so that a slow spell of the machine does not land on one of
 //         them; keeps each run's output in --out (default
-//         _build/compare/speed) and prints each benchmark's mean over the
-//         runs, then the runs, in milliseconds.
+//         _build/compare/speed) and prints each benchmark's median over
+//         the runs, named by its test, then the runs, in milliseconds.
 // --dir     where the streams go (default _build/compare)
 // --only    runs the decoders or encoders whose name contains NAME
 // --timeout seconds before a decoder counts as hanging (default 60)
@@ -861,6 +863,26 @@ async fn run_batch(
 }
 
 ///|
+/// The first case from `first` of `format` (Brotli's large cases with
+/// Brotli's) with no result yet, if any.
+fn first_missing(
+  cases : Array[Case],
+  format : String,
+  results : Map[Int32, Result],
+  first : Int32,
+) -> Int32? {
+  for i in first..<cases.length() {
+    let c = cases[i]
+    let matches = c.format == format ||
+      (format == "brotli" && c.format == "brotli-large")
+    if matches && results.get(i) is None {
+      return Some(i)
+    }
+  }
+  None
+}
+
+///|
 /// The decoders compare_check knows: format, name, and whether it takes its
 /// input in pieces.
 async fn listed() -> Array[(String, String, Bool)] {
@@ -919,6 +941,13 @@ async fn check(
         timeout_s,
         results,
       )
+      // A batch that ran out of time between cases, or before its log
+      // reached the disk, names no case: it goes on from the first case of
+      // the format without a result, instead of leaving the rest unrun.
+      let stopped = match stopped {
+        None if timed_out => first_missing(cases, format, results, first)
+        _ => stopped
+      }
       guard stopped is Some(at) else { break }
       // A batch's time runs over all its cases: the case it ran out on runs
       // again alone, and hangs only if it runs out of time by itself.
@@ -1222,6 +1251,33 @@ async fn memory(dir : String, timeout_s : Int32, only : String) -> Unit {
 }
 
 ///|
+/// Runs independent ratio units with bounded concurrency, printing their
+/// lines in order as soon as each one and those before it are done, so that
+/// a long run shows its progress. Claim the index before any suspension so
+/// workers cannot take the same unit.
+async fn ratio_units(units : Array[async () -> String], jobs : Int32) -> Unit {
+  let results : Array[String?] = Array::make(units.length(), None)
+  let mut next = 0
+  let mut printed = 0
+  let workers = if jobs < units.length() { jobs } else { units.length() }
+  @async.with_task_group() <| group => {
+    for _ in 0..<workers {
+      group.spawn_bg() <| () => {
+        while next < units.length() {
+          let i = next
+          next += 1
+          results[i] = Some(units[i]())
+          while printed < units.length() && results[printed] is Some(line) {
+            println(line)
+            printed += 1
+          }
+        }
+      }
+    }
+  }
+}
+
+///|
 /// `ratio`: selected Brotli qualities (all 0..11 by default), or the other
 /// encoders' default and highest levels, over the bench text and binary
 /// and files of the directories given: sizes and speed. The bench streams
@@ -1232,8 +1288,12 @@ async fn ratio(
   min_ms : Int32,
   only : String,
   dirs : Array[String],
-  qualities : Array[Int],
+  qualities : Array[Int32],
+  jobs : Int32,
 ) -> Unit {
+  if min_ms > 0 && jobs > 1 {
+    setup_failure("--jobs above 1 requires --time 0; timing must run alone")
+  }
   @shell.Cmd("moon", [
     "build", "--release", "--target", "native", "bench/src/compare_ratio",
   ]).run()
@@ -1261,49 +1321,86 @@ async fn ratio(
   let list = @shell.Cmd(ratio_tool, ["--list", format]).output()
   list.check()
   println("encoder\tlevel\tvalue\tfile\tsize\tcompressed\tMB/s\tchecked")
+  let units : Array[async () -> String] = []
+  let dumps : Array[(String, String)] = []
   for name in list.stdout().split("\n") {
     let name = name.to_owned()
     if name == "" || (only != "" && !name.contains(only)) {
       continue
     }
     for path in paths {
-      let out = @shell.Cmd(ratio_tool, [format, min_ms.to_string(), path], env={
-        "ONLY": name,
-        "DUMP": "\{work}/dump",
-        "BROTLI_QUALITIES": qualities.map(q=>q.to_string()).join(","),
-      }).output(max_output_bytes=1 << 24)
-      if out.exit_code() != 0 {
-        println(
-          "\{name}\t\t\t\{path}\t\t\t\taborted (exit status \{out.exit_code()}) \{out.stderr().trim(chars="\n ")}",
-        )
-      } else {
-        println(out.stdout().trim(chars="\n").to_owned())
-      }
+      // Isolate each unit: different corpus directories can have the same
+      // basename, and encoder names can normalize to the same dump tag.
+      let dump = "\{work}/dump/\{dumps.length()}"
+      @fs.mkdir(dump)
+      dumps.push((dump, path))
+      units.push(() => {
+        let out = @shell.Cmd(ratio_tool, [format, min_ms.to_string(), path], env={
+          "ONLY": name,
+          "DUMP": dump,
+          "BROTLI_QUALITIES": qualities.map(q => q.to_string()).join(","),
+        }).output(max_output_bytes=1 << 24)
+        if out.exit_code() != 0 {
+          "\{name}\t\t\t\{path}\t\t\t\taborted (exit status \{out.exit_code()}) \{out.stderr().trim(chars="\n ")}"
+        } else {
+          out.stdout().trim(chars="\n").to_owned()
+        }
+      })
     }
   }
-  // Zstandard at levels one through twelve and the five negative levels
-  // the ratio driver measures, and Brotli at the selected qualities;
-  // the DEFLATE table has no reference row. The file is named, not piped, as
+  ratio_units(units, jobs)
+  // Zstandard at levels one through twenty-two (`--ultra` from 20) and the
+  // five negative levels the ratio driver measures, and Brotli at the
+  // selected qualities; the DEFLATE table has no reference row. The file is named, not piped, as
   // brotli then knows its size, which changes some streams.
+  let references : Array[async () -> String] = []
   if format == "zstd" && (only == "" || only == "gaato/zstd") {
-    for level in 1..<=12 {
+    for level in 1..<=22 {
+      let ultra = if level >= 20 { ["--ultra"] } else { [] }
       for path in paths {
-        let out = @shell.Cmd("zstd", ["-\{level}", "--check", "-c", "-q", path]).output(max_output_bytes=1 << 28)
-        out.check()
-        let size = @fs.read_binary(path).length()
-        println("zstd -\{level}\treference\t\{level}\t\{path}\t\{size}\t\{out.stdout_bytes().length()}\t0\tchecksum on")
-        let hc = @shell.Cmd("zstd", ["-\{level}", "--no-row-match-finder", "--check", "-c", "-q", path]).output(max_output_bytes=1 << 28)
-        hc.check()
-        println("zstd-hc -\{level}\treference\t\{level}\t\{path}\t\{size}\t\{hc.stdout_bytes().length()}\t0\tchecksum on; row finder disabled")
+        references.push(() => {
+          let out = @shell.Cmd(
+            "zstd",
+            [..ultra, "-\{level}", "--check", "-c", "-q", path],
+          ).output(max_output_bytes=1 << 28)
+          out.check()
+          let size = @fs.read_binary(path).length()
+          "zstd -\{level}\treference\t\{level}\t\{path}\t\{size}\t\{out.stdout_bytes().length()}\t0\tchecksum on"
+        })
+        references.push(() => {
+          let hc = @shell.Cmd(
+            "zstd",
+            [
+              ..ultra,
+              "-\{level}",
+              "--no-row-match-finder",
+              "--check",
+              "-c",
+              "-q",
+              path,
+            ],
+          ).output(max_output_bytes=1 << 28)
+          hc.check()
+          let size = @fs.read_binary(path).length()
+          "zstd-hc -\{level}\treference\t\{level}\t\{path}\t\{size}\t\{hc.stdout_bytes().length()}\t0\tchecksum on; row finder disabled"
+        })
       }
     }
     // The negative levels, as `zstd --fast=N`.
     for n in [1, 3, 5, 10, 100] {
       for path in paths {
-        let out = @shell.Cmd("zstd", ["--fast=\{n}", "--check", "-c", "-q", path]).output(max_output_bytes=1 << 28)
-        out.check()
-        let size = @fs.read_binary(path).length()
-        println("zstd --fast=\{n}\treference\t\{-n}\t\{path}\t\{size}\t\{out.stdout_bytes().length()}\t0\tchecksum on")
+        references.push(() => {
+          let out = @shell.Cmd("zstd", [
+            "--fast=\{n}",
+            "--check",
+            "-c",
+            "-q",
+            path,
+          ]).output(max_output_bytes=1 << 28)
+          out.check()
+          let size = @fs.read_binary(path).length()
+          "zstd --fast=\{n}\treference\t\{-n}\t\{path}\t\{size}\t\{out.stdout_bytes().length()}\t0\tchecksum on"
+        })
       }
     }
   }
@@ -1314,49 +1411,54 @@ async fn ratio(
     for q in qualities {
       let args = ["-q", q.to_string(), "-w", "22"]
       for path in paths {
-        let out = @shell.Cmd(pinned, [..args, "-c", path]).output(
-          max_output_bytes=1 << 28,
-        )
-        out.check()
-        let size = @fs.read_binary(path).length()
-        println(
-          "brotli \{args.join(" ")}\treference\t\t\{path}\t\{size}\t\{out.stdout_bytes().length()}\t0\t",
-        )
+        references.push(() => {
+          let out = @shell.Cmd(pinned, [..args, "-c", path]).output(
+            max_output_bytes=1 << 28,
+          )
+          out.check()
+          let size = @fs.read_binary(path).length()
+          "brotli \{args.join(" ")}\treference\t\t\{path}\t\{size}\t\{out.stdout_bytes().length()}\t0\t"
+        })
       }
     }
   }
+  ratio_units(references, jobs)
   // Every stream, decoded by the reference: a stream counts only if it gives
-  // its file back. The dump names end in -<file name>.
-  let names = @fs.readdir("\{work}/dump")
-  names.sort()
-  for n in names {
-    guard paths.search_by(p => n.has_suffix("-\{p.split("/").last().unwrap()}"))
-      is Some(at) else {
-      println("\{n}: no input file of that name")
-      continue
+  // its file back. Keep the original name order, but associate each dump
+  // with its exact input rather than searching by a possibly shared suffix.
+  let streams : Array[(String, String, String)] = []
+  for (dump, path) in dumps {
+    for n in @fs.readdir(dump) {
+      streams.push((n, "\{dump}/\{n}", path))
     }
-    let original = @fs.read_binary(paths[at])
-    let cmd = if format == "zstd" {
-      @shell.Cmd("zstd", ["-d", "-c", "-q", "\{work}/dump/\{n}"])
-    } else if format == "brotli" {
-      @shell.Cmd("brotli", ["-d", "-c", "\{work}/dump/\{n}"])
-    } else {
-      @shell.Cmd("node", [
-        "-e",
-        "process.stdout.write(require('node:zlib').inflateRawSync(require('node:fs').readFileSync(process.argv[1])))",
-        "\{work}/dump/\{n}",
-      ])
-    }
-    let out = cmd.output(max_output_bytes=1 << 28)
-    let verdict = if out.exit_code() != 0 {
-      "refuses the stream"
-    } else if out.stdout_bytes() == original {
-      "gives the input back"
-    } else {
-      "gives other bytes"
-    }
-    println("\{n}: the reference decoder \{verdict}")
   }
+  streams.sort_by((a, b) => a.0.compare(b.0))
+  let decodes : Array[async () -> String] = []
+  for (n, dumped, path) in streams {
+    decodes.push(() => {
+      let original = @fs.read_binary(path)
+      let cmd = if format == "zstd" {
+        @shell.Cmd("zstd", ["-d", "-c", "-q", dumped])
+      } else if format == "brotli" {
+        @shell.Cmd("brotli", ["-d", "-c", dumped])
+      } else {
+        @shell.Cmd("node", [
+          "-e", "process.stdout.write(require('node:zlib').inflateRawSync(require('node:fs').readFileSync(process.argv[1])))",
+          dumped,
+        ])
+      }
+      let out = cmd.output(max_output_bytes=1 << 28)
+      let verdict = if out.exit_code() != 0 {
+        "refuses the stream"
+      } else if out.stdout_bytes() == original {
+        "gives the input back"
+      } else {
+        "gives other bytes"
+      }
+      "\{n}: the reference decoder \{verdict}"
+    })
+  }
+  ratio_units(decodes, jobs)
 }
 
 // ---------------------------------------------------------------------------
@@ -1595,14 +1697,24 @@ async fn speed(out : String, runs : Int32) -> Unit {
       }
     }
   }
-  // Each benchmark's mean over the runs, and the runs.
+  // Each benchmark's median over the runs, and the runs. A benchmark is
+  // named by its test ("zstd encode") as well: a package that covers several
+  // formats gives each of them a benchmark of the same name.
   for target in targets {
     println("=== \{target}")
     let order : Array[String] = []
     let times : Map[String, Array[Double]] = Map([])
     for run in 1..<=runs {
+      let mut section = ""
       for line in read_text("\{out}/\{target}-\{run}.txt").split("\n") {
-        guard bench_line(line.to_owned()) is Some((name, ms)) else { continue }
+        if line.contains(" bench compare_speed/") &&
+          line.split("(\"").collect() is [_, rest, ..] &&
+          rest.split("\")").collect() is [name, ..] {
+          section = name.to_owned()
+          continue
+        }
+        guard bench_line(line.to_owned()) is Some((bench, ms)) else { continue }
+        let name = if section == "" { bench } else { "\{section}: \{bench}" }
         match times.get(name) {
           Some(list) => list.push(ms)
           None => {
@@ -1614,15 +1726,21 @@ async fn speed(out : String, runs : Int32) -> Unit {
     }
     for name in order {
       let list = times[name]
-      let mean = list.fold(init=0.0, (a, b) => a + b) /
-        list.length().to_double()
+      let sorted = list.copy()
+      sorted.sort()
+      let n = sorted.length()
+      let median = if n % 2 == 1 {
+        sorted[n / 2]
+      } else {
+        (sorted[n / 2 - 1] + sorted[n / 2]) / 2.0
+      }
       let shown = list.map(t => t.to_string()).join(" ")
       let note = if list.length() == runs {
         ""
       } else {
         "\tin \{list.length()} of \{runs} runs"
       }
-      println("\{name}\t\{mean}\t\{shown}\{note}")
+      println("\{name}\t\{median}\t\{shown}\{note}")
     }
   }
 }
@@ -1638,12 +1756,13 @@ async fn main {
   let mut invalid = false
   let mut format = "deflate"
   let mut min_ms = 1000
+  let mut jobs = 1
   let mut fixtures = "bench/compare/fixtures.tsv"
   let mut limit_mib = 1024
   let mut runs = 3
   let mut out = ""
   let dirs = []
-  let mut qualities = [0,1,2,3,4,5,6,7,8,9,10,11]
+  let mut qualities = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
   let mut i = 1
   if args.get(1) is Some(c) && !c.has_prefix("--") {
     command = c
@@ -1656,10 +1775,27 @@ async fn main {
       "--only" => only = args[i + 1]
       "--format" => format = args[i + 1]
       "--time" => min_ms = @string.parse_int(args[i + 1])
+      "--jobs" => {
+        jobs = @string.parse_int(args.get(i + 1).unwrap_or("")) catch {
+          _ => setup_failure("--jobs requires a positive integer")
+        }
+        if jobs < 1 {
+          setup_failure("--jobs requires a positive integer")
+        }
+      }
       "--corpus" => dirs.push(args[i + 1])
       "--qualities" => {
-        qualities = args[i+1].split(",").map(s=>@string.parse_int(s) catch { _ => setup_failure("invalid quality") }).collect()
-        if qualities.is_empty() || qualities.any(q=>q<0 || q>11) { setup_failure("qualities must be in 0..11") }
+        qualities = args[i + 1]
+          .split(",")
+          .map(s => {
+            @string.parse_int(s) catch {
+              _ => setup_failure("invalid quality")
+            }
+          })
+          .collect()
+        if qualities.is_empty() || qualities.any(q => q < 0 || q > 11) {
+          setup_failure("qualities must be in 0..11")
+        }
       }
       "--fixtures" => fixtures = args[i + 1]
       "--limit" => limit_mib = @string.parse_int(args[i + 1])
@@ -1688,7 +1824,7 @@ async fn main {
     "stream" => stream(dir, timeout_s, only)
     "memory" => memory(dir, timeout_s, only)
     "claims" => claims(dir, fixtures, limit_mib, timeout_s, only)
-    "ratio" => ratio(dir, format, min_ms, only, dirs, qualities)
+    "ratio" => ratio(dir, format, min_ms, only, dirs, qualities, jobs)
     "speed" => speed(if out == "" { "\{dir}/speed" } else { out }, runs)
     c => setup_failure("unknown command: \{c}")
   }
