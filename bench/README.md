@@ -79,7 +79,7 @@ decoder itself holds 47,360 + 2 × (1 + 1,536) bytes for these images.
 ## Other MoonBit PNG decoders
 
 `src/compare_png` holds the other PNG decoders on mooncakes.io behind one
-shape: moonbitlang/typst 0.1.9 (`codecs`, its `decode_png`), gmlewis/image 0.17.18
+shape: moonbitlang/typst 0.1.10 (`codecs`, its `decode_png`), gmlewis/image 0.17.20
 (`png`) and mizchi/image 0.5.0 (`decode_png`). Each decodes a whole file, and
 its output is brought to straight RGBA, 16 bits a sample, samples of fewer
 bits widened by repeating their bits, so that it can be compared byte for byte
@@ -102,8 +102,8 @@ same code as `src/compare_png`.
 
 Measured on 2026-10-23, on an Intel Core i5-10400F, with MoonBit 0.10.16 (moon
 0.1.20261016; moonrun 0.1.20261016 for Wasm, Node 26.12.1 for JS, GCC 16.2.1
-for Native). The benchmarks build typst 0.1.9, whose `codecs` sources are
-those of 0.1.7. The times of gaato/png, typst, gmlewis/image and
+for Native). The recorded comparisons used typst 0.1.9, whose `codecs`
+sources are those of 0.1.7. The times of gaato/png, typst, gmlewis/image and
 mizchi/image were measured again on 2026-11-15, on the same machine with
 MoonBit 0.10.20 (moon and moonrun 0.1.20261104, Node 26.13.1), with
 gaato/png 0.1.2; bikallem/image's,
