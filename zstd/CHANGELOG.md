@@ -13,6 +13,10 @@ never does. Every breaking change is listed with a migration note.
 - **`decompress` with a negative `max_output`** takes it as 0: an empty output is returned instead of raising, and a stream that decodes to any byte still raises `LimitExceeded` with a limit of 0, as documented for brotli, lz4, lzw and snappy.
 - **Faster on Wasm and JS, and in small pieces**, with the same bytes out: the decoder's sequence loop keeps its state in locals, reads its FSE tables without index checks and, on Native and Wasm, copies matches inline; the encoder's sequence and FSE tables go without index checks (but on Wasm GC), and a step whose input fits the current block appends it and returns. Against the code before, on the benchmarks' 512 KiB text (bench/README.md, Speed): decoding it whole took 3.37 ms on Wasm, now 2.31 (Native 2.17 → 1.91, JS 7.69 → 6.85); compressing it at level 3, 13.5 ms on Wasm, now 8.40 (Native 5.18 → 4.33, JS 23.8 → 17.7). Compressing its first 64 KiB handed over 1 byte at a time took 8.16 ms on Wasm, now 2.98 (Native 3.56 → 1.86).
 
+### Fixed
+
+- **The README no longer says the decoder takes no dictionary**, and its errors list `DictionaryMismatch` and say that the decoder's errors, like the encoder's, stick until `reset`. The module description names the encoder too.
+
 ## [0.6.0] - 2026-11-17
 
 ### Added

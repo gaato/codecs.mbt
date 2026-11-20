@@ -119,7 +119,7 @@ test "encode a stream part by part" {
 
 ## What it decodes
 
-Every RFC 8878 frame without a dictionary: raw, RLE and compressed blocks, Huffman-coded literals (one or four streams, with or without a new tree), every FSE table mode, and the content checksum (XXH64). A stream may hold several frames, and skippable frames among them, as the `zstd` tool writes them.
+Every RFC 8878 frame: raw, RLE and compressed blocks, Huffman-coded literals (one or four streams, with or without a new tree), every FSE table mode, and the content checksum (XXH64). A stream may hold several frames, and skippable frames among them, as the `zstd` tool writes them.
 
 Input comes in chunks of any size, down to one byte, and output goes into slices of any size, under the rules of `gaato/codec_bytes`. The header decisions and the Huffman decoding tables are proved against RFC 8878; [PROOFS.md](https://github.com/gaato/codecs.mbt/blob/main/zstd/PROOFS.md) lists what is proved and what is trusted.
 
@@ -169,9 +169,12 @@ Every malformed stream raises [`gaato/codec`](https://mooncakes.io/docs/gaato/co
 - `TrailingData`: bytes after the last frame that start no frame.
 - `ChecksumMismatch`: the content checksum does not match.
 - `LimitExceeded`: a window over `max_window_bits`, with `resource: Memory`; more than `max_output` from `decompress`, with `resource: Output`.
-- `DictionaryRequired`: the frame names a dictionary, with its id.
+- `DictionaryRequired`: the frame names a dictionary and none was given, with its id.
+- `DictionaryMismatch`: the frame names a dictionary other than the one given.
 
-The encoder raises only when it was given `content_size` and the input does not match it: `ChecksumMismatch`, once the input passes the size (the output for the input up to it is handed out first) or at `Finish` when it falls short. The error sticks until `reset`.
+Errors stick: later steps raise the same kind until `reset`.
+
+The encoder raises only when it was given `content_size` and the input does not match it: `ChecksumMismatch`, once the input passes the size (the output for the input up to it is handed out first) or at `Finish` when it falls short, and sticks the same way.
 
 In a `catch` on these functions, `CodecError(kind, _)` and the kinds match unqualified, with no import; to name the types elsewhere, import [`gaato/codec_bytes`](https://mooncakes.io/docs/gaato/codec_bytes), which re-exports them.
 
@@ -179,7 +182,7 @@ A step that raises first hands out the output that comes before the error (answe
 
 ## When to use it
 
-gaato/zstd fits zstd that arrives in pieces or comes from anyone. `Decoder` takes input in pieces down to one byte, writes into your slices and holds the window you allow, 128 MiB by default (a process decoding 256 MiB of output in 64 KiB pieces peaks at 15.9 MiB, most of it the runtime and the compressed input); it allocates nothing from a size a header claims. It agreed with `zstd -d` on all 36 valid and 318 invalid streams of the comparison, checks the content checksum, and its frame headers and Huffman tables are proved against RFC 8878. It runs on Native, JS, Wasm and Wasm GC and takes no dictionary. Its encoder, at each level from 1 to 12, compresses the corpora to within 1 % of `zstd`, and its frames never depend on how the input arrives.
+gaato/zstd fits zstd that arrives in pieces or comes from anyone. `Decoder` takes input in pieces down to one byte, writes into your slices and holds the window you allow, 128 MiB by default (a process decoding 256 MiB of output in 64 KiB pieces peaks at 15.9 MiB, most of it the runtime and the compressed input); it allocates nothing from a size a header claims. It agreed with `zstd -d` on all 36 valid and 318 invalid streams of the comparison, checks the content checksum, and its frame headers and Huffman tables are proved against RFC 8878. It runs on Native, JS, Wasm and Wasm GC. Its encoder, at each level from 1 to 12, compresses the corpora to within 1 % of `zstd`, and its frames never depend on how the input arrives.
 
 Milky2018/zstd, which also compresses and takes dictionaries, takes about 4.1 (Native), 5.1 (Wasm), 4.0 (Wasm GC) and 2.7 (JS) times as long as gaato/zstd on the benchmarks' text. Its encoder writes the input uncompressed at its default level 3; at level 22 it writes twice what gaato/zstd writes at level 12 on that text, and takes 9 (Wasm GC) to 16 (JS) times as long.
 

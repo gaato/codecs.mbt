@@ -95,7 +95,7 @@ The decoder holds a window of 256 KiB at most (`decoder_memory_bound()`), grown 
 
 ## Errors
 
-A malformed frame raises `CodecError(kind, message)` with `Truncated`, `Corrupt`, `ChecksumMismatch` (the header's, a block's or the content's checksum, or a content size the frame does not hold), `Unsupported` (a version, block size or reserved bit the format has not defined), `DictionaryRequired`, or `TrailingData` (bytes after the last frame that begin none); `max_output` raises `LimitExceeded` past it (a negative one counts as 0). The decoders do not abort.
+A malformed frame raises `CodecError(kind, message)` with `Truncated`, `Corrupt`, `ChecksumMismatch` (the header's, a block's or the content's checksum, or a content size the frame does not hold), `Unsupported` (a version, block size or reserved bit the format has not defined, or a legacy frame under `until=EndOfMember`), `DictionaryRequired`, or `TrailingData` (bytes after the last frame that begin none); `max_output` raises `LimitExceeded` past it (a negative one counts as 0). The decoders do not abort. Errors stick: later steps raise the same kind until `reset`.
 
 A step that raises first hands out the output before the error, and `last_consumed()` and `last_produced()` count what that step took and wrote: a corrupt stream gives the same output, then the same error, however it is split. On `TrailingData`, `last_consumed()` stops at the end of the stream.
 

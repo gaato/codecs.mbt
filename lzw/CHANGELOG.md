@@ -12,6 +12,10 @@ never does. Every breaking change is listed with a migration note.
 - **Faster one-shot calls**, with the same bytes out: `compress` and `decompress` write straight into one growing array instead of appending 64 KiB pieces to a buffer. Decoding the benchmarks' 512 KiB text whole took 8.8 ms on JS, now 4.1.
 - **Faster decoding in small pieces on Wasm, Wasm GC and JS**, with the same bytes out: the fast decoding loop is not entered with fewer than 3 bytes left, and on Wasm its table goes without index checks. The benchmarks' text, its first 64 KiB handed over 1 byte at a time, took 1.99 ms to decode on Wasm, now 1.25 (Wasm GC 1.17 → 0.94, JS 1.68 → 1.35); 16 bytes at a time on Wasm, 0.71 ms, now 0.43.
 
+### Fixed
+
+- **The README says when `Unsupported` and `LimitExceeded` are raised**, including by `Format::gif`, `Format::unix_compress` and the encoder.
+
 ## [0.1.0] - 2026-11-16
 
 ### Added

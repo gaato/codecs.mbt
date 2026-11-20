@@ -103,7 +103,7 @@ The decoder holds the table, 7 bytes a code: 28 KiB for GIF, TIFF and PDF, 448 K
 
 ## Errors
 
-A malformed stream raises `CodecError(kind, message)` with `Truncated` (the input ends before the end code, or inside .Z's header), `Corrupt` (a first code that is no literal, a code past the table, a .Z header that is not one), `Unsupported`, `LimitExceeded` or `TrailingData` (bytes after the end code); `max_output` raises `LimitExceeded` past it. The decoders do not abort. A step that raises first hands out the output before the error; after that, steps raise it again until `reset`.
+A malformed stream raises `CodecError(kind, message)` with `Truncated` (the input ends before the end code, or inside .Z's header), `Corrupt` (a first code that is no literal, a code past the table, a .Z header that is not one), `Unsupported` (a .Z header over 16 bits or of 9 bits, or .Z under `until=EndOfMember`), `LimitExceeded` (a .Z stream wider than the format's `max_bits`, with `resource: Memory`) or `TrailingData` (bytes after the end code); `max_output` raises `LimitExceeded` with `resource: Output` past it. `Format::gif` raises `Unsupported` for a minimum code size outside 1 to 8, and `Format::unix_compress` for a `max_bits` outside 10 to 16. The encoder raises `Unsupported` on `Flush`, and for a byte its GIF minimum code size cannot code. The decoders do not abort. A step that raises first hands out the output before the error; after that, steps raise it again until `reset`.
 
 ## Links
 
