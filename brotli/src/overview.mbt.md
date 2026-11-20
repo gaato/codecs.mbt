@@ -139,7 +139,7 @@ At quality 4 the encoder holds its window (`Encoder(window_bits=n)`, 22 by defau
 
 ## Errors
 
-Every malformed stream raises `CodecError(kind, message)` with `Truncated`, `Corrupt` or `TrailingData` (bytes after the stream); `decompress(max_output=n)` raises `LimitExceeded` past `n` bytes. The decoder does not abort.
+Every malformed stream raises `CodecError(kind, message)` with `Truncated`, `Corrupt` or `TrailingData` (bytes after the stream). A stream whose window is over `max_window_bits` raises `LimitExceeded` with `resource: Memory`, and `decompress(max_output=n)` raises `LimitExceeded` with `resource: Output` past `n` bytes. The decoder does not abort. Errors stick: later steps raise the same kind until `reset`.
 
 A step that raises first hands out the output that comes before the error (answering `NeedMoreOutput` while it does not fit), and `last_consumed()` and `last_produced()` count what that step took and wrote: a corrupt stream gives the same output, then the same error, however it is split. On `TrailingData`, `last_consumed()` stops at the end of the stream.
 

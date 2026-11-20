@@ -21,7 +21,7 @@ keywords = [
   "streaming",
 ]
 
-description = "A streaming Zstandard (RFC 8878) decoder in pure MoonBit: arbitrary input chunks, bounded output slices, memory bounded by the window."
+description = "A streaming Zstandard (RFC 8878) decoder and encoder in pure MoonBit: arbitrary input chunks, bounded output slices, memory bounded by the window."
 
 source = "src"
 

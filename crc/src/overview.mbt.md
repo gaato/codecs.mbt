@@ -56,7 +56,7 @@ None of the functions raises. `Crc::new` aborts for parameters a program cannot 
 
 - [Changelog](https://github.com/gaato/codecs.mbt/blob/main/crc/CHANGELOG.md)
 - [Repository](https://github.com/gaato/codecs.mbt)
-- [The reveng CRC catalogue](https://reveng.sourceforge.io/crc-catalogue/all.htm), whose check values the tests hold every named CRC to, and whose residues every one of whole bytes
+- [The reveng CRC catalogue](https://reveng.sourceforge.io/crc-catalogue/all.htm), whose check values the tests hold every named CRC to, and whose residues every CRC whose width is whole bytes
 - [Resource bounds](https://github.com/gaato/codecs.mbt/blob/main/crc/RESOURCE_BOUNDS.md) and [test coverage](https://github.com/gaato/codecs.mbt/blob/main/crc/TEST_COVERAGE.md)
 
 ## License

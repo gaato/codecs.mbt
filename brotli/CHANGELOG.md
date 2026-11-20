@@ -24,6 +24,7 @@ never does. Every breaking change is listed with a migration note.
 ### Fixed
 
 - `Decoder(until=EndOfMember)` returns whole bytes prefetched from the current input before suspending for output. Bytes belonging to a following member remain unconsumed even with one-byte output buffers; completing a stream no longer tries to return bytes counted by an earlier step.
+- **The README's errors list `LimitExceeded` for a window over `max_window_bits`**, with `resource: Memory`, and say that errors stick until `reset`.
 
 ## [0.5.0] - 2026-11-15
 

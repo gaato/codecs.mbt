@@ -37,6 +37,10 @@ never does. Every breaking change is listed with a migration note.
   96.9); its first 64 KiB handed over 1 byte at a time, 3.30 ms on Native,
   now 3.02 (Wasm 5.23 → 4.49).
 
+### Fixed
+
+- **The README no longer says levels stop at 9.** Levels go to 12 as libdeflate's, and the Limits give their encoder memory; its errors say they stick until `reset`.
+
 ## [0.4.0] - 2026-11-17
 
 ### Added

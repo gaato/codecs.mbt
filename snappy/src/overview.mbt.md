@@ -93,7 +93,7 @@ Not included: the encoder's levels of snappy 1.2 (level 2 searches harder, and d
 
 ## Errors
 
-A malformed framed stream raises `CodecError(kind, message)` with `Truncated` (the input ends inside a chunk), `Corrupt` or `ChecksumMismatch` (a chunk's CRC-32C); a raw stream raises `Truncated` when the input ends inside its length, and `Corrupt` for anything else wrong in it, cut short or not, as snappy refuses it. `max_output` raises `LimitExceeded` past it (a negative one counts as 0). The decoders do not abort.
+A malformed framed stream raises `CodecError(kind, message)` with `Truncated` (the input ends inside a chunk), `Corrupt` or `ChecksumMismatch` (a chunk's CRC-32C); a raw stream raises `Truncated` when the input ends inside its length, and `Corrupt` for anything else wrong in it, cut short or not, as snappy refuses it. A compressed chunk over 76,494 bytes raises `LimitExceeded` with `resource: Memory`, and `max_output` raises `LimitExceeded` with `resource: Output` past it (a negative one counts as 0). The decoders do not abort. Errors stick: later steps raise the same kind until `reset`.
 
 A step that raises first hands out the output before the error, the bytes of a chunk decoded before it breaks off included, and `last_consumed()` and `last_produced()` count what that step took and wrote: a corrupt stream gives the same output, then the same error, however it is split.
 

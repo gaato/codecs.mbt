@@ -305,9 +305,8 @@ test "a message split across frames comes out once its flush arrives" {
 ## Limits
 
 - A decoder's memory is the 32 KiB window and its decoding tables, about 46 KiB from its first step to its last, with a dictionary or without (a dictionary is your bytes, held by reference), plus a gzip header's fields up to `max_header_bytes`.
-- An encoder's memory is fixed by its level: about 530 KiB at the default level, less at levels 0 and 1, and for gzip its header's bytes.
+- An encoder's memory is fixed by its level: about 530 KiB at the default level, less at levels 0 and 1, at most about 6.8 MiB at levels 10 to 12, and for gzip its header's bytes.
 - `memory_usage()` reports both; [RESOURCE_BOUNDS.md](https://github.com/gaato/codecs.mbt/blob/main/deflate/RESOURCE_BOUNDS.md) gives every bound exactly.
-- Levels stop at 9: libdeflate's levels 10 to 12, near-optimal parsing at several times the time, are not here, and higher levels are clamped to 9.
 - A flush is a sync flush: zlib's full flush, which also forgets the window, is not offered.
 
 ## Errors
@@ -321,7 +320,7 @@ A decoder refuses what zlib refuses, with zlib's kind of error: reserved block t
 - `DictionaryRequired`, `DictionaryMismatch`: a zlib stream names a preset dictionary that was not given, or another one was.
 - `LimitExceeded`: a gzip header over `max_header_bytes`, with `resource: Memory`; more than `max_output` from `decompress`, with `resource: Output`.
 
-An error inside the DEFLATE data of a zlib or gzip stream keeps its kind. In a `catch` on these functions, `CodecError(kind, _)` and the kinds match unqualified, with no import; to name the types elsewhere, import [`gaato/codec_bytes`](https://mooncakes.io/docs/gaato/codec_bytes), which re-exports them.
+An error inside the DEFLATE data of a zlib or gzip stream keeps its kind. Errors stick: later steps raise the same kind until `reset`. In a `catch` on these functions, `CodecError(kind, _)` and the kinds match unqualified, with no import; to name the types elsewhere, import [`gaato/codec_bytes`](https://mooncakes.io/docs/gaato/codec_bytes), which re-exports them.
 
 Every checksum is checked: zlib's Adler-32, gzip's CRC-32 and length, and the header CRC when a gzip header has one. Output comes out as soon as it is decoded, before the checksum that covers it, so `ChecksumMismatch` can follow output you already have; `decompress` returns only checked output.
 

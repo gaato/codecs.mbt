@@ -12,6 +12,10 @@ never does. Every breaking change is listed with a migration note.
 - **Faster one-shot `decompress`**, and faster encoding and decoding on JS, with the same bytes out: `decompress` writes straight into one growing array instead of appending pieces to a buffer, and literals, copies and chunks move without core's checked copy on JS. Decoding the benchmarks' 512 KiB text whole took 12.0 ms on JS, now 6.5.
 - **Faster, mostly in small pieces**, with the same bytes out: elements are worked out in 32-bit arithmetic, short literals and copies move 16 bytes at once, the encoder reads its input and hash table without index checks, and a raw `decompress` returns its buffer without a last copy. The benchmarks' text, its first 64 KiB handed over 16 bytes at a time, took 208 µs to decode on Native, now 137 (Wasm 304 → 181, JS 750 → 492); 1 byte at a time, 1.65 ms to compress on Native, now 1.28 (Wasm 2.52 → 1.99).
 
+### Fixed
+
+- **The README's errors list `LimitExceeded` for a compressed chunk over 76,494 bytes**, with `resource: Memory`, and say that errors stick until `reset`.
+
 ## [0.1.0] - 2026-11-16
 
 ### Added
