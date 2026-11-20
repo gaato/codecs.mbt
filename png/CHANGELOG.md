@@ -7,6 +7,10 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+### Changed
+
+- **Faster decoding in small pieces**: the decoder no longer calls its zlib decoder again once that has used all of an IDAT chunk's bytes and asked for more. A file handed over 1 byte at a time decodes in 30 % less time on Native and JS, and 35 to 37 % less on Wasm and Wasm GC.
+
 ## [0.1.3] - 2026-11-15
 
 ### Added

@@ -22,6 +22,20 @@ never does. Every breaking change is listed with a migration note.
 - **`decompress` with a negative `max_output`** takes it as 0: an empty
   output is returned instead of raising, and a stream that decodes to any
   byte still raises `LimitExceeded` with a limit of 0.
+- **Faster decoding in small pieces**: the decoder copies the few input
+  bytes it carries between steps with a loop and skips an empty second
+  output copy; zlib's Adler-32 takes a short path below 16 bytes; and zlib
+  and gzip skip the checksum when a step gave out nothing. The benchmarks'
+  text, its first 64 KiB handed over 1 byte at a time, took 1.61 ms to
+  decode as raw DEFLATE on Native, now 1.23 (Wasm 3.37 → 2.53); as zlib,
+  2.12 ms, now 1.55 (Wasm 4.85 → 3.37); as gzip, 2.02 ms, now 1.50. Whole
+  inputs decode as fast as before.
+- **Faster encoding on JS and in small pieces**, with the same bytes out:
+  the match finders read without index checks on JS and Wasm GC too, and a
+  step with nothing to hand out skips the output copy. Level 6 on the
+  benchmarks' 512 KiB text took 34.3 ms on JS, now 32.5 (level 9, 103 →
+  96.9); its first 64 KiB handed over 1 byte at a time, 3.30 ms on Native,
+  now 3.02 (Wasm 5.23 → 4.49).
 
 ## [0.4.0] - 2026-11-17
 
