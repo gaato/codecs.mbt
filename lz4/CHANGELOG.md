@@ -10,6 +10,7 @@ never does. Every breaking change is listed with a migration note.
 ### Changed
 
 - **Faster one-shot calls**, and faster encoding and decoding on JS, with the same bytes out: `compress`, `decompress` and `decompress_block` write straight into one growing array instead of appending 64 KiB pieces to a buffer, and the window and the encoder's input move without core's checked copy on JS. Decoding the benchmarks' 512 KiB text whole took 11.5 ms on JS, now 4.0.
+- **Faster, mostly in small pieces**, with the same bytes out: short sequences copy 16 bytes at once on Native and Wasm, XXH32 makes no calls (but on JS), the encoder hashes each block from its own buffer (but on JS), and the frame's 64-bit total grows once per block, only in frames that declare their size. The benchmarks' text, its first 64 KiB handed over 1 byte at a time, took 2.37 ms to compress on Native, now 1.36 (Wasm 4.70 → 1.99, Wasm GC 2.86 → 2.04); 16 bytes at a time, 1.60 ms to decode on JS, now 1.24.
 
 ## [0.1.0] - 2026-11-16
 

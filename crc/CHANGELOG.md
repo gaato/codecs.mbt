@@ -7,6 +7,10 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+### Changed
+
+- **Faster on Wasm, Wasm GC and JS**, with the same values: a model that reflects both its input and its output skips both reflections; on Wasm and JS, models of up to 32 bits run on a 32-bit table and register; on JS, CRC-64/XZ runs as two 32-bit halves; and on Wasm the CRC-32 and CRC-32C loops make no calls. Over 512 KiB on JS, CRC-32/BZIP2 took 25.5 ms, now 1.3; CRC-64/XZ, 24.4 ms, now 0.83; a reflected CRC-16 fed 1 byte at a time, 1,166 ms, now 16. Native keeps its code, which the first two changes made slower there.
+
 ## [0.1.0] - 2026-11-16
 
 ### Added

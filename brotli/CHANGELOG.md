@@ -18,6 +18,8 @@ never does. Every breaking change is listed with a migration note.
 
 - **Faster one-shot calls**, and faster encoding and decoding on JS, with the same bytes out: `compress` and `decompress` write straight into one growing array instead of appending 64 KiB pieces to a buffer, and the window, the encoder's input and bit writer copy without core's checked copy on JS. Decoding the benchmarks' 512 KiB text whole took 16.2 ms on JS, now 8.1.
 - **`decompress` with a negative `max_output`** returns an empty output instead of raising, as the documented limit of 0 allows; a stream that decodes to any byte still raises `LimitExceeded`.
+- **Faster decoding on Wasm, and in small pieces**, with the same bytes out: the decoder's fast path runs on Wasm too, with its tables read without index checks and its bit state in locals, and the input kept between steps is reused in place. Decoding the benchmarks' 512 KiB text whole took 8.02 ms on Wasm, now 3.60 (Native 2.34 → 2.08, JS 6.13 → 5.10); its first 64 KiB handed over 1 byte at a time, 3.49 ms on Native, now 1.78 (Wasm 8.40 → 4.06).
+- **Faster encoding**, with the same bytes out at every quality: SIMD match lengths on Native and Wasm, the hashers' and tree's tables without index checks at qualities 5 to 11, and the cost loops of qualities 10 and 11 written out (but on Wasm GC). Quality 11 on the text took 979 ms on Native, now 869 (Wasm 2,340 → 1,820); quality 4 on JS, 25.0 ms, now 18.6; quality 4 over its first 64 KiB handed over 1 byte at a time, 3.55 ms on Native, now 2.49 (Wasm 6.86 → 3.84).
 
 ### Fixed
 

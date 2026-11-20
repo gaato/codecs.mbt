@@ -24,7 +24,8 @@ The codecs implement one contract for each kind, described in
 [CONTRACT.md](CONTRACT.md): code written against `gaato/codec_bytes` drives
 any of the byte-stream codecs, and code written against `gaato/codec_image`
 any image decoder. [ARCHITECTURE.md](ARCHITECTURE.md) describes how the
-repository is laid out.
+repository is laid out, and [docs/decisions.md](docs/decisions.md) why some
+things are built as they are and what was tried and left out.
 
 ## Development
 
