@@ -1,6 +1,6 @@
 ///|
 /// The package and its version.
-pub let name : String = "moonbitlang/core/async (MoonBit 0.10.21)"
+pub let name : String = "moonbitlang/core/compress/gzip streams (MoonBit 0.10.22)"
 
 ///|
 /// A reader over bytes in memory that hands out at most `piece` bytes per
@@ -87,7 +87,7 @@ pub async fn gunzip(
   out : Int32,
   sink : (BytesView) -> Unit,
 ) -> Unit {
-  let decoder = @agzip.Decoder({
+  let decoder = @agzip.StreamDecoder({
     data: input,
     piece,
     pos: 0,
@@ -95,7 +95,7 @@ pub async fn gunzip(
   })
   let buf = FixedArray::make(out, b'\x00')
   for ;; {
-    let n = decoder.read_into(buf, offset=0, max_len=out)
+    let n = decoder.read_into(buf.mut_view())
     if n == 0 {
       return
     }
@@ -115,7 +115,7 @@ pub async fn gunzip_whole(input : Bytes) -> Bytes {
 /// Compresses `input` into one gzip member.
 pub async fn gzip(input : Bytes) -> Bytes {
   let sink = { out: Buffer(), controller: @io.BinaryWriterController(), }
-  let encoder = @agzip.Encoder(sink)
+  let encoder = @agzip.StreamEncoder(sink)
   encoder.write(input[:])
   encoder.end()
   sink.out.to_bytes()

@@ -14,7 +14,7 @@ async fn gaato_stream(path : String) -> String {
   for ;; {
     if start == end && !eof {
       start = 0
-      end = file.read_into(input)
+      end = file.read_into(input.mut_view())
       eof = end == 0
     }
     let view = Bytes::from_array(input[start:end])
@@ -33,7 +33,7 @@ async fn gaato_stream(path : String) -> String {
           input.blit_to(input, len=left, src_offset=start, dst_offset=0)
           start = 0
           end = left
-          let n = file.read_into(input, offset=left)
+          let n = file.read_into(input.mut_view(start=left))
           eof = n == 0
           end += n
         }

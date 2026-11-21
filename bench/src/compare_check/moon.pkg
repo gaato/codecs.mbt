@@ -15,6 +15,12 @@ import {
 
 pkgtype(kind: "executable")
 
+// `async fn main` here needs moonbitlang/core/async imported, because main
+// awaits compare_async, which imports only core/async/io. MoonBit 0.10.22
+// still reports the import as unused (0.10.21 did not).
+
+warnings = "-unused_package"
+
 supported_targets = "native"
 
 options(

@@ -65,8 +65,8 @@ xz here. Bugs and requests go to [Issues](https://github.com/gaato/codecs.mbt/is
 
 ## Development
 
-The development toolchain is MoonBit 0.10.21 (`moonc v0.10.21+06da1ed44`,
-`moon 0.1.20261117`), pinned in `moonbit-version` and the CI containers.
+The development toolchain is MoonBit 0.10.22 (`moonc v0.10.22+124d61d05`,
+`moon 0.1.20261119`), pinned in `moonbit-version` and the CI containers.
 
 ```sh
 moon run scripts/gates.mbtx                     # check, test on every target, coverage ledgers, proofs, format, interfaces
