@@ -8,6 +8,12 @@ note.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-21
+
+### Changed
+
+- **The README is rewritten**: complete examples of whole-buffer and streaming use, the defaults and limits, and the errors; a streaming loop now passes `end=true` (or `Finish`) once even for an empty source.
+
 ## [0.1.0] - 2026-10-23
 
 ### Added

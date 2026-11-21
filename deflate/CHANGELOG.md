@@ -7,6 +7,8 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-21
+
 ### Changed
 
 - **Faster one-shot calls**: `compress` and `decompress` of the raw, zlib
@@ -36,6 +38,7 @@ never does. Every breaking change is listed with a migration note.
   benchmarks' 512 KiB text took 34.3 ms on JS, now 32.5 (level 9, 103 →
   96.9); its first 64 KiB handed over 1 byte at a time, 3.30 ms on Native,
   now 3.02 (Wasm 5.23 → 4.49).
+- **The README is rewritten**: complete examples of whole-buffer and streaming use, the defaults and limits, and the errors; a streaming loop now passes `end=true` (or `Finish`) once even for an empty source.
 
 ### Fixed
 

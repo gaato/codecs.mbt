@@ -7,10 +7,13 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-21
+
 ### Changed
 
 - **Faster one-shot `decompress`**, and faster encoding and decoding on JS, with the same bytes out: `decompress` writes straight into one growing array instead of appending pieces to a buffer, and literals, copies and chunks move without core's checked copy on JS. Decoding the benchmarks' 512 KiB text whole took 12.0 ms on JS, now 6.5.
 - **Faster, mostly in small pieces**, with the same bytes out: elements are worked out in 32-bit arithmetic, short literals and copies move 16 bytes at once, the encoder reads its input and hash table without index checks, and a raw `decompress` returns its buffer without a last copy. The benchmarks' text, its first 64 KiB handed over 16 bytes at a time, took 208 µs to decode on Native, now 137 (Wasm 304 → 181, JS 750 → 492); 1 byte at a time, 1.65 ms to compress on Native, now 1.28 (Wasm 2.52 → 1.99).
+- **The README is rewritten**: complete examples of whole-buffer and streaming use, the defaults and limits, and the errors; a streaming loop now passes `end=true` (or `Finish`) once even for an empty source.
 
 ### Fixed
 
