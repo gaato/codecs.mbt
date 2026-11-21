@@ -1,6 +1,18 @@
 # gaato/crc
 
-Cyclic redundancy checks in pure MoonBit, for Native, JS, Wasm and Wasm GC: any CRC of up to 64 bits from its parameters, the 112 of the reveng catalogue by name, the CRC of two pieces from theirs (`combine`), and CRC-32, CRC-32C and CRC-64/XZ eight bytes at a time.
+Cyclic redundancy checks in pure MoonBit, for Native, JS, Wasm and Wasm GC.
+Use it to compute or verify the CRC a file format or protocol specifies:
+CRC-32 for ZIP, gzip and PNG, CRC-32C for iSCSI, ext4 and Snappy, CRC-64/XZ
+for `.xz`, or a CRC such as CRC-16/MODBUS by its catalogue name.
+
+- Any CRC up to 64 bits wide, from its parameters, or one of the 112 in the
+  [reveng catalogue](https://reveng.sourceforge.io/crc-catalogue/all.htm) by
+  name.
+- Data in pieces: a running digest, or a CRC continued from a stored one.
+- `combine`: the CRC of two pieces joined, from the two CRCs and the second
+  piece's length, without the data. Use it for pieces checksummed in parallel or
+  on different machines.
+- CRC-32, CRC-32C and CRC-64/XZ are computed eight bytes at a time.
 
 ## Install
 
@@ -40,24 +52,47 @@ test {
 }
 ```
 
-`Crc::new(width~, poly~, init?, reflect_in?, reflect_out?, xor_out?)` takes Ross Williams's parameters as the reveng catalogue writes them: `poly` without its top term, `init` the register's start, `reflect_in` for input taken least significant bit first, `reflect_out` (as `reflect_in` unless given) for a register reflected before output, and `xor_out`. `Crc::named` finds a CRC of the catalogue by its name or an alias, in any case ("CRC-32" is CRC-32/ISO-HDLC), and gives None for another. A CRC's parameters are readable fields.
+**Pick the CRC by name, not by width.** CRC-32 and CRC-32C are both 32 bits but
+use different polynomials and give different values. Take the name from the
+format's specification. `Crc::named` accepts the catalogue's name or an alias,
+in any case ("CRC-32" is CRC-32/ISO-HDLC), and returns `None` for anything else.
 
-`update(crc, data)` continues a CRC as zlib's `crc32` does: from the CRC of the data so far, with `checksum(b"")` for none, so that `update(checksum(a), b)` is `checksum(a + b)`. `combine(crc_a, crc_b, len_b)` gives the CRC of `a` then `b` from those of each and `b`'s length in bytes, in time logarithmic in the length, as zlib's `crc32_combine` does; it serves pieces computed apart, in parallel or on other machines.
+**Continuing a CRC.** `update(crc, data)` continues from the CRC of the data so
+far, as zlib's `crc32` does: `update(checksum(a), b)` equals `checksum(a + b)`,
+and `checksum(b"")` is the start. `crc32_update`, `crc32c_update` and
+`crc64_xz_update` are the same as plain functions, starting from 0.
 
-`crc32`, `crc32c` and `crc64_xz`, and any `Crc` made with their parameters, take eight bytes at a time from tables computed at start-up (slice-by-8). `crc32_update`, `crc32c_update` and `crc64_xz_update` are the same as plain functions on `UInt32` and `UInt64`, starting from 0. Other CRCs take a byte at a time from a table of 256 entries made with the `Crc`.
+**Combining.** `combine(crc_a, crc_b, len_b)` takes the second piece's length
+in bytes, and runs in time logarithmic in that length.
 
-Not included: CRCs wider than 64 bits (the catalogue's CRC-82/DARC), whose register does not fit a `UInt64`; messages that are not whole bytes; hardware CRC instructions, which MoonBit does not reach; and other checksums. Adler-32 and xxHash are not CRCs, and gaato/deflate and gaato/zstd keep theirs internal; for SHA-2 and other cryptographic hashes, use `moonbitlang/x/crypto`.
+## Custom parameters
 
-## Errors
+`Crc::new(width~, poly~, init?, reflect_in?, reflect_out?, xor_out?)` takes the
+parameters as the reveng catalogue writes them: `poly` without its top term,
+`init` as the register's start, `reflect_in` for input taken least significant
+bit first, `reflect_out` (the same as `reflect_in` unless given), and
+`xor_out`. A CRC's parameters are readable fields.
 
-None of the functions raises. `Crc::new` aborts for parameters a program cannot mean: a width outside 1 to 64, or a `poly`, `init` or `xor_out` that does not fit in the width. For parameters that come from data, such as a configuration, `Crc::try_new` takes the same arguments and gives `Err` with the reason instead. `combine` takes a negative length as 0.
+`Crc::new` aborts on parameters a program cannot mean: a width outside 1 to 64,
+or a `poly`, `init` or `xor_out` that does not fit the width. For parameters
+read from a file or configuration, use `Crc::try_new`, which takes the same
+arguments and returns `Err` with the reason. No other function raises or
+aborts.
+
+## Not included
+
+CRCs wider than 64 bits, messages that are not whole bytes, hardware CRC
+instructions, and checksums that are not CRCs (Adler-32, xxHash). For SHA-2
+and other cryptographic hashes, use `moonbitlang/x/crypto`.
 
 ## Links
 
+- [The reveng CRC catalogue](https://reveng.sourceforge.io/crc-catalogue/all.htm):
+  the tests check every named CRC against its check value
+- [Resource bounds](https://github.com/gaato/codecs.mbt/blob/main/crc/RESOURCE_BOUNDS.md)
+  and [test coverage](https://github.com/gaato/codecs.mbt/blob/main/crc/TEST_COVERAGE.md)
 - [Changelog](https://github.com/gaato/codecs.mbt/blob/main/crc/CHANGELOG.md)
 - [Repository](https://github.com/gaato/codecs.mbt)
-- [The reveng CRC catalogue](https://reveng.sourceforge.io/crc-catalogue/all.htm), whose check values the tests hold every named CRC to, and whose residues every CRC whose width is whole bytes
-- [Resource bounds](https://github.com/gaato/codecs.mbt/blob/main/crc/RESOURCE_BOUNDS.md) and [test coverage](https://github.com/gaato/codecs.mbt/blob/main/crc/TEST_COVERAGE.md)
 
 ## License
 

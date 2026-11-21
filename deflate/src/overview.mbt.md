@@ -1,8 +1,25 @@
 # gaato/deflate
 
-Streaming decoders and encoders for DEFLATE (RFC 1951) and the two formats around it, zlib (RFC 1950) and gzip (RFC 1952), in pure MoonBit, for Native, JS, Wasm and Wasm GC. They take input in chunks of any size, write output into slices of any size, verify every checksum, and keep their memory fixed, so they fit HTTP's `gzip` and `deflate` codings, `.gz` files, PNG and WebSocket compression alike.
+DEFLATE (RFC 1951), zlib (RFC 1950) and gzip (RFC 1952) for MoonBit:
+one-shot and streaming decoders and encoders, and a decoder for Deflate64
+(ZIP method 9). Pure MoonBit, on Native, JS, Wasm and Wasm GC.
 
-The one-shot functions have the same shape as those of MoonBit's core library (`moonbitlang/core/compress`) and of moonbit-community/flate, so decoding with either moves to `@zlib` and `@gzip` mostly by changing the import; [Moving from MoonBit's core library](https://github.com/gaato/codecs.mbt/blob/main/deflate/docs/migrating.md) lists what else changes: levels, error types and a few defaults.
+- **Streaming in fixed memory.** Decoders and encoders take input in pieces
+  of any size, down to one byte, and write into output buffers you supply.
+  Their memory is fixed when they are made, about 46 KiB for a DEFLATE
+  decoder, however long the stream.
+- **Checked.** Every checksum is verified: zlib's Adler-32, gzip's CRC-32 and
+  length, and a gzip header's CRC. Malformed input raises an error and never
+  aborts. The raw, zlib and gzip decoders are tested against zlib on crafted
+  and corrupted streams: they refuse what zlib refuses, with the same kind of
+  error.
+- **Encoders** with levels 0 to 12, sync flush, preset dictionaries and a
+  window from 256 bytes to 32 KiB.
+- **gzip** headers read and written, and files of several members.
+- **One step API and one error type** with the other codecs of
+  [codecs.mbt](https://github.com/gaato/codecs.mbt): every `Decoder` and
+  `Encoder` implements the traits of
+  [`gaato/codec_bytes`](https://mooncakes.io/docs/gaato/codec_bytes).
 
 ## Install
 
@@ -10,11 +27,18 @@ The one-shot functions have the same shape as those of MoonBit's core library (`
 moon add gaato/deflate
 ```
 
-## Usage
+Each format is its own package. Import the ones you need in your package's
+`moon.pkg` and call them by their last name: `@deflate`, `@zlib`, `@gzip`,
+`@deflate64`.
 
-Each format is its own package; import those you need in your `moon.pkg` (see [Packages](#packages)).
+| Package | Format | Use it for |
+| --- | --- | --- |
+| `gaato/deflate` | raw DEFLATE | ZIP method 8, WebSocket `permessage-deflate`, formats that frame DEFLATE themselves |
+| `gaato/deflate/zlib` | zlib | HTTP's `deflate` coding, PNG image data, Discord's `zlib-stream` |
+| `gaato/deflate/gzip` | gzip | `.gz` files, HTTP's `gzip` coding |
+| `gaato/deflate/deflate64` | Deflate64, decode only | ZIP method 9 entries |
 
-One shot:
+## Whole buffers
 
 ```mbt check
 ///|
@@ -26,29 +50,42 @@ test "compress and decompress a whole stream of each format" {
 }
 
 ///|
-test "decompress a whole stream of each format" {
-  let raw = b"\xcb\x48\xcd\xc9\xc9\x07\x00"
-  assert_eq(@deflate.decompress(raw), b"hello")
-  let zlib = b"\x78\x9c\xcb\x48\xcd\xc9\xc9\x07\x00\x06\x2c\x02\x15"
-  assert_eq(@zlib.decompress(zlib, max_output=16 * 1024 * 1024), b"hello")
+test "decompress with a cap on the output" {
   let gzip = b"\x1f\x8b\x08\x00\x00\x00\x00\x00\x02\x03\xcb\x48\xcd\xc9\xc9\x07\x00\x86\xa6\x10\x36\x05\x00\x00\x00"
-  assert_eq(@gzip.decompress(gzip), b"hello")
+  assert_eq(@gzip.decompress(gzip, max_output=16 * 1024 * 1024), b"hello")
 }
 ```
 
-Streaming: feed input as it arrives, take output in slices of the size you choose. Every step says whether its input is the last: `end=false` before, `end=true` with the last input, so that a stream cut short raises `Truncated` instead of ending quietly. `Status` is [`gaato/codec_bytes`](https://mooncakes.io/docs/gaato/codec_bytes)'s, re-exported by each package: match `Done`, `NeedMoreInput` and `NeedMoreOutput` unqualified, or write `@gzip.Status::Done`.
+`decompress` has no cap unless you pass `max_output`; past it, it raises
+`LimitExceeded` with `resource: Output`. Set one for input you did not make.
+`decompress` returns only output its checksums have verified.
+
+## Decode as the input arrives
+
+Keep one decoder for the stream. Each `step_into` takes the input you have
+and a buffer to write into: advance the input by `last_consumed()`, take
+`last_produced()` bytes of output, and call again on `NeedMoreOutput`. Pass
+`end=true` with the last input, an empty one if the source has just run dry,
+so that a stream cut short raises `Truncated` instead of ending quietly.
 
 ```mbt check
 ///|
-fn gunzip(chunks : Array[Bytes], sink : (BytesView) -> Unit) -> Unit raise {
+/// Decodes a gzip stream that `read` hands over in pieces, `None` once it has
+/// no more, and passes the output to `write` as it is decoded.
+fn gunzip(read : () -> Bytes?, write : (Bytes) -> Unit) -> Unit raise {
   let decoder = @gzip.Decoder()
   let out = FixedArray::make(64 * 1024, b'\x00')
-  for i, chunk in chunks {
-    let mut input = chunk[:]
+  for ;; {
+    let piece = read()
+    let end = piece is None
+    let mut input = match piece {
+      Some(bytes) => bytes[:]
+      None => b""[:]
+    }
     for ;; {
-      let status = decoder.step_into(input, out, end=i == chunks.length() - 1)
+      let status = decoder.step_into(input, out, end~)
       input = input[decoder.last_consumed():]
-      sink(Bytes::from_array(out[:decoder.last_produced()]))
+      write(Bytes::from_array(out[:decoder.last_produced()]))
       match status {
         Done => return
         NeedMoreInput => break
@@ -59,166 +96,156 @@ fn gunzip(chunks : Array[Bytes], sink : (BytesView) -> Unit) -> Unit raise {
 }
 
 ///|
-test "decode a gzip stream chunk by chunk" {
+test "decode a gzip stream that arrives in pieces" {
+  let pieces = [
+    b"\x1f\x8b\x08\x00\x00\x00\x00\x00", b"\x02\x03\xcb\x48\xcd\xc9\xc9\x07", b"\x00\x86\xa6\x10\x36\x05\x00\x00\x00",
+  ]
+  let mut next = 0
   let decoded = Buffer()
   gunzip(
-    [
-      b"\x1f\x8b\x08\x00\x00\x00\x00\x00", b"\x02\x03\xcb\x48\xcd\xc9\xc9\x07", b"\x00\x86\xa6\x10\x36\x05\x00\x00\x00",
-    ],
-    bytes => decoded.write_bytes(bytes.to_owned()),
+    () => if next < pieces.length() {
+      next += 1
+      Some(pieces[next - 1])
+    } else {
+      None
+    },
+    bytes => decoded.write_bytes(bytes),
   )
   assert_eq(decoded.to_bytes(), b"hello")
+  // A source with nothing in it is a stream cut short, not an empty one.
+  let empty = try gunzip(() => None, _ => ()) catch {
+    @codec_bytes.CodecError::CodecError(kind, _) => Some(kind)
+    _ => None
+  } noraise {
+    _ => None
+  }
+  assert_true(empty is Some(Truncated))
 }
 ```
 
-Encoding works the same way, with an action instead of `end`: `Continue` takes input, `Flush` makes the output so far decode to the input so far while the stream goes on, and `Finish` ends the stream. `EncodeAction` is re-exported too.
+`step` does the same into a `MutArrayView[Byte]`; `step_into` takes a whole
+`FixedArray` and copies in bulk. Output may come before the checksum that
+covers it, so `ChecksumMismatch` can follow output you already have. Every
+decoder also has `is_finished()`, `memory_usage()` and `reset()`, which
+starts a new stream with the same options and reuses what the decoder
+allocated.
+
+## Encode as the input arrives
+
+An encoder's step takes an action instead of `end`. `Continue` takes input,
+`Flush` makes the output so far decode to the input so far while the stream
+goes on, and `Finish` ends the stream. Keep stepping while the answer is
+`NeedMoreOutput`, passing what was not taken again with the same action.
+An encoder never raises.
 
 ```mbt check
 ///|
-/// Compresses each message of a connection into one zlib stream, as
-/// Discord's `zlib-stream` does: every message ends in a sync flush. Returns
-/// the bytes to send for each message.
-fn compress_messages(messages : Array[Bytes]) -> Array[Bytes] {
-  let encoder = @zlib.Encoder()
-  let out = FixedArray::make(64 * 1024, b'\x00')
-  messages.map(message => {
-    let part = Buffer()
-    let mut input = message[:]
-    for ;; {
-      let status = encoder.step_into(input, out, action=Flush)
-      input = input[encoder.last_consumed():]
-      part.write_bytes(Bytes::from_array(out[:encoder.last_produced()]))
-      if status is NeedMoreInput {
-        break
-      }
+/// Steps `encoder` over `input` with `action`, passing each piece of output
+/// to `write`, until all of `input` is taken and, for `Finish`, the stream
+/// has ended.
+fn encode(
+  encoder : @zlib.Encoder,
+  input : BytesView,
+  action : @zlib.EncodeAction,
+  out : FixedArray[Byte],
+  write : (Bytes) -> Unit,
+) -> Unit {
+  let mut input = input
+  for ;; {
+    let status = encoder.step_into(input, out, action~)
+    input = input[encoder.last_consumed():]
+    write(Bytes::from_array(out[:encoder.last_produced()]))
+    if status is (NeedMoreInput | Done) {
+      break
     }
-    part.to_bytes()
-  })
-}
-
-///|
-test "each message decodes on its own, without the end of the stream" {
-  let messages = [b"{\"op\":10}", b"{\"op\":11}"]
-  let decoder = @zlib.Decoder()
-  let out = FixedArray::make(64 * 1024, b'\x00')
-  for i, part in compress_messages(messages) {
-    assert_true(part[part.length() - 4:] is [0x00, 0x00, 0xff, 0xff])
-    assert_true(decoder.step_into(part, out, end=false) is NeedMoreInput)
-    assert_eq(Bytes::from_array(out[:decoder.last_produced()]), messages[i])
   }
 }
-```
 
-`level` goes from 0 to 12, following libdeflate: 0 stores the input in stored blocks, 1 is the fastest, 12 the smallest, and 6, the default, a balance; -1, zlib's `Z_DEFAULT_COMPRESSION`, is 6 too, and other levels outside are clamped. `window_bits`, 8 to 15 (15, a 32 KiB window, by default), keeps every match within `1 << window_bits` bytes, for a peer that keeps less history, as WebSocket's permessage-deflate (RFC 7692) negotiates with `server_max_window_bits` and `client_max_window_bits`; the raw and zlib encoders take it, and zlib's CINFO says it. gzip has no field for a window, so a gzip decoder keeps 32 KiB and the gzip encoder takes none. `Flush` is zlib's sync flush (`Z_SYNC_FLUSH`): it ends with an empty stored block, `00 00 ff ff`, and a flush with nothing new since the last adds nothing. A flush ends the current block and costs at least the 5 bytes of the empty one, so flush where a reader needs the data, not after every write; matches still reach back across it. The output does not depend on how the input and the output are split, only on the input, the options and where the flushes fall. The levels follow libdeflate's; how they compare with zlib's is in [Compression levels and ratio](https://github.com/gaato/codecs.mbt/blob/main/deflate/docs/compression.md). An encoder never raises. `compress_bound(n)` is the most `compress` writes for `n` bytes, and `encoder_memory_bound(level~)` and `decoder_memory_bound()` what an encoder and a decoder hold; `@zlib` and `@gzip` have their own, with their framing.
-
-Each `Decoder` implements `gaato/codec_bytes`'s `Decode`, and each `Encoder` its `Encode`, so code written against that contract (an HTTP client, a command-line tool) takes any of them as it takes the other codecs of [codecs.mbt](https://github.com/gaato/codecs.mbt).
-
-## Packages
-
-| Package | Format | Use it for |
-|---|---|---|
-| `gaato/deflate` | raw DEFLATE | ZIP entries, WebSocket `permessage-deflate`, formats that frame DEFLATE themselves |
-| `gaato/deflate/deflate64` | raw Deflate64 (decode only) | ZIP method 9 entries |
-| `gaato/deflate/zlib` | zlib | HTTP's `deflate` coding, PNG, Discord's `zlib-stream` |
-| `gaato/deflate/gzip` | gzip | `.gz` files, HTTP's `gzip` coding |
-
-## Deflate64
-
-`gaato/deflate/deflate64` decodes ZIP method 9 (Enhanced Deflating), used by
-Windows Explorer and 7-Zip. Select it explicitly: the ordinary DEFLATE
-decoder keeps RFC 1951's codes. This package has no encoder or preset
-dictionary. A ZIP reader supplies the raw member data and checks the ZIP
-CRC itself; this package does not parse ZIP headers.
-
-```mbt check
 ///|
-test "decode a Deflate64 long match" {
-  let raw = b"\x4b\x1c\xfd\xff\x07\x00"
-  assert_eq(
-    @deflate64.decompress(raw, max_output=1 << 20),
-    Bytes::make(65539, b'a'),
-  )
+test "flush after each message, then finish the stream" {
+  let encoder = @zlib.Encoder()
+  let decoder = @zlib.Decoder(until=EndOfMember)
+  let out = FixedArray::make(64 * 1024, b'\x00')
+  let decoded = FixedArray::make(64 * 1024, b'\x00')
+  let stream = Buffer()
+  for message in [b"{\"op\":10}", b"{\"op\":11}"] {
+    let part = Buffer()
+    encode(encoder, message, Flush, out, bytes => part.write_bytes(bytes))
+    let part = part.to_bytes()
+    // A flushed part ends in 00 00 ff ff, and decodes in full on arrival.
+    assert_true(part is [.., 0x00, 0x00, 0xff, 0xff])
+    assert_true(decoder.step_into(part, decoded, end=false) is NeedMoreInput)
+    assert_eq(Bytes::from_array(decoded[:decoder.last_produced()]), message)
+    stream.write_bytes(part)
+  }
+  encode(encoder, b"", Finish, out, bytes => stream.write_bytes(bytes))
+  assert_eq(@zlib.decompress(stream.to_bytes()), b"{\"op\":10}{\"op\":11}")
 }
 ```
 
-`@deflate64.Decoder(until~)` has the same streaming methods and end policies
-as the raw DEFLATE decoder. Its fixed element-payload memory is **79,384
-bytes**, including a 64 KiB window, as `@deflate64.decoder_memory_bound()`
-reports. Output chunks may have any size, even for a match longer than the
-window. See [Deflate64](https://github.com/gaato/codecs.mbt/blob/main/deflate/docs/deflate64.md)
-for format sources and interoperability checks.
+`Flush` is zlib's sync flush (`Z_SYNC_FLUSH`) and costs at least 5 bytes, so
+flush where a reader needs the data. Matches still reach back across it;
+zlib's full flush, which forgets the window, is not offered. The output
+depends only on the input, the options and where the flushes fall, never on
+how the input or the output is split. Every encoder also has
+`is_finished()`, `memory_usage()` and `reset()`.
+
+## Options
+
+| Option | Taken by | Default | Meaning |
+| --- | --- | --- | --- |
+| `level` | `compress`, `Encoder` | 6 | 0 stores, 1 is the fastest, 12 the smallest. -1, zlib's `Z_DEFAULT_COMPRESSION`, means 6; other values outside 0 to 12 are clamped. The levels follow libdeflate's: 10 to 12 search much harder and hold far more memory. |
+| `window_bits` | raw and zlib `compress`, `Encoder` | 15 (32 KiB) | 8 to 15, clamped. No match reaches further back than `1 << window_bits` bytes, for a peer that keeps less history, as WebSocket's `server_max_window_bits` and `client_max_window_bits` negotiate. A zlib header's CINFO says it. |
+| `dictionary` | raw and zlib `compress`, `decompress`, `Encoder`, `Decoder` | none | A preset dictionary; see [zlib](#zlib). |
+| `max_output` | every `decompress` | none | A cap on the decoded size; a negative one counts as 0. |
+| `until` | every `Decoder` | `EndOfInput` | `EndOfMember` stops right after the first stream or gzip member and consumes nothing past it. |
+| `keep_header` | `@gzip.Decoder` | `true` | `false` skips each header's extra field, name and comment, whatever their size; see [gzip](#gzip). |
+| `max_header_bytes` | `@gzip.Decoder` | 65,536 | The most a header's extra field, name and comment may hold between them. |
+| `header` | `@gzip.compress`, `@gzip.Encoder` | none | The member's header; see [gzip](#gzip). |
+
+## Memory and sizes
+
+| | Holds |
+| --- | --- |
+| Raw or zlib decoder | 46,592 bytes, from its first step to its last |
+| gzip decoder | the same, plus the current header's fields up to `max_header_bytes` (none with `keep_header=false`) |
+| Deflate64 decoder | 79,384 bytes |
+| Encoder, levels 5 to 9 | 542,516 bytes; less at lower levels |
+| Encoder, levels 10 to 12 | up to 7,056,748 bytes |
+
+`decoder_memory_bound()` and `encoder_memory_bound(level~)` give these before
+you make one; `memory_usage()` reports what one holds. A preset dictionary is
+your bytes, kept by reference and not counted. `compress_bound(n)` is the
+most `compress` writes for `n` bytes, at any level; a streaming encoder stays
+within it plus 10 bytes per `Flush`. A decoder bounds its memory, not its
+output: when streaming, count bytes at your sink to cap the total.
 
 ## gzip
 
-A gzip stream may hold several members, as `cat a.gz b.gz` makes, and nothing marks the last one. By default the decoder reads every member, as the `gzip` command does. After a member, bytes that begin another (`1f 8b`) are read as one; anything else, zero padding included, raises `TrailingData`. A decoder that skipped zeros would also skip the members after them.
+A gzip file may hold several members, as `cat a.gz b.gz` makes. By default
+the decoder reads every member, as the `gzip` command does; bytes after a
+member that do not begin another, zero padding included, raise
+`TrailingData`. `until=EndOfMember` stops right after the first member, so
+that you decide what may follow it.
 
-`header()` gives the current member's header: the extra field, the name and the comment as the bytes hold them (RFC 1952 writes names in ISO 8859-1; they are not converted), and the time, flags and OS. `until=EndOfMember` stops right after the first member and consumes nothing past it, so that you can decide yourself what may follow:
+`header()` gives the current member's header, with the name and comment as
+the bytes hold them (ISO 8859-1, not converted). `keep_header=false` skips
+those fields at any size and still checks the header CRC;
+`@gzip.decompress` does this.
 
-```mbt check
-///|
-test "one member, then what follows it" {
-  let gz = b"\x1f\x8b\x08\x00\x00\x00\x00\x00\x02\x03\xcb\x48\xcd\xc9\xc9\x07\x00\x86\xa6\x10\x36\x05\x00\x00\x00"
-  let input = Bytes::from_array([..gz, 0, 0, 0, 0])
-  let decoder = @gzip.Decoder(until=EndOfMember)
-  let out = FixedArray::make(64, b'\x00')
-  assert_true(decoder.step_into(input, out, end=true) is Done)
-  assert_eq(Bytes::from_array(out[:decoder.last_produced()]), b"hello")
-  assert_eq(input[decoder.last_consumed():], b"\x00\x00\x00\x00")
-  let header = decoder.header().unwrap()
-  assert_eq(header.os, b'\x03')
-  assert_true(header.name is None)
-}
-```
-
-A header's extra field, name and comment may hold at most `max_header_bytes` between them, 65,536 by default; a header that holds more raises `LimitExceeded({ resource: Memory, .. })`, rather than being kept whole or cut short.
-
-A decoder that has no use for them, as an HTTP client usually has none, passes `keep_header=false`: it skips the extra field, the name and the comment whatever their size, holds none of their bytes, and still checks the header CRC. `header()` then gives the time, flags and OS, with the other fields None, and `max_header_bytes` does not apply. `@gzip.decompress` skips them this way, so a large header never stops it.
-
-```mbt check
-///|
-test "skip the header's fields" {
-  // A member named "a.txt" (FNAME).
-  let gz = b"\x1f\x8b\x08\x08\x00\x00\x00\x00\x00\x03a.txt\x00\xcb\x48\xcd\xc9\xc9\x07\x00\x86\xa6\x10\x36\x05\x00\x00\x00"
-  let decoder = @gzip.Decoder(keep_header=false)
-  let out = FixedArray::make(64, b'\x00')
-  assert_true(decoder.step_into(gz, out, end=true) is Done)
-  assert_eq(Bytes::from_array(out[:decoder.last_produced()]), b"hello")
-  assert_true(decoder.header() is Some({ name: None, os: b'\x03', .. }))
-  assert_eq(@gzip.decompress(gz), b"hello")
-}
-```
-
-`@gzip.Encoder` and `@gzip.compress` write one member. Without a `header`, it has no name, comment or extra field, MTIME 0 and OS 255 (both unknown), so that the same input gives the same bytes on every target and every day, and XFL as zlib sets it: 4 at levels 0 and 1, 2 at levels 9 to 12, 0 otherwise. A `Header` you give is written as it is, but it must be writable (`Header::is_writable`): an extra field of at most 65,535 bytes, and no zero byte in the name or the comment, which a zero ends. Passing one that is not is a programming error, and aborts.
-
-```mbt check
-///|
-test "a member with a name" {
-  let header : @gzip.Header = {
-    text: true,
-    mtime: 1700000000,
-    xfl: b'\x00',
-    os: b'\x03',
-    extra: None,
-    name: Some(b"notes.txt"),
-    comment: None,
-  }
-  assert_true(header.is_writable())
-  let gz = @gzip.compress(b"hello", header~)
-  let decoder = @gzip.Decoder()
-  let out = FixedArray::make(64, b'\x00')
-  assert_true(decoder.step_into(gz, out, end=true) is Done)
-  assert_eq(decoder.header(), Some(header))
-  // The default header: MTIME 0, XFL 0 at level 6, OS 255.
-  assert_eq(
-    @gzip.compress(b"hello")[:10],
-    b"\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff",
-  )
-}
-```
+`@gzip.compress` and `@gzip.Encoder` write one member. Without a `header`,
+it has MTIME 0 and OS 255, so the same input gives the same bytes on every
+target and every day. A `Header` you give must pass `Header::is_writable`
+(an extra field of at most 65,535 bytes, no zero byte in the name or the
+comment); one that does not aborts.
 
 ## zlib
 
-A zlib stream that was compressed with a preset dictionary names it by its Adler-32, which `@zlib.dictionary_id` computes. Without it the decoder raises `DictionaryRequired(Some(id))`, and with another one `DictionaryMismatch`; make a new decoder with the right dictionary and start over. A stream that names no dictionary ignores the one you give. A decoder keeps a view of the dictionary's last 32 KiB, not a copy, so the `Bytes` it is a view of stay alive as long as the decoder; the same goes for `@deflate.Decoder(dictionary=...)`.
+A zlib stream compressed with a preset dictionary names it by its Adler-32,
+which `@zlib.dictionary_id` computes. Without the dictionary the decoder
+raises `DictionaryRequired(Some(id))`, and with another one
+`DictionaryMismatch`; make a new decoder with the right one and start over.
+A stream that names no dictionary ignores the one you give.
 
 ```mbt check
 ///|
@@ -237,116 +264,113 @@ test "a stream that needs a dictionary" {
 }
 ```
 
-An encoder given a `dictionary` names it in the header, and its stream's matches may reach back into it; the same goes for `@deflate.Encoder(dictionary=...)`, whose stream does not name it. Its header's FLEVEL says which kind of level made it, as zlib's does, so `@zlib.compress` writes the same header bytes as zlib: `78 9c` at the default level.
+An encoder given a `dictionary` names it in the header, and its matches may
+reach back into it. The raw `@deflate` encoder and decoder take a dictionary
+too, which the stream does not name. The header's FLEVEL says which kind of
+level made the stream, as zlib's does, so `@zlib.compress` starts with
+`78 9c` at the default level.
+
+`@zlib.is_header(cmf, flg)` tells a zlib header from the start of raw
+DEFLATE, for servers that send HTTP's `deflate` coding without the zlib
+wrapper. It is a strong heuristic, not a proof.
+
+## Streams that never end
+
+A connection that carries one stream flushed after each message, as
+Discord's `zlib-stream` does, keeps one `@zlib.Decoder(until=EndOfMember)`
+and passes every frame with `end=false`. Each frame answers `NeedMoreInput`
+once everything it determines is written, so a frame ending in
+`00 00 ff ff` has given its whole message. When the connection closes, drop
+or `reset()` the decoder rather than pass `end=true`, which raises
+`Truncated`. However long the connection, the decoder holds its window and
+tables, never the messages so far.
+
+For WebSocket's `permessage-deflate` (RFC 7692), decode each message with an
+`@deflate.Decoder(until=EndOfMember)`, then the appended `00 00 ff ff` as a
+step of its own, and accept the message only when
+`at_block_boundary()` is then true. Its doc comment says why; `reset` with
+`dictionary=` carries the window between messages or, with `b""`, drops it.
+
+## Deflate64
+
+`gaato/deflate/deflate64` decodes ZIP method 9 (Enhanced Deflating), as
+7-Zip writes it. Use it explicitly: the ordinary decoder keeps RFC 1951's
+codes, under which a Deflate64 entry is refused or decodes wrongly. It has
+no encoder and no preset dictionary, and it does not parse ZIP headers: give
+it an entry's compressed bytes, and check the entry's size and CRC in your
+ZIP reader. For whole ZIP archives, see
+[`gaato/zip`](https://mooncakes.io/docs/gaato/zip).
 
 ```mbt check
 ///|
-test "compress with a dictionary" {
-  let dictionary = b"{\"op\":0,\"t\":\"MESSAGE_CREATE\",\"d\":{\"content\":\""
-  let message = b"{\"op\":0,\"t\":\"MESSAGE_CREATE\",\"d\":{\"content\":\"hi\"}}"
-  let stream = @zlib.compress(message, dictionary~)
-  assert_eq(@zlib.decompress(stream, dictionary~), message)
-  assert_true(stream.length() < @zlib.compress(message).length())
+test "decode a Deflate64 entry with a match longer than DEFLATE allows" {
+  let entry = b"\x4b\x1c\xfd\xff\x07\x00"
+  assert_eq(
+    @deflate64.decompress(entry, max_output=1 << 20),
+    Bytes::make(65539, b'a'),
+  )
 }
 ```
 
-`@zlib.is_header(cmf, flg)` tells a zlib header from the start of raw DEFLATE, for HTTP's `deflate` coding, which is zlib but which some servers send raw. It is a heuristic, though a strong one.
-## Streams that do not end
-
-Discord's `zlib-stream` gateway compression is one zlib stream per connection that never ends; each message ends in a sync flush (`00 00 ff ff`), and a message may come in several WebSocket frames. Keep one decoder for the connection, made with `until=EndOfMember`, and pass every frame with `end=false`, since no frame is the last:
-
-- `NeedMoreInput`, with the frame consumed, is the answer to every frame. Everything the frame determines has been written, so after a frame that ends in `00 00 ff ff` the whole message is out. The decoder does not know where messages end; the suffix does.
-- `NeedMoreOutput`: the slice is full. Call again with the rest of the frame, `frame[last_consumed():]`.
-- `Done`: the stream ended, which a gateway stream never does. `until=EndOfMember` makes the decoder report this at once; under the default, it would wait for what follows and raise `TrailingData` on the next frame.
-
-When the connection closes, drop the decoder or `reset` it for the next one, rather than passing `end=true`, which raises `Truncated`: the stream was cut, not ended. However long the connection, the decoder holds its window and tables, never the messages so far.
-
-WebSocket's permessage-deflate (RFC 7692) is raw DEFLATE that drops each message's `00 00 ff ff`, which the reader appends back. Appended bytes can also complete a message cut inside a block, without a byte of output: as a stored block's LEN, or as a fixed-code block's end-of-block code followed by the next block's header. So decode with `until=EndOfMember`, the message first and the four bytes after it as a step of their own, and accept the message only when every byte is consumed, the four bytes wrote nothing, and `@deflate.Decoder::at_block_boundary()` is then true: the input ended between two blocks on a byte boundary, with all the output handed out. The four bytes must write nothing because they are the empty stored block that ends the message; a message that leaves a stored block open would take them as its data. A message may also hold a final block (RFC 7692, sections 7.2.1 and 7.2.3.4), after which more blocks follow from the next byte, decoded with the same window. There the decoder answers `Done` and stops right after the final block: keep `input[last_consumed():]` first, since a reset clears the count, then `reset(dictionary=...)` with the last 32 KiB of the output so far, and go on with what you kept, which in section 7.2.3.4's example is the tail's empty stored block. For a message that starts without the previous ones' window (no context takeover), reset with `dictionary=b""`: a reset without one keeps the dictionary the decoder has, the last one given.
-
-```mbt check
-///|
-/// Inflates the frames of one connection, and returns its messages.
-fn inflate_messages(frames : Array[Bytes]) -> Array[Bytes] raise {
-  let decoder = @zlib.Decoder(until=EndOfMember)
-  let out = FixedArray::make(64 * 1024, b'\x00')
-  let message = Buffer()
-  let messages = []
-  for frame in frames {
-    let mut input = frame[:]
-    for ;; {
-      let status = decoder.step_into(input, out, end=false)
-      input = input[decoder.last_consumed():]
-      message.write_bytes(Bytes::from_array(out[:decoder.last_produced()]))
-      match status {
-        NeedMoreInput => break
-        NeedMoreOutput => ()
-        Done => fail("the stream ended")
-      }
-    }
-    if frame is [.., 0x00, 0x00, 0xff, 0xff] {
-      messages.push(message.to_bytes())
-      message.reset()
-    }
-  }
-  messages
-}
-
-///|
-test "a message split across frames comes out once its flush arrives" {
-  let messages = [b"{\"op\":10}", b"{\"op\":0,\"t\":\"READY\"}"]
-  let parts = compress_messages(messages)
-  // The second message in two frames.
-  let second = parts[1]
-  let frames = [parts[0], second[:3].to_owned(), second[3:].to_owned()]
-  assert_eq(inflate_messages(frames), messages)
-}
-```
-
-## Limits
-
-- A decoder's memory is the 32 KiB window and its decoding tables, about 46 KiB from its first step to its last, with a dictionary or without (a dictionary is your bytes, held by reference), plus a gzip header's fields up to `max_header_bytes`.
-- An encoder's memory is fixed by its level: about 530 KiB at the default level, less at levels 0 and 1, at most about 6.8 MiB at levels 10 to 12, and for gzip its header's bytes.
-- `memory_usage()` reports both; [RESOURCE_BOUNDS.md](https://github.com/gaato/codecs.mbt/blob/main/deflate/RESOURCE_BOUNDS.md) gives every bound exactly.
-- A flush is a sync flush: zlib's full flush, which also forgets the window, is not offered.
+`@deflate64.Decoder(until?)` steps as the other decoders do.
 
 ## Errors
 
-A decoder refuses what zlib refuses, with zlib's kind of error: reserved block types and codes, over-subscribed and incomplete codes, distances before the start of the output, and the reserved header fields and values of zlib and gzip. Every malformed stream raises [`gaato/codec`](https://mooncakes.io/docs/gaato/codec)'s `CodecError(kind, message)`; a decoder does not abort. The kinds:
+Every malformed stream raises
+[`gaato/codec`](https://mooncakes.io/docs/gaato/codec)'s
+`CodecError(kind, message)`. In a `catch` on these functions, `CodecError`
+and the kinds match unqualified, with no import; to name the types
+elsewhere, import `gaato/codec_bytes`, which re-exports them.
 
-- `Truncated`: the input ends inside a stream.
-- `Corrupt`: the input is not a valid stream.
-- `ChecksumMismatch`: a checksum or a gzip length does not match.
-- `TrailingData`: bytes after the stream (after a gzip member, bytes that start no other member).
-- `DictionaryRequired`, `DictionaryMismatch`: a zlib stream names a preset dictionary that was not given, or another one was.
-- `LimitExceeded`: a gzip header over `max_header_bytes`, with `resource: Memory`; more than `max_output` from `decompress`, with `resource: Output`.
+| Kind | When |
+| --- | --- |
+| `Truncated` | The input ends inside a stream, or holds none. |
+| `Corrupt` | The input is not a valid stream: reserved block types or header values, bad Huffman codes, a distance before the start of the output. |
+| `ChecksumMismatch` | An Adler-32, a CRC-32, a gzip length or a gzip header CRC does not match. |
+| `TrailingData` | Bytes follow the stream; for gzip, bytes that begin no other member. |
+| `DictionaryRequired(Some(id))`, `DictionaryMismatch` | A zlib stream names a preset dictionary that was not given, or another one was. |
+| `LimitExceeded` | Output past `max_output` (`resource: Output`), or a gzip header's fields past `max_header_bytes` (`resource: Memory`). |
 
-An error inside the DEFLATE data of a zlib or gzip stream keeps its kind. Errors stick: later steps raise the same kind until `reset`. In a `catch` on these functions, `CodecError(kind, _)` and the kinds match unqualified, with no import; to name the types elsewhere, import [`gaato/codec_bytes`](https://mooncakes.io/docs/gaato/codec_bytes), which re-exports them.
+Errors stick: every later step raises the same kind until `reset()`. A step
+that raises first writes the output that comes before the error, and
+`last_consumed()` and `last_produced()` say what it took and wrote. The
+output and the kind of error do not depend on how the input and the output
+are split.
 
-Every checksum is checked: zlib's Adler-32, gzip's CRC-32 and length, and the header CRC when a gzip header has one. Output comes out as soon as it is decoded, before the checksum that covers it, so `ChecksumMismatch` can follow output you already have; `decompress` returns only checked output.
+## Compared with MoonBit's core library
 
-A decoder never reads past the end of a stream: after `Done` under `until=EndOfMember`, what follows is `input[last_consumed():]`, whatever the input splits. Raw DEFLATE and zlib streams cannot be concatenated, so under the default `until=EndOfInput` anything after one raises `TrailingData`.
+MoonBit's core library has DEFLATE, zlib and gzip in
+`moonbitlang/core/compress`, with no dependency to add. If it does what you
+need, it is the simpler choice. The one-shot functions here have the same
+shape, so decoding code mostly moves by changing the import. Choose this
+module when you need any of these:
 
-A step that raises first writes the output that comes before the error, and `last_consumed()` and `last_produced()` say what it took and wrote, so a stream with bytes after it gives all its output, then `TrailingData`, with `last_consumed()` at its end, whether it came in one step or many. A malformed stream gives the same output before the same kind of error however its input and output are split.
+- the same step API and error type as the other codecs of codecs.mbt;
+- bytes after a gzip stream refused as `TrailingData`, as zlib refuses them;
+- gzip headers read and written, `window_bits`, `at_block_boundary()`,
+  memory bounds before decoding or encoding, or Deflate64.
 
-The header checks, the decoder's verdict on a code's lengths and the canonical codes of the fixed Huffman code are proved against RFC 1950, 1951 and 1952; the codes the encoder builds for each block, made as libdeflate makes them, are tested, not proved; [PROOFS.md](https://github.com/gaato/codecs.mbt/blob/main/deflate/PROOFS.md) lists what is proved and what is trusted.
-
-## When to use it
-
-gaato/deflate fits DEFLATE, zlib and gzip that arrive in pieces or come from anyone. Its decoders take input in pieces down to one byte, write into your slices and hold about 46 KiB, check every checksum, and refuse what zlib refuses: they agreed with zlib on all 517 valid and 2,893 invalid streams of the comparison. Its header checks and code-length verdicts are proved against RFC 1950, 1951 and 1952. It runs on Native, JS, Wasm and Wasm GC.
-
-The one-shot decoder of moonbit-community/flate 0.10.0, its latest release before its code went into MoonBit's core library (moonbitlang/core#4459, 2026-10-24), takes about 1.3 (Native), 2.8 (Wasm), 1.4 (Wasm GC) and 0.77 (JS) times as long as gaato/deflate's `decompress` on the benchmarks' text; its streaming decoder 1.1 to 3.0. Its level-6 encoder takes 0.85 (Native), 0.68 (Wasm), 0.99 (Wasm GC) and 0.70 (JS) times as long as ours, for 1.5 % more output on the Silesia corpus. The DEFLATE, zlib and gzip packages of MoonBit's core library that it became (`moonbitlang/core/compress`, experimental in MoonBit 0.10.20) take 1.6 (Native), 3.0 (Wasm), 1.4 (Wasm GC) and 0.75 (JS) times as long as `decompress`, 1.2 to 3.0 when streaming, and compress to the same sizes as moonbit-community/flate. Both accept text after the last member of a gzip stream, which zlib and gaato/deflate refuse.
+[Moving from MoonBit's core library](https://github.com/gaato/codecs.mbt/blob/main/deflate/docs/migrating.md)
+lists the names, levels, errors and defaults that differ.
 
 ## Links
 
+- [Comparison with other MoonBit implementations](https://github.com/gaato/codecs.mbt/blob/main/bench/README.md#compression-codecs-against-other-implementations):
+  features, conformance and speed
+- [Compression levels and ratio](https://github.com/gaato/codecs.mbt/blob/main/deflate/docs/compression.md):
+  how the levels work, and sizes against zlib
+- [Deflate64](https://github.com/gaato/codecs.mbt/blob/main/deflate/docs/deflate64.md):
+  format differences and interoperability checks
+- [Resource bounds](https://github.com/gaato/codecs.mbt/blob/main/deflate/RESOURCE_BOUNDS.md):
+  every limit and the tests that hold it
+- [Proofs](https://github.com/gaato/codecs.mbt/blob/main/deflate/PROOFS.md):
+  the header checks and Huffman code checks proved against the RFCs, and
+  what is trusted
+- [Test coverage](https://github.com/gaato/codecs.mbt/blob/main/deflate/TEST_COVERAGE.md)
+- [The byte-stream codec contract](https://github.com/gaato/codecs.mbt/blob/main/CONTRACT.md)
+  that every `Decoder` and `Encoder` keeps
 - [Changelog](https://github.com/gaato/codecs.mbt/blob/main/deflate/CHANGELOG.md)
 - [Repository](https://github.com/gaato/codecs.mbt)
-- [Comparison with other MoonBit implementations](https://github.com/gaato/codecs.mbt/blob/main/bench/README.md#compression-codecs-against-other-implementations): what each supports, checks and holds, and how fast it decodes and encodes
-- [The byte-stream codec contract](https://github.com/gaato/codecs.mbt/blob/main/CONTRACT.md) that every `Decoder` and `Encoder` keeps
-- [Compression levels and ratio](https://github.com/gaato/codecs.mbt/blob/main/deflate/docs/compression.md): how the levels work, and sizes against zlib
-- [Deflate64](https://github.com/gaato/codecs.mbt/blob/main/deflate/docs/deflate64.md): format differences, decoder bounds and interoperability checks
-- [Moving from MoonBit's core library or moonbit-community/flate](https://github.com/gaato/codecs.mbt/blob/main/deflate/docs/migrating.md): the names, errors and behaviour that differ
-- [Resource bounds](https://github.com/gaato/codecs.mbt/blob/main/deflate/RESOURCE_BOUNDS.md): every limit and the tests that hold it
-- [Proofs](https://github.com/gaato/codecs.mbt/blob/main/deflate/PROOFS.md) and [test coverage](https://github.com/gaato/codecs.mbt/blob/main/deflate/TEST_COVERAGE.md)
 
 ## License
 

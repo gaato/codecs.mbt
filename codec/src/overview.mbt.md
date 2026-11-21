@@ -1,16 +1,17 @@
 # gaato/codec
 
-The error kinds and limits shared by the streaming codecs of
-[codecs.mbt](https://github.com/gaato/codecs.mbt). A codec of any kind, a
-byte-stream decoder or an image decoder, raises `CodecError` with one of
-these kinds through its kind's contract, so that callers handle failures the
-same way whatever they decode.
+One error type for every decoder and encoder in
+[codecs.mbt](https://github.com/gaato/codecs.mbt), from Zstandard and gzip to
+PNG. A program that accepts several formats, such as an HTTP server taking
+compressed request bodies, can answer a cut stream, a body that grows past its
+budget or a missing dictionary the same way whichever format failed.
 
-This module only defines types. A codec such as
-[`gaato/zstd`](https://mooncakes.io/docs/gaato/zstd) brings it in, and
-[`gaato/codec_bytes`](https://mooncakes.io/docs/gaato/codec_bytes)
-re-exports its types, so a consumer of byte-stream codecs can name them with
-that one import instead.
+This module only defines types. You rarely add it yourself: every codec
+depends on it, and [`gaato/codec_bytes`](https://mooncakes.io/docs/gaato/codec_bytes)
+and [`gaato/codec_image`](https://mooncakes.io/docs/gaato/codec_image)
+re-export its types, so code that already imports one of those can name
+`CodecError` through it. Add it directly when a package handles codec errors
+without importing either.
 
 ## Install
 
@@ -18,10 +19,11 @@ that one import instead.
 moon add gaato/codec
 ```
 
-## Usage
+## Turn a codec error into a reply
 
-A `CodecError` carries a kind to act on and a message for people. Match on
-the kind, and keep a wildcard arm: `ErrorKind` and `Resource` may gain cases.
+A `CodecError` carries a kind to act on and a message for people. Match on the
+kind, not the message, and keep a wildcard arm: `ErrorKind` and `Resource` may
+gain cases.
 
 ```mbt check
 ///|
@@ -54,26 +56,26 @@ test "describe codec errors" {
 
 ## Error kinds
 
-- `Truncated`: the input ended inside a stream.
-- `Corrupt`: the input is not a valid stream.
-- `ChecksumMismatch`: a checksum, or a length the stream declares, does not
-  match the data.
-- `TrailingData`: bytes follow the end of the stream.
-- `LimitExceeded(limit)`: going on would exceed a limit. `limit` says which
-  resource (`Memory` or `Output`), how much the stream needs when that is
-  known, and how much is allowed, in bytes.
-- `DictionaryRequired(id)` and `DictionaryMismatch`: the stream needs a
-  dictionary that was not given, or was given another one.
-- `Unsupported`: the stream is valid but uses something the codec does not
-  implement.
+| Kind | Meaning |
+| --- | --- |
+| `Truncated` | The input ended inside a stream. |
+| `Corrupt` | The input is not a valid stream. |
+| `ChecksumMismatch` | A checksum, or a length the stream declares, does not match the data. |
+| `TrailingData` | Bytes follow the end of the stream. |
+| `LimitExceeded(limit)` | Going on would pass a limit. `limit` names the resource (`Memory` or `Output`), the bytes allowed, and the bytes needed when the codec knows them. |
+| `DictionaryRequired(id)` | The stream needs a dictionary that was not given. |
+| `DictionaryMismatch` | The stream needs a different dictionary from the one given. |
+| `Unsupported` | The stream is valid but uses a feature the codec does not implement. |
 
-Each codec's README says which kinds it raises and when.
+Each codec's README says which kinds it raises and when. A codec that has
+raised keeps raising the same kind until it is `reset`.
 
 ## Links
 
+- [The codec contracts](https://github.com/gaato/codecs.mbt/blob/main/CONTRACT.md):
+  the rules every byte-stream and image codec keeps
 - [Changelog](https://github.com/gaato/codecs.mbt/blob/main/codec/CHANGELOG.md)
 - [Repository](https://github.com/gaato/codecs.mbt)
-- [The byte-stream codec contract](https://github.com/gaato/codecs.mbt/blob/main/CONTRACT.md)
 
 ## License
 
