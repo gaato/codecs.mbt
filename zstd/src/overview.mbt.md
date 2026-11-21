@@ -1,6 +1,17 @@
 # gaato/zstd
 
-A streaming Zstandard (RFC 8878) decoder and encoder in pure MoonBit, for Native, JS, Wasm and Wasm GC. Both take input in chunks of any size and write output into slices of any size; the decoder keeps its memory within the window you allow, so it fits an HTTP client's `zstd` content coding as well as a whole file, and the encoder compresses about as well as `zstd` at the same level.
+Zstandard (RFC 8878) compression and decompression in pure MoonBit, for
+Native, JS, Wasm and Wasm GC. Use it to decode an HTTP `zstd` response as it
+arrives, to compress a file or a response, or to cut a stream into frames
+without decoding it.
+
+The decoder and the encoder take input in chunks of any size and write into
+output buffers you choose. The decoder's window is bounded by the
+`max_window_bits` you allow, its other memory by about 270 KiB, and it
+allocates nothing because of a size a header claims. Both
+implement [`gaato/codec_bytes`](https://mooncakes.io/docs/gaato/codec_bytes),
+so the same loop drives gzip, Brotli and the other codecs of
+[codecs.mbt](https://github.com/gaato/codecs.mbt).
 
 ## Install
 
@@ -8,18 +19,9 @@ A streaming Zstandard (RFC 8878) decoder and encoder in pure MoonBit, for Native
 moon add gaato/zstd
 ```
 
-## Usage
-
-One shot:
+## Compress and decompress bytes
 
 ```mbt check
-///|
-test "decompress a whole stream" {
-  let compressed = b"\x28\xb5\x2f\xfd\x20\x05\x29\x00\x00\x68\x65\x6c\x6c\x6f" // zstd.compress(b"hello")
-  let text = @zstd.decompress(compressed, max_output=16 * 1024 * 1024)
-  assert_eq(text, b"hello")
-}
-
 ///|
 test "compress and decompress" {
   let text = b"hello, hello, hello, zstd"
@@ -28,21 +30,41 @@ test "compress and decompress" {
   let smaller = @zstd.compress(text, level=12)
   assert_eq(@zstd.decompress(smaller), text)
 }
+
+///|
+test "decompress with an output cap" {
+  let compressed = b"\x28\xb5\x2f\xfd\x20\x05\x29\x00\x00\x68\x65\x6c\x6c\x6f" // compress(b"hello")
+  let text = @zstd.decompress(compressed, max_output=16 * 1024 * 1024)
+  assert_eq(text, b"hello")
+}
 ```
 
-Streaming: feed input as it arrives, take output in slices of the size you choose. A stream may hold several frames and nothing marks the last one, so every step says whether its input is the last: `end=false` before, `end=true` with the last input. `Status` is [`gaato/codec_bytes`](https://mooncakes.io/docs/gaato/codec_bytes)'s, re-exported: match `Done`, `NeedMoreInput` and `NeedMoreOutput` unqualified, or write `@zstd.Status::Done`.
+`decompress` has no output cap unless you pass `max_output`. Set one for input
+that comes from elsewhere: a few bytes of zstd can expand to gigabytes.
+
+## Decode a stream as it arrives
+
+Feed input as it comes, and take output in slices of the size you choose. A
+stream may hold several frames and nothing marks the last one, so every step
+says whether the source has run dry: `end=false` while it has more, `end=true`
+once it has none, with an empty input if need be. A stream cut short, or a
+source with nothing in it, then raises `Truncated`.
 
 ```mbt check
 ///|
-fn decode_all(chunks : Array[Bytes], sink : (BytesView) -> Unit) -> Unit raise {
+/// Decodes what `read` hands over, `None` once it has no more, passing the
+/// output to `write` as it is decoded.
+fn decode_all(read : () -> Bytes?, write : (Bytes) -> Unit) -> Unit raise {
   let decoder = @zstd.Decoder(max_window_bits=23) // 8 MiB, as RFC 9659 asks of HTTP
   let out = FixedArray::make(64 * 1024, b'\x00')
-  for i, chunk in chunks {
-    let mut input = chunk[:]
+  for ;; {
+    let piece = read()
+    let end = piece is None
+    let mut input = piece.unwrap_or(b"")[:]
     for ;; {
-      let status = decoder.step_into(input, out, end=i == chunks.length() - 1)
+      let status = decoder.step_into(input, out, end~)
       input = input[decoder.last_consumed():]
-      sink(Bytes::from_array(out[:decoder.last_produced()]))
+      write(Bytes::from_array(out[:decoder.last_produced()]))
       match status {
         Done => return
         NeedMoreInput => break
@@ -53,52 +75,69 @@ fn decode_all(chunks : Array[Bytes], sink : (BytesView) -> Unit) -> Unit raise {
 }
 
 ///|
+/// A source that hands over `pieces` one by one, then `None`.
+fn pieces_of(pieces : Array[Bytes]) -> () -> Bytes? {
+  let mut next = 0
+  () => if next < pieces.length() {
+    next += 1
+    Some(pieces[next - 1])
+  } else {
+    None
+  }
+}
+
+///|
 test "decode a stream chunk by chunk" {
   let decoded = Buffer()
   decode_all(
-    [b"\x28\xb5\x2f", b"\xfd\x20\x05\x29\x00\x00\x68", b"\x65\x6c\x6c\x6f"],
-    bytes => decoded.write_bytes(bytes.to_owned()),
+    pieces_of([
+      b"\x28\xb5\x2f", b"\xfd\x20\x05\x29\x00\x00\x68", b"\x65\x6c\x6c\x6f",
+    ]),
+    bytes => decoded.write_bytes(bytes),
   )
   assert_eq(decoded.to_bytes(), b"hello")
 }
 ```
 
-A frame followed by something else: `until=EndOfMember` stops right after the first frame and consumes nothing past it, so what follows is `input[last_consumed():]`. A skippable frame counts as a frame here.
+A `Decoder`'s memory is bounded by its window, but its total output is not.
+For input from elsewhere, count what `write` receives and stop past your
+budget.
+
+To read one frame followed by something else, make the decoder with
+`until=EndOfMember`. It stops right after the first frame and consumes nothing
+past it, so what follows is `input[decoder.last_consumed():]`.
+
+## Encode a stream
+
+`Encoder` works the same way, with an action in place of `end`. `Flush` makes
+the output so far decodable, say to send one part of an HTTP response. `Finish`
+ends the frame. A flush costs a 3-byte block header. A flush with nothing new
+since the last one writes nothing.
 
 ```mbt check
 ///|
-test "stop after the first frame" {
-  let frame = b"\x28\xb5\x2f\xfd\x20\x05\x29\x00\x00\x68\x65\x6c\x6c\x6f"
-  let input = Bytes::from_array([..frame[:], ..b"rest"])
-  let decoder = @zstd.Decoder(until=EndOfMember)
-  let out = FixedArray::make(64, b'\x00')
-  let status = decoder.step_into(input, out, end=true)
-  assert_true(status is Done)
-  assert_eq(Bytes::from_array(out[:decoder.last_produced()]), b"hello")
-  assert_eq(input[decoder.last_consumed():], b"rest")
-}
-```
-
-Encoding works the same way. `Flush` makes the output so far decode to the input so far, say to send one part of an HTTP response; `Finish` ends the frame. A flush ends the block in progress, 3 bytes of block header besides what it holds; a flush with nothing new since the last writes nothing, and so does one before any input, since the frame header comes with the first block.
-
-```mbt check
-///|
-fn encode_parts(parts : Array[Bytes], sink : (BytesView) -> Unit) -> Unit raise {
+/// Compresses each part `read` hands over and flushes it, so that the output
+/// so far decodes in full; at `None` it finishes the frame, which an empty
+/// source needs too.
+fn encode_parts(read : () -> Bytes?, write : (Bytes) -> Unit) -> Unit raise {
   let encoder = @zstd.Encoder()
   let out = FixedArray::make(64 * 1024, b'\x00')
-  for i, part in parts {
-    let action : @zstd.EncodeAction = if i == parts.length() - 1 {
+  for ;; {
+    let piece = read()
+    let action : @zstd.EncodeAction = if piece is None {
       Finish
     } else {
       Flush
     }
-    let mut input = part[:]
+    let mut input = piece.unwrap_or(b"")[:]
     for ;; {
       let status = encoder.step_into(input, out, action~)
       input = input[encoder.last_consumed():]
-      sink(Bytes::from_array(out[:encoder.last_produced()]))
-      if status is (Done | NeedMoreInput) {
-        break
+      write(Bytes::from_array(out[:encoder.last_produced()]))
+      match status {
+        Done => return
+        NeedMoreInput => break
+        NeedMoreOutput => ()
       }
     }
   }
@@ -107,27 +146,51 @@ fn encode_parts(parts : Array[Bytes], sink : (BytesView) -> Unit) -> Unit raise 
 ///|
 test "encode a stream part by part" {
   let encoded = Buffer()
-  encode_parts([b"<html>", b"<body>hello</body>", b"</html>"], bytes => {
-    encoded.write_bytes(bytes.to_owned())
+  encode_parts(pieces_of([b"<html>", b"<body>hello</body>", b"</html>"]), bytes => {
+    encoded.write_bytes(bytes)
   })
   let decoded = @zstd.decompress(encoded.to_bytes())
   assert_eq(decoded, b"<html><body>hello</body></html>")
 }
 ```
 
-`Decoder` and `Encoder` implement `gaato/codec_bytes`'s `Decode` and `Encode`, so code written against that contract (an HTTP client, a command-line tool) takes them as it takes any other codec there.
+The frame's bytes depend only on the input, the options and where `Flush`
+falls, never on how the input or output is split.
 
-## What it decodes
+## Defaults and limits
 
-Every RFC 8878 frame: raw, RLE and compressed blocks, Huffman-coded literals (one or four streams, with or without a new tree), every FSE table mode, and the content checksum (XXH64). A stream may hold several frames, and skippable frames among them, as the `zstd` tool writes them.
+| Option | Default | Notes |
+| --- | --- | --- |
+| `level` (`compress`, `Encoder`) | 3 | 1 to 22, plus the fast levels -1 down to -131072 (`zstd --fast=N` is level -N). Higher levels search harder and use more memory. |
+| `checksum` (`compress`, `Encoder`) | `true` | Writes the XXH64 content checksum. The decoder checks it when present. |
+| `content_size` (`Encoder`) | unknown | Give it when known: it is written in the header, and the window and tables shrink to fit. |
+| `max_window_bits` (`decompress`, `Decoder`) | 27 (128 MiB) | Frames that need a larger window are refused before anything is allocated. For HTTP, RFC 9659 asks for 23 (8 MiB). |
+| `max_output` (`decompress`) | none | Raises `LimitExceeded` with `resource: Output` past it. |
+| `until` (`Decoder`) | `EndOfInput` | Decodes every frame. `EndOfMember` stops after the first. |
 
-Input comes in chunks of any size, down to one byte, and output goes into slices of any size, under the rules of `gaato/codec_bytes`. The header decisions and the Huffman decoding tables are proved against RFC 8878; [PROOFS.md](https://github.com/gaato/codecs.mbt/blob/main/zstd/PROOFS.md) lists what is proved and what is trusted.
+A decoder holds at most `2^max_window_bits` bytes plus 256 KiB for a block,
+plus 13 KiB of tables. `decoder_memory_bound(max_window_bits=n)` gives that
+bound before you make one, and `memory_usage()` reports the current amount. For
+input of unknown size, an encoder holds about 3.1 MiB at level 1, 6.8 MiB at
+level 3 and 50 MiB at level 12. `encoder_memory_bound(level~, content_size?)`
+gives the bound for any level. `compress_bound(n)` is the most `compress`
+writes for `n` bytes.
 
-A dictionary, given to `Decoder(dictionary=d)` or `decompress(dictionary=d)`, comes as if just before every frame's output, so a frame made with `zstd -D` decodes, and so does RFC 9842's `dcz` coding. `Dictionary::raw(bytes)` takes the bytes as they are, as `dcz` does; `Dictionary::parse(bytes)` reads a formatted dictionary, as `zstd --train` writes them, whose entropy tables and repeat offsets the frames start from, and takes anything else as raw content, as `zstd -D` does. A frame that names another dictionary raises `DictionaryMismatch`, and one that names a dictionary when none is given `DictionaryRequired(Some(id))`.
+## Dictionaries
 
-## Reading frames without decoding them
+Pass a `Dictionary` to `Decoder`, `Encoder`, `compress` or `decompress`.
+`Dictionary::parse(bytes)` reads a dictionary in the format `zstd --train`
+writes, and `Dictionary::raw(bytes)` takes plain content, as RFC 9842's `dcz`
+coding does. Frames made with `zstd -D` decode, and frames written here decode
+with `zstd -d -D`. Training dictionaries is not included.
 
-`inspect_frame` reads the header of the frame at the start of some bytes: a Zstandard frame's window, content size, dictionary and checksum flag, or a skippable frame's variant and size. `frame_size` walks the frame's block headers to where it ends, without decoding it, as zstd's `ZSTD_findFrameCompressedSize` does, so a stream can be cut into frames, or checked to be whole, cheaply. `skippable_frame` writes a skippable frame, which carries bytes of your own beside Zstandard frames and which every decoder passes over (RFC 9842's `dcz` coding starts with one), and `read_skippable_frame` reads one back.
+## Read frames without decoding them
+
+`inspect_frame` reads the header of the frame at the start of some bytes.
+`frame_size` walks the block headers to where the frame ends, so you can cut a
+stream into frames, or check that a frame is whole, cheaply. `skippable_frame`
+and `read_skippable_frame` write and read frames that carry your own bytes,
+which every decoder skips.
 
 ```mbt check
 ///|
@@ -144,58 +207,47 @@ test "frames, read without decoding them" {
 }
 ```
 
-## Encoding
-
-`Encoder(level=n)` and `compress(level=n)` take zstd's levels 1 to 22, 3 by default (0 is the default too), and its negative levels, -1 down to -131072, the faster ones `zstd --fast=N` makes as level -N: they skip ahead faster the lower they go and leave literals uncoded. Higher positive levels generally spend more time and memory searching for matches. Levels 13 to 22 add binary-tree lazy2 and optimal parsing; a smaller input can get another strategy, as in zstd. Give `content_size` when known so the encoder can shrink its window and tables; `encoder_memory_bound(level~, content_size?)` reports their bound before allocation. The largest unknown-size level-22 configuration has a 128 MiB window and a bound of about 899 MiB. The frame carries the XXH64 content checksum unless `checksum=false`. Its bytes do not depend on how the input or the output is split: only on the input, the options and where `Flush` falls. See [Compression levels and strategies](https://github.com/gaato/codecs.mbt/blob/main/zstd/docs/compression.md) for the algorithms and existing ratio measurements.
-
-`compress` and `Encoder(content_size=n)` write the size in the frame header and pick the parameters for it, as zstd does: a small input gets small tables and declares a window no larger than itself.
-
-`Encoder(dictionary=d)` and `compress(dictionary=d)` put a `Dictionary` before the frame as `zstd -D` does: the frame's matches may reach into it until the input is a window past it, and the parameters are chosen for the input and the dictionary together. With a formatted dictionary, the frame names it by its id, and its first block may code literals and sequences with the dictionary's tables and start from its repeat offsets. The frames decode with `zstd -d -D`, and on small inputs come out the size of zstd's or smaller.
-
-Not included: long-distance matching, multithreading, and training dictionaries (`zstd --train` makes them).
-
-## Memory
-
-Memory is the window (at most the frame's `Window_Size`, and no more than its output so far), one compressed block of at most 128 KiB and its literals, plus 13 KiB of tables. `Decoder(max_window_bits=n)` refuses frames that need a window over `2^n` bytes, before allocating anything; the default 27 (128 MiB) is the reference decoder's. For HTTP, RFC 9659 asks for 23 (8 MiB). `memory_usage()` reports all of it: at most `2^n` bytes plus 256 KiB plus 13,156 bytes of tables, which `decoder_memory_bound(max_window_bits=n)` gives before you make a decoder.
-
-The encoder's memory is set by its level: for input of unknown size, about 3.1 MiB at level 1, 6.8 MiB at level 3 and 50 MiB at level 12 (its 4 MiB window, as much again before it slides, and 40 MiB of match tables). A known `content_size` shrinks the window and the tables to fit. `memory_usage()` reports it, and stays within `encoder_memory_bound(level~, content_size?, dictionary_len~)` whatever the steps. `compress_bound(n)` is the most `compress` writes for `n` bytes, for sizing an output buffer or a limit.
-
 ## Errors
 
-Every malformed stream raises [`gaato/codec`](https://mooncakes.io/docs/gaato/codec)'s `CodecError(kind, message)`; the decoder does not abort. The kinds:
+A malformed stream raises [`gaato/codec`](https://mooncakes.io/docs/gaato/codec)'s
+`CodecError(kind, message)`. The decoder never aborts on bad input.
 
-- `Truncated`: the input ends inside a frame.
-- `Corrupt`: the input is not a valid stream.
-- `TrailingData`: bytes after the last frame that start no frame.
-- `ChecksumMismatch`: the content checksum does not match.
-- `LimitExceeded`: a window over `max_window_bits`, with `resource: Memory`; more than `max_output` from `decompress`, with `resource: Output`.
-- `DictionaryRequired`: the frame names a dictionary and none was given, with its id.
-- `DictionaryMismatch`: the frame names a dictionary other than the one given.
+| Kind | When |
+| --- | --- |
+| `Truncated` | The input ends inside a frame. |
+| `Corrupt` | The input is not a valid stream. |
+| `TrailingData` | Bytes after the last frame start no frame. |
+| `ChecksumMismatch` | The content checksum does not match. The encoder also raises it when the input does not match the `content_size` it was given. |
+| `LimitExceeded` | A window over `max_window_bits` (`resource: Memory`), or more than `max_output` from `decompress` (`resource: Output`). |
+| `DictionaryRequired(Some(id))` | The frame names a dictionary and none was given. |
+| `DictionaryMismatch` | The frame names a different dictionary from the one given. |
 
-Errors stick: later steps raise the same kind until `reset`.
+A step that raises first hands out the output that comes before the error, so
+a streaming caller may already hold bytes when the checksum at the end fails.
+**Errors stick:** every later step raises the same kind until `reset()`.
 
-The encoder raises only when it was given `content_size` and the input does not match it: `ChecksumMismatch`, once the input passes the size (the output for the input up to it is handed out first) or at `Finish` when it falls short, and sticks the same way.
+In a `catch`, `CodecError(kind, _)` and the kinds match unqualified. To name
+the types elsewhere, import `gaato/codec_bytes`, which re-exports them.
 
-In a `catch` on these functions, `CodecError(kind, _)` and the kinds match unqualified, with no import; to name the types elsewhere, import [`gaato/codec_bytes`](https://mooncakes.io/docs/gaato/codec_bytes), which re-exports them.
+## Not included
 
-A step that raises first hands out the output that comes before the error (answering `NeedMoreOutput` while it does not fit), and `last_consumed()` and `last_produced()` count what that step took and wrote: a corrupt stream gives the same output, then the same error, however it is split. On `TrailingData`, `last_consumed()` stops at the end of the stream.
-
-## When to use it
-
-gaato/zstd fits zstd that arrives in pieces or comes from anyone. `Decoder` takes input in pieces down to one byte, writes into your slices and holds the window you allow, 128 MiB by default (a process decoding 256 MiB of output in 64 KiB pieces peaks at 15.9 MiB, most of it the runtime and the compressed input); it allocates nothing from a size a header claims. It agreed with `zstd -d` on all 36 valid and 318 invalid streams of the comparison, checks the content checksum, and its frame headers and Huffman tables are proved against RFC 8878. It runs on Native, JS, Wasm and Wasm GC. Its encoder, at each level from 1 to 12, compresses the corpora to within 1 % of `zstd`, and its frames never depend on how the input arrives.
-
-Milky2018/zstd, which also compresses and takes dictionaries, takes about 4.1 (Native), 5.1 (Wasm), 4.0 (Wasm GC) and 2.7 (JS) times as long as gaato/zstd on the benchmarks' text. Its encoder writes the input uncompressed at its default level 3; at level 22 it writes twice what gaato/zstd writes at level 12 on that text, and takes 9 (Wasm GC) to 16 (JS) times as long.
+Long-distance matching, multithreaded compression and dictionary training.
 
 ## Links
 
+- [Comparison with other MoonBit implementations](https://github.com/gaato/codecs.mbt/blob/main/bench/README.md#compression-codecs-against-other-implementations):
+  features, conformance results and speed
+- [Compression levels and strategies](https://github.com/gaato/codecs.mbt/blob/main/zstd/docs/compression.md):
+  how each level searches, and sizes against the reference `zstd`
+- [Resource bounds](https://github.com/gaato/codecs.mbt/blob/main/zstd/RESOURCE_BOUNDS.md),
+  [proofs](https://github.com/gaato/codecs.mbt/blob/main/zstd/PROOFS.md) and
+  [test coverage](https://github.com/gaato/codecs.mbt/blob/main/zstd/TEST_COVERAGE.md)
+- [The byte-stream codec contract](https://github.com/gaato/codecs.mbt/blob/main/CONTRACT.md)
 - [Changelog](https://github.com/gaato/codecs.mbt/blob/main/zstd/CHANGELOG.md)
 - [Repository](https://github.com/gaato/codecs.mbt)
-- [Comparison with other MoonBit implementations](https://github.com/gaato/codecs.mbt/blob/main/bench/README.md#compression-codecs-against-other-implementations): what each supports, checks and holds, and how fast it decodes and encodes
-- [The byte-stream codec contract](https://github.com/gaato/codecs.mbt/blob/main/CONTRACT.md) that `Decoder` and `Encoder` keep
-- [Compression levels and strategies](https://github.com/gaato/codecs.mbt/blob/main/zstd/docs/compression.md): how each level finds its matches, the sizes against zstd 1.5.7, and the encoder's speed
-- [Resource bounds](https://github.com/gaato/codecs.mbt/blob/main/zstd/RESOURCE_BOUNDS.md): every limit and the tests that hold it
-- [Proofs](https://github.com/gaato/codecs.mbt/blob/main/zstd/PROOFS.md) and [test coverage](https://github.com/gaato/codecs.mbt/blob/main/zstd/TEST_COVERAGE.md)
 
 ## License
 
-Apache-2.0. The test frames under `testdata/upstream` come from [facebook/zstd](https://github.com/facebook/zstd) under its BSD license; see `NOTICE`.
+Apache-2.0. The test frames under `testdata/upstream` come from
+[facebook/zstd](https://github.com/facebook/zstd) under its BSD license; see
+`NOTICE`.

@@ -1,6 +1,17 @@
 # gaato/lz4
 
-LZ4 in pure MoonBit, for Native, JS, Wasm and Wasm GC: its frame format, streamed, with its checksums, dictionaries, content sizes, skippable frames and legacy frames, and its block format, whole. The encoder is lz4's fast one, and without a dictionary writes the bytes lz4 1.10.0 writes for the same options.
+LZ4 compression and decompression in pure MoonBit, for Native, JS, Wasm and
+Wasm GC. Use it to read and write `.lz4` files and LZ4 frames from other
+programs, or to decode raw LZ4 blocks inside a container format that records
+their sizes.
+
+The frame decoder and encoder stream: they take input in chunks of any size,
+write into output buffers you choose, and check every checksum. With the same
+options and no dictionary, the encoder writes the bytes the reference `lz4`
+1.10.0 writes. Both implement
+[`gaato/codec_bytes`](https://mooncakes.io/docs/gaato/codec_bytes), so the same
+loop drives Zstandard, gzip and the other codecs of
+[codecs.mbt](https://github.com/gaato/codecs.mbt).
 
 ## Install
 
@@ -8,9 +19,11 @@ LZ4 in pure MoonBit, for Native, JS, Wasm and Wasm GC: its frame format, streame
 moon add gaato/lz4
 ```
 
-## Usage
+## Frames or blocks
 
-One shot:
+An LZ4 **frame** (what the `lz4` command writes) carries its own header,
+checksums and end. A **block** is bare compressed data: the program that
+stores it must also keep its decoded size, or a bound on it.
 
 ```mbt check
 ///|
@@ -31,23 +44,30 @@ test "decode what lz4 wrote" {
 }
 ```
 
-Streaming: feed input as it arrives, take output in slices of the size you choose.
+`decompress` has no output cap unless you pass `max_output`. Set one for input
+that comes from elsewhere.
+
+## Decode frames as they arrive
+
+Pass `end=true` once the source has run dry, with an empty input if need be,
+so that a cut frame, or a source with nothing in it, raises `Truncated`.
+The decoder reads frames one after another, as `lz4 -d` does.
 
 ```mbt check
 ///|
-fn decode_all(chunks : Array[Bytes], sink : (BytesView) -> Unit) -> Unit raise {
+/// Decodes what `read` hands over, `None` once it has no more, passing the
+/// output to `write` as it is decoded.
+fn decode_all(read : () -> Bytes?, write : (Bytes) -> Unit) -> Unit raise {
   let decoder = @lz4.Decoder()
   let out = FixedArray::make(64 * 1024, b'\x00')
-  for i, chunk in chunks {
-    let mut input = chunk[:]
+  for ;; {
+    let piece = read()
+    let end = piece is None
+    let mut input = piece.unwrap_or(b"")[:]
     for ;; {
-      let status = decoder.step(
-        input,
-        out.mut_view(),
-        end=i == chunks.length() - 1,
-      )
+      let status = decoder.step(input, out.mut_view(), end~)
       input = input[decoder.last_consumed():]
-      sink(Bytes::from_array(out[:decoder.last_produced()]))
+      write(Bytes::from_array(out[:decoder.last_produced()]))
       match status {
         Done => return
         NeedMoreInput => break
@@ -58,12 +78,23 @@ fn decode_all(chunks : Array[Bytes], sink : (BytesView) -> Unit) -> Unit raise {
 }
 
 ///|
+/// A source that hands over `pieces` one by one, then `None`.
+fn pieces_of(pieces : Array[Bytes]) -> () -> Bytes? {
+  let mut next = 0
+  () => if next < pieces.length() {
+    next += 1
+    Some(pieces[next - 1])
+  } else {
+    None
+  }
+}
+
+///|
 test "decode a stream chunk by chunk" {
   let frame = @lz4.compress(b"one frame, then the next")
   let decoded = Buffer()
-  decode_all([frame[:9].to_owned(), frame[9:].to_owned(), frame], bytes => {
-    decoded.write_bytes(bytes.to_owned())
-  })
+  let pieces = [frame[:9].to_owned(), frame[9:].to_owned(), frame]
+  decode_all(pieces_of(pieces), bytes => decoded.write_bytes(bytes))
   assert_eq(
     decoded.to_bytes(),
     b"one frame, then the nextone frame, then the next",
@@ -71,42 +102,79 @@ test "decode a stream chunk by chunk" {
 }
 ```
 
-`Encoder()` streams the other way: `Continue` takes input, `Flush` writes what it holds as a block, so that the output so far decodes to the input so far, and `Finish` ends the frame. Both keep the rules of [`gaato/codec_bytes`](https://mooncakes.io/docs/gaato/codec_bytes), and implement its `Decode` and `Encode`.
+`Decoder(until=EndOfMember)` stops after the first frame and consumes nothing
+past it. Legacy frames (`lz4 -l`) end only where the next frame or the input
+does, so they raise `Unsupported` in that mode. `frame_info()` gives what the
+current frame's header says.
 
-## What it decodes
+`Encoder()` streams the other way, as the `codec_bytes` loop shows: `Continue`
+takes input, `Flush` writes what it holds as a block so the output so far
+decodes, and `Finish` ends the frame.
 
-Every LZ4 frame: independent and linked blocks of 64 KiB to 4 MiB, compressed and stored, with block checksums, the content checksum and the content size, all checked; skippable frames; legacy frames (`lz4 -l`), which end where the next frame's magic number or the input does; and frames one after another, as `lz4 -d` reads them. `Decoder(until=EndOfMember)` stops after the first frame, a skippable one included, and consumes nothing past it; a legacy frame, whose end shows only after it, raises `Unsupported` under it. `frame_info()` gives what the frame's header says. A block's bytes come out as they are decoded, before the checksums that cover them are checked, as the contract has provisional output (`decompress` returns only checked output).
+## Defaults and limits
 
-`Decoder(dictionary=d)` and `decompress(dictionary=d)` decode frames written with a dictionary (`lz4 -D`): its last 64 KiB come before the frame's first block, or before every block when they are independent. A frame that names a dictionary in its header (`frame_info().dictionary_id`) raises `DictionaryRequired` without one; `lz4 -D` names none. Legacy frames take none.
+| Option | Default | Notes |
+| --- | --- | --- |
+| `acceleration` | 1 | Higher is faster and larger. `lz4 --fast=N` is N + 1. |
+| `block_size` | `Max64KiB` | The `lz4` command uses `Max4MiB` with `linked=false`. |
+| `linked` | `true` | Blocks may refer to the previous 64 KiB. |
+| `checksum` | `true` | Content checksum. |
+| `block_checksum` | `false` | |
+| `content_size` | none | Written in the header when given, and the input is held to it. |
+| `max_output` (`decompress`) | none | Raises `LimitExceeded` past it. |
+| `max_output` (`decompress_block`) | required | A block does not say its size, so the caller gives its decoded size or a bound. |
 
-`decompress_block` decodes a block on its own, as `LZ4_decompress_safe` does, given a bound of its size, and with a dictionary as `LZ4_decompress_safe_usingDict`. A block must end with literals, as the format has it.
+The decoder holds at most 256 KiB (`decoder_memory_bound()`), never a whole
+block, however large the frame's blocks are. The encoder holds 229 KiB at the
+defaults and 8.1 MiB with 4 MiB blocks (`encoder_memory_bound(block_size~)`).
+`compress_bound(n)` bounds a frame and `block_compress_bound(n)` a block.
 
-## Encoding
+## Dictionaries
 
-The encoder is lz4's fast compressor (`LZ4_compress_fast`) and its frame writer: with the same options, its frames are lz4 1.10.0's to the byte, for independent and for linked blocks of every size, with block checksums and the content size, at every `acceleration` (`lz4 --fast=N` is N + 1), and so are its blocks; the tests hold it to that on every target, and `lz4 -d` and lz4_flex decode every stream. With a dictionary, its output differs from lz4's, by under 0.1 % of the size on the test data either way: it indexes every position of the dictionary, where lz4 skips some, and keeps its history differently. A block is stored uncompressed when compressing does not make it smaller, as lz4 stores it.
-
-The defaults are lz4's library's: 64 KiB linked blocks, and the content checksum, which `lz4` the command writes too; the command uses 4 MiB independent blocks (`block_size=Max4MiB, linked=false`). `content_size` writes the size in the header and holds the input to it. `dictionary` and `dictionary_id` write frames for `lz4 -D`, naming the dictionary in the header when given an id. `compress_bound(n)` is the most a frame of `n` bytes takes, 8 more for each `Flush`; `block_compress_bound(n)` is lz4's `LZ4_COMPRESSBOUND`.
-
-Not included: lz4's high-compression levels (lz4hc, `lz4 -3` to `-12`) and its compressor that fills a given output (`LZ4_compress_destSize`); decoding a block partly (`LZ4_decompress_safe_partial`); dictionary training, which lz4 leaves to zstd; and multithreaded compression. Their output decodes here like any LZ4.
-
-## Memory
-
-The decoder holds a window of 256 KiB at most (`decoder_memory_bound()`), grown as output needs it: never a whole block, however large the frame's blocks are, since a match reaches no more than 64 KiB back. The encoder holds a block of input, the 64 KiB before it for linked blocks or a dictionary, the hash tables and a block's output: 229 KiB at the defaults, 8.1 MiB for 4 MiB blocks, within `encoder_memory_bound(block_size~)`. `memory_usage()` reports each.
+`Decoder(dictionary=d)` and `decompress(dictionary=d)` read frames written with
+`lz4 -D`. A frame that names a dictionary id in its header raises
+`DictionaryRequired` without one. `Encoder(dictionary=…, dictionary_id=…)`
+writes such frames. With a dictionary, the encoder's output differs slightly
+from the reference `lz4`, but both decode the same.
 
 ## Errors
 
-A malformed frame raises `CodecError(kind, message)` with `Truncated`, `Corrupt`, `ChecksumMismatch` (the header's, a block's or the content's checksum, or a content size the frame does not hold), `Unsupported` (a version, block size or reserved bit the format has not defined, or a legacy frame under `until=EndOfMember`), `DictionaryRequired`, or `TrailingData` (bytes after the last frame that begin none); `max_output` raises `LimitExceeded` past it (a negative one counts as 0). The decoders do not abort. Errors stick: later steps raise the same kind until `reset`.
+A malformed frame raises [`gaato/codec`](https://mooncakes.io/docs/gaato/codec)'s
+`CodecError(kind, message)`. The decoders never abort on bad input.
 
-A step that raises first hands out the output before the error, and `last_consumed()` and `last_produced()` count what that step took and wrote: a corrupt stream gives the same output, then the same error, however it is split. On `TrailingData`, `last_consumed()` stops at the end of the stream.
+| Kind | When |
+| --- | --- |
+| `Truncated` | The input ends inside a frame. |
+| `Corrupt` | The input is not valid LZ4. |
+| `ChecksumMismatch` | A header, block or content checksum fails, or the content size does not match. |
+| `Unsupported` | A version, block size or reserved bit the format does not define, or a legacy frame under `until=EndOfMember`. |
+| `DictionaryRequired` | The frame names a dictionary and none was given. |
+| `TrailingData` | Bytes after the last frame start no frame. |
+| `LimitExceeded` | More than `max_output`. |
+
+A block's bytes come out as they are decoded, before the checksums that cover
+them, so a streaming caller may hold bytes when a checksum fails. `decompress`
+returns only checked output. **Errors stick:** every later step raises the same
+kind until `reset()`.
+
+## Not included
+
+High-compression levels (lz4hc, `lz4 -3` to `-12`), compressing to fit a given
+output size, partial block decoding, dictionary training and multithreaded
+compression. Output from any of them decodes here.
 
 ## Links
 
+- [The frame format](https://github.com/lz4/lz4/blob/dev/doc/lz4_Frame_format.md)
+  and [the block format](https://github.com/lz4/lz4/blob/dev/doc/lz4_Block_format.md)
+- [Resource bounds](https://github.com/gaato/codecs.mbt/blob/main/lz4/RESOURCE_BOUNDS.md)
+  and [test coverage](https://github.com/gaato/codecs.mbt/blob/main/lz4/TEST_COVERAGE.md)
+- [The byte-stream codec contract](https://github.com/gaato/codecs.mbt/blob/main/CONTRACT.md)
 - [Changelog](https://github.com/gaato/codecs.mbt/blob/main/lz4/CHANGELOG.md)
 - [Repository](https://github.com/gaato/codecs.mbt)
-- [The frame format](https://github.com/lz4/lz4/blob/dev/doc/lz4_Frame_format.md) and [the block format](https://github.com/lz4/lz4/blob/dev/doc/lz4_Block_format.md)
-- [The byte-stream codec contract](https://github.com/gaato/codecs.mbt/blob/main/CONTRACT.md) that `Decoder` and `Encoder` keep
-- [Resource bounds](https://github.com/gaato/codecs.mbt/blob/main/lz4/RESOURCE_BOUNDS.md) and [test coverage](https://github.com/gaato/codecs.mbt/blob/main/lz4/TEST_COVERAGE.md)
 
 ## License
 
-Apache-2.0. The compressor in `src/encode.mbt` follows [lz4](https://github.com/lz4/lz4)'s `LZ4_compress_generic`, under the BSD 2-Clause license; see `LICENSE-lz4`.
+Apache-2.0. The compressor in `src/encode.mbt` follows
+[lz4](https://github.com/lz4/lz4)'s `LZ4_compress_generic`, under the BSD
+2-Clause license; see `LICENSE-lz4`.
