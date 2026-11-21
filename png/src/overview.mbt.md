@@ -126,9 +126,10 @@ Each frame of an animation is a `Frame`, its rows, then `FrameEnd`. After
 `frame_height()`), its delay (`delay_numerator()`, `delay_denominator()`) and
 its `dispose()` and `blend()` operations. These are given as the values to
 apply (a denominator of 0 comes as 100). Compositing frames onto a canvas is
-the caller's job, because the decoder holds no canvas. `in_animation()` says
-whether the default image is part of the animation. `Decoder(animation=false)`
-gives the default image only.
+the caller's job, because the decoder holds no canvas. `animated()`,
+`frame_count()` and `plays()` give what the animation control chunk says, and
+`in_animation()` says whether the default image is part of the animation.
+`Decoder(animation=false)` gives the default image only.
 
 ## Metadata chunks
 
