@@ -78,11 +78,13 @@ fn decode_all(read : () -> Bytes?, write : (Bytes) -> Unit) -> Unit raise {
 /// A source that hands over `pieces` one by one, then `None`.
 fn pieces_of(pieces : Array[Bytes]) -> () -> Bytes? {
   let mut next = 0
-  () => if next < pieces.length() {
-    next += 1
-    Some(pieces[next - 1])
-  } else {
-    None
+  () => {
+    if next < pieces.length() {
+      next += 1
+      Some(pieces[next - 1])
+    } else {
+      None
+    }
   }
 }
 
@@ -124,11 +126,7 @@ fn encode_parts(read : () -> Bytes?, write : (Bytes) -> Unit) -> Unit raise {
   let out = FixedArray::make(64 * 1024, b'\x00')
   for ;; {
     let piece = read()
-    let action : @zstd.EncodeAction = if piece is None {
-      Finish
-    } else {
-      Flush
-    }
+    let action : @zstd.EncodeAction = if piece is None { Finish } else { Flush }
     let mut input = piece.unwrap_or(b"")[:]
     for ;; {
       let status = encoder.step_into(input, out, action~)
