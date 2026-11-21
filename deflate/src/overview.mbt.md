@@ -289,9 +289,11 @@ tables, never the messages so far.
 
 For WebSocket's `permessage-deflate` (RFC 7692), decode each message with an
 `@deflate.Decoder(until=EndOfMember)`, then the appended `00 00 ff ff` as a
-step of its own, and accept the message only when
-`at_block_boundary()` is then true. Its doc comment says why; `reset` with
-`dictionary=` carries the window between messages or, with `b""`, drops it.
+step of its own. Accept the message only when every byte is consumed, the four
+appended bytes produce no output, and `at_block_boundary()` is then true:
+otherwise the appended bytes completed something inside a block, such as an
+open stored block that took them as data. `reset` with `dictionary=` carries
+the window between messages or, with `b""`, drops it.
 
 ## Deflate64
 
