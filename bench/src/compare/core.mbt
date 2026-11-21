@@ -5,7 +5,7 @@
 ///|
 /// The name the core codecs go by in the comparison. Core has no version of
 /// its own: it is the toolchain's, `moonbit-version` at the repository root.
-pub let core_name : String = "moonbitlang/core 0.10.21"
+pub let core_name : String = "moonbitlang/core 0.10.22"
 
 ///|
 /// Runs one of core's push decoders over `input` in pieces into a buffer of

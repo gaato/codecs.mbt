@@ -304,7 +304,7 @@ library ships:
 | [mizchi/zlib](https://mooncakes.io/docs/mizchi/zlib) (the pure package, not `mizchi/zlib/native`) | 0.4.12 | raw DEFLATE, zlib, gzip |
 | [hustcer/fzip](https://mooncakes.io/docs/hustcer/fzip) | 0.8.8 | raw DEFLATE, zlib, gzip |
 | [moonbitstack/moonzip](https://mooncakes.io/docs/moonbitstack/moonzip) `zstd`, `brotli`, `deflate`, `zlib`, `gzip` | 0.4.1 | zstd, Brotli, raw DEFLATE, zlib, gzip |
-| [moonbitlang/core](https://mooncakes.io/docs/moonbitlang/core) `async/gzip`: a gzip reader over asynchronous IO with an inflater of its own (`async/internal/gzip_internal`), not `compress/flate`'s; it was moonbitlang/async 0.22.5's | MoonBit 0.10.21 | gzip |
+| [moonbitlang/core](https://mooncakes.io/docs/moonbitlang/core) `async/gzip`: a gzip reader over asynchronous IO with an inflater of its own (`async/internal/gzip_internal`), not `compress/flate`'s; it was moonbitlang/async 0.22.5's. MoonBit 0.10.22 removes it, and `compare_async` now runs `compress/gzip`'s `StreamDecoder` and `StreamEncoder` instead, which the tables below have not measured yet | MoonBit 0.10.21 | gzip |
 | [moonbitlang/core](https://mooncakes.io/docs/moonbitlang/core) `compress/flate`, `compress/zlib`, `compress/gzip` (experimental packages) | MoonBit 0.10.21 | raw DEFLATE, zlib, gzip |
 
 Ours are this repository's main on 2026-11-19: gaato/zstd 0.6.0,
