@@ -7,6 +7,12 @@ never does. Every breaking change is listed with a migration note.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-21
+
+### Changed
+
+- **The README is rewritten** with complete examples.
+
 ## [0.1.1] - 2026-11-14
 
 ### Changed
