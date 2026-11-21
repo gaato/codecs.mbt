@@ -103,11 +103,13 @@ test "decode a gzip stream that arrives in pieces" {
   let mut next = 0
   let decoded = Buffer()
   gunzip(
-    () => if next < pieces.length() {
-      next += 1
-      Some(pieces[next - 1])
-    } else {
-      None
+    () => {
+      if next < pieces.length() {
+        next += 1
+        Some(pieces[next - 1])
+      } else {
+        None
+      }
     },
     bytes => decoded.write_bytes(bytes),
   )

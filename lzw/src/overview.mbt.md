@@ -95,11 +95,13 @@ fn decode_all(
 /// A source that hands over `pieces` one by one, then `None`.
 fn pieces_of(pieces : Array[Bytes]) -> () -> Bytes? {
   let mut next = 0
-  () => if next < pieces.length() {
-    next += 1
-    Some(pieces[next - 1])
-  } else {
-    None
+  () => {
+    if next < pieces.length() {
+      next += 1
+      Some(pieces[next - 1])
+    } else {
+      None
+    }
   }
 }
 
